@@ -10,7 +10,8 @@ space   [ \t\v\f\n]+
 
 
 %{
-    using namespace std;
+#include <fstream>
+using namespace std;
 
 enum TokenType {
     KEYWORD_AUTO = 1,
@@ -47,6 +48,7 @@ enum TokenType {
     KEYWORD_RETURN,
     KEYWORD_SHORT,
     KEYWORD_SIGNED,
+    KEYWORD_SIZEOF,
     KEYWORD_STATIC,
     KEYWORD_STRUCT,
     KEYWORD_SWITCH,
@@ -66,13 +68,28 @@ enum TokenType {
 %}
 
 %%
+"//"[^\n]*\n    {/* Ignore Single Line Comments */}
+"/*"            {
+                    int c;
+                    while((c = yyinput()) != 0){
+                        if(c == '\n')
+                            continue;
+                        else if(c == '*'){
+                            if((c = yyinput()) == '/')
+                                break;
+                            else
+                                unput(c);
+                        }
+                    }
+                }
+
 auto        {return (KEYWORD_AUTO);}
 bool        {return (KEYWORD_BOOL);}
 break       {return (KEYWORD_BREAK);}
 case        {return (KEYWORD_CASE);}
 catch       {return (KEYWORD_CATCH);}
 char        {return (KEYWORD_CHAR);}
-class       {return (KEYWORD_CONST);}
+class       {return (KEYWORD_CLASS);}
 const       {return (KEYWORD_CONST);}
 continue    {return (KEYWORD_CONTINUE);}
 default     {return (KEYWORD_DELETE);}
@@ -95,11 +112,12 @@ new         {return (KEYWORD_NEW);}
 nullptr     {return (KEYWORD_NULLPTR);}
 private     {return (KEYWORD_PRIVATE);}
 protected   {return (KEYWORD_PROTECTED);}
-public      {return {KEYWORD_PUBLIC};}
+public      {return (KEYWORD_PUBLIC);}
 register    {return (KEYWORD_REGISTER);}
 return      {return (KEYWORD_RETURN);}
 short       {return (KEYWORD_SHORT);}
 signed      {return (KEYWORD_SIGNED);}
+sizeof      {return (KEYWORD_SIZEOF);}
 static      {return (KEYWORD_STATIC);}
 struct      {return (KEYWORD_STRUCT);}
 switch      {return (KEYWORD_SWITCH);}
@@ -116,15 +134,27 @@ void        {return (KEYWORD_VOID);}
 while       {return (KEYWORD_WHILE);}
 
 {space}   { /* Ignore Spaces */ }
+.         {cout << "Unrecognized Token: " << yytext << endl;} 
 %% 
 
-int main() {
-    FlexLexer* lexer = new yyFlexLexer();
-    
+
+int main(int argc, char **argv) {
+    if(argc < 2){
+        cout << "Usage: " << argv[0] << " <input_file>" << endl;
+        return 1;
+    }
+
+    ifstream file(argv[1]);
+    if(!file.is_open()){
+        cout << "Error: Unable to open file" << endl;
+        return 1;
+    }
+
+    yyFlexLexer* lexer = new yyFlexLexer(&file);
     int token;
     while ((token = lexer->yylex()) != 0) {
-        cout << "Token: " << token << endl;
-    }
+        cout << "Token Class: " << token << " " << lexer->YYText() << endl;
+    } 
 
     delete lexer;
     return 0;
