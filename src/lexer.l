@@ -68,7 +68,7 @@ enum TokenType {
 %}
 
 %%
-"//"[^\n]*\n    {/* Ignore Single Line Comments */}
+"//"[^\n]*    {/* Ignore Single Line Comments */}
 "/*"            {
                     int c;
                     while((c = yyinput()) != 0){
