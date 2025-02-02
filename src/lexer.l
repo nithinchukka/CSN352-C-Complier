@@ -1,4 +1,4 @@
-%option noyywrap
+%option noyywrap c++
 
 digit   [0-9]
 digits  [0-9]+  
@@ -10,61 +10,9 @@ space   [ \t\v\f\n]+
 
 
 %{
+#include "tokenType.h"
 #include <fstream>
 using namespace std;
-
-enum TokenType {
-    KEYWORD_AUTO = 1,
-    KEYWORD_BOOL,
-    KEYWORD_BREAK,
-    KEYWORD_CASE,
-    KEYWORD_CATCH,
-    KEYWORD_CHAR,
-    KEYWORD_CLASS,
-    KEYWORD_CONST,
-    KEYWORD_CONTINUE,
-    KEYWORD_DEFAULT,
-    KEYWORD_DELETE,
-    KEYWORD_DO,
-    KEYWORD_DOUBLE,
-    KEYWORD_ELSE,
-    KEYWORD_ENUM,
-    KEYWORD_FALSE,
-    KEYWORD_FLOAT,
-    KEYWORD_FOR,
-    KEYWORD_FRIEND,
-    KEYWORD_GOTO,
-    KEYWORD_IF,
-    KEYWORD_INLINE,
-    KEYWORD_INT,
-    KEYWORD_LONG,
-    KEYWORD_NAMESPACE,
-    KEYWORD_NEW,
-    KEYWORD_NULLPTR,
-    KEYWORD_PRIVATE,
-    KEYWORD_PROTECTED,
-    KEYWORD_PUBLIC,
-    KEYWORD_REGISTER,
-    KEYWORD_RETURN,
-    KEYWORD_SHORT,
-    KEYWORD_SIGNED,
-    KEYWORD_SIZEOF,
-    KEYWORD_STATIC,
-    KEYWORD_STRUCT,
-    KEYWORD_SWITCH,
-    KEYWORD_THIS,
-    KEYWORD_THROW,
-    KEYWORD_TRUE,
-    KEYWORD_TRY,
-    KEYWORD_TYPEDEF,
-    KEYWORD_UNION,
-    KEYWORD_UNSIGNED,
-    KEYWORD_USING,
-    KEYWORD_VIRTUAL,
-    KEYWORD_VOID,
-    KEYWORD_WHILE
-};
-
 %}
 
 %%
@@ -146,14 +94,14 @@ int main(int argc, char **argv) {
 
     ifstream file(argv[1]);
     if(!file.is_open()){
-        cout << "Error: Unable to open file" << endl;
+        cout << "Error: Unable to open file " << argv[1] << endl;
         return 1;
     }
 
     yyFlexLexer* lexer = new yyFlexLexer(&file);
     int token;
     while ((token = lexer->yylex()) != 0) {
-        cout << "Token Class: " << token << " " << lexer->YYText() << endl;
+        cout << tokenTypeToTokenClass(token) << " " << lexer->YYText() << endl;
     } 
 
     delete lexer;

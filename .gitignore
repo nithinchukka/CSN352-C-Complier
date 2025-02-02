@@ -32,3 +32,6 @@ y.tab.hh
 # IDEs - VSCode
 .vscode/
 *.code-workspace
+
+test.c
+test.cpp
