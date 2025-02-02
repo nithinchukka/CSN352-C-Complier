@@ -1,10 +1,12 @@
 %option noyywrap c++
 
 digit   [0-9]
-digits  [0-9]+  
-alpha   [A-Za-z]  
-number  {digits}(\.{digits})?((e|E)[+-]?{digits})?
-id      [{alpha}_][{alpha}{digit}_]*
+digits  {digit}+
+alpha   [A-Za-z]
+number  {digits}(\.{digits})?([eE][+-]?{digits})?
+id      ({alpha}|_)({alpha}|{digit}|_)*
+char    \'([^\'\\]|\\.)\'
+string  \"([^\"\\]|\\.)*\"
 space   [ \t\v\f\n]+
 
 
@@ -40,7 +42,7 @@ char        {return (KEYWORD_CHAR);}
 class       {return (KEYWORD_CLASS);}
 const       {return (KEYWORD_CONST);}
 continue    {return (KEYWORD_CONTINUE);}
-default     {return (KEYWORD_DELETE);}
+default     {return (KEYWORD_DEFAULT);}
 delete      {return (KEYWORD_DELETE);}
 do          {return (KEYWORD_DO);}
 double      {return (KEYWORD_DOUBLE);}
@@ -80,6 +82,11 @@ using       {return (KEYWORD_USING);}
 virtual     {return (KEYWORD_VIRTUAL);}
 void        {return (KEYWORD_VOID);}
 while       {return (KEYWORD_WHILE);}
+
+{id}        {return (ID);}
+{number}    {return (NUMBER);}
+{char}      {return (CHAR);}
+{string}    {return (STRING);}
 
 {space}   { /* Ignore Spaces */ }
 .         {cout << "Unrecognized Token: " << yytext << endl;} 

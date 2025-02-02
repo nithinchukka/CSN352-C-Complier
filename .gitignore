@@ -33,5 +33,4 @@ y.tab.hh
 .vscode/
 *.code-workspace
 
-test.c
-test.cpp
+test.*

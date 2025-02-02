@@ -53,7 +53,11 @@ enum TokenType {
     KEYWORD_USING,
     KEYWORD_VIRTUAL,
     KEYWORD_VOID,
-    KEYWORD_WHILE
+    KEYWORD_WHILE,
+    NUMBER,
+    CHAR,
+    STRING,
+    ID,
 };
 
 string tokenTypeToTokenClass(int token) {
@@ -107,6 +111,10 @@ string tokenTypeToTokenClass(int token) {
         case KEYWORD_VIRTUAL: return "VIRTUAL";
         case KEYWORD_VOID: return "VOID";
         case KEYWORD_WHILE: return "WHILE";
+        case NUMBER: return "NUMBER";
+        case CHAR: return "CHARACTER_LITERAL";
+        case STRING: return "STRING_LITERAL";
+        case ID: return "IDENTIFIER";
         default: return "UNKNOWN";
     }
 }
