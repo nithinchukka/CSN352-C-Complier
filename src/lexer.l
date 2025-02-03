@@ -93,6 +93,67 @@ virtual     {return (KEYWORD_VIRTUAL);}
 void        {return (KEYWORD_VOID);}
 while       {return (KEYWORD_WHILE);}
 
+"+"         |
+"-"         |
+"*"         |
+"/"         |
+"%"         |
+"--"        |
+"++"        {return (ARTHEMATIC_OPERATOR);}
+
+"="         |
+"+="        |
+"-="        |
+"*="        |
+"/="        |
+"%="        |
+"&="        |
+"|="        |
+"^="        |
+">>="       |
+"<<="       {return (ASSIGNMENT_OPERATOR);}
+
+"=="        |
+"!="        |
+">"         |
+"<"         |
+">="        |
+"<="        {return (COMPARISON_OPERATOR);}
+
+"&&"        |
+"||"        |
+"!"         {return (LOGICAL_OPERATOR);}
+
+"&"         |
+"|"         |
+"^"         |
+"<<"        |
+">>"        |
+"~"         {return (BITWISE_OPERATOR);}
+
+"?"         |
+":"         {return (CONDITIONAL_OPERATOR);}
+
+"."         |
+"->"        {return (MEMBER_ACCESS_OPERATOR);}
+
+"sizeof"    |
+"typeid"    |
+"alignof"   |
+"decltype"  {return (TYPE_SIZE_OPERATOR);}
+
+","          {return (COMMA_OPERATOR);}
+
+"::"         {return (SCOPE_RESOLUTION_OPERATOR);}
+
+"#"          |
+"##"         {return (PREPROCESSOR_OPERATOR);}
+
+"..."        {return (ELLIPSIS_OPERATOR);}
+
+".*"         |
+"->*"        {return (POINTER_TO_MEMBER_OPERATOR);}
+
 {id}        {return (ID);}
 {number}    {return (NUMBER);}
 {char}      {return (CHAR);}

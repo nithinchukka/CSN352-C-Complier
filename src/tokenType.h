@@ -56,10 +56,23 @@ enum TokenType {
     KEYWORD_VIRTUAL,
     KEYWORD_VOID,
     KEYWORD_WHILE,
+    ARITHMETIC_OPERATOR,
+    ASSIGNMENT_OPERATOR,
+    COMPARISON_OPERATOR,
+    LOGICAL_OPERATOR,
+    BITWISE_OPERATOR,
+    CONDITIONAL_OPERATOR,
+    MEMBER_ACCESS_OPERATOR,
+    TYPE_SIZE_OPERATOR,
+    COMMA_OPERATOR,
+    SCOPE_RESOLUTION_OPERATOR,
+    PREPROCESSOR_OPERATOR,
+    ELLIPSIS_OPERATOR,
+    POINTER_TO_MEMBER_OPERATOR,
     NUMBER,
-    CHAR,
-    STRING,
-    ID,
+    CHARACTER_LITERAL,
+    STRING_LITERAL,
+    IDENTIFIER,
     LBRACE,
     RBRACE,
     LBRACKET,
@@ -68,7 +81,7 @@ enum TokenType {
     RPAREN,
     SEMICOLON,
     COMMA,
-    COLON,
+    COLON
 };
 
 string tokenTypeToTokenClass(int token) {
@@ -124,10 +137,23 @@ string tokenTypeToTokenClass(int token) {
         case KEYWORD_VIRTUAL: return "VIRTUAL";
         case KEYWORD_VOID: return "VOID";
         case KEYWORD_WHILE: return "WHILE";
+        case ARITHMETIC_OPERATOR: return "ARITHMETIC_OPERATOR";
+        case ASSIGNMENT_OPERATOR: return "ASSIGNMENT_OPERATOR";
+        case COMPARISON_OPERATOR: return "COMPARISON_OPERATOR";
+        case LOGICAL_OPERATOR: return "LOGICAL_OPERATOR";
+        case BITWISE_OPERATOR: return "BITWISE_OPERATOR";
+        case CONDITIONAL_OPERATOR: return "CONDITIONAL_OPERATOR";
+        case MEMBER_ACCESS_OPERATOR: return "MEMBER_ACCESS_OPERATOR";
+        case TYPE_SIZE_OPERATOR: return "TYPE_SIZE_OPERATOR";
+        case COMMA_OPERATOR: return "COMMA_OPERATOR";
+        case SCOPE_RESOLUTION_OPERATOR: return "SCOPE_RESOLUTION_OPERATOR";
+        case PREPROCESSOR_OPERATOR: return "PREPROCESSOR_OPERATOR";
+        case ELLIPSIS_OPERATOR: return "ELLIPSIS_OPERATOR";
+        case POINTER_TO_MEMBER_OPERATOR: return "POINTER_TO_MEMBER_OPERATOR";
         case NUMBER: return "NUMBER";
-        case CHAR: return "CHARACTER_LITERAL";
-        case STRING: return "STRING_LITERAL";
-        case ID: return "IDENTIFIER";
+        case CHARACTER_LITERAL: return "CHARACTER_LITERAL";
+        case STRING_LITERAL: return "STRING_LITERAL";
+        case IDENTIFIER: return "IDENTIFIER";
         case LBRACE: return "LBRACE";
         case RBRACE: return "RBRACE";
         case LBRACKET: return "LBRACKET";
