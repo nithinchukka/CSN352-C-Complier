@@ -56,6 +56,7 @@ do          {return (KEYWORD_DO);}
 double      {return (KEYWORD_DOUBLE);}
 else        {return (KEYWORD_ELSE);}
 enum        {return (KEYWORD_ENUM);}
+extern      {return (KEYWORD_EXTERN);}
 false       {return (KEYWORD_FALSE);}
 float       {return (KEYWORD_FLOAT);}
 for         {return (KEYWORD_FOR);}
@@ -68,13 +69,11 @@ long        {return (KEYWORD_LONG);}
 namespace   {return (KEYWORD_NAMESPACE);}
 new         {return (KEYWORD_NEW);}
 nullptr     {return (KEYWORD_NULLPTR);}
-printf      {return (KEYWORD_PRINTF);}
 private     {return (KEYWORD_PRIVATE);}
 protected   {return (KEYWORD_PROTECTED);}
 public      {return (KEYWORD_PUBLIC);}
 register    {return (KEYWORD_REGISTER);}
 return      {return (KEYWORD_RETURN);}
-scanf       {return (KEYWORD_SCANF);}
 short       {return (KEYWORD_SHORT);}
 signed      {return (KEYWORD_SIGNED);}
 sizeof      {return (KEYWORD_SIZEOF);}
@@ -91,6 +90,7 @@ unsigned    {return (KEYWORD_UNSIGNED);}
 using       {return (KEYWORD_USING);}
 virtual     {return (KEYWORD_VIRTUAL);}
 void        {return (KEYWORD_VOID);}
+volatile   {return (KEYWORD_VOLATILE);}
 while       {return (KEYWORD_WHILE);}
 
 "+"         |
@@ -131,18 +131,11 @@ while       {return (KEYWORD_WHILE);}
 ">>"        |
 "~"         {return (BITWISE_OPERATOR);}
 
-"?"         |
-":"         {return (CONDITIONAL_OPERATOR);}
+"?"         {return (CONDITIONAL_OPERATOR);}
 
 "."         |
 "->"        {return (MEMBER_ACCESS_OPERATOR);}
 
-"sizeof"    |
-"typeid"    |
-"alignof"   |
-"decltype"  {return (TYPE_SIZE_OPERATOR);}
-
-","          {return (COMMA_OPERATOR);}
 
 "::"         {return (SCOPE_RESOLUTION_OPERATOR);}
 

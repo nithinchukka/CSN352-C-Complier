@@ -20,6 +20,7 @@ enum TokenType {
     KEYWORD_DOUBLE,
     KEYWORD_ELSE,
     KEYWORD_ENUM,
+    KEYWORD_EXTERN,
     KEYWORD_FALSE,
     KEYWORD_FLOAT,
     KEYWORD_FOR,
@@ -32,13 +33,11 @@ enum TokenType {
     KEYWORD_NAMESPACE,
     KEYWORD_NEW,
     KEYWORD_NULLPTR,
-    KEYWORD_PRINTF,
     KEYWORD_PRIVATE,
     KEYWORD_PROTECTED,
     KEYWORD_PUBLIC,
     KEYWORD_REGISTER,
     KEYWORD_RETURN,
-    KEYWORD_SCANF,
     KEYWORD_SHORT,
     KEYWORD_SIGNED,
     KEYWORD_SIZEOF,
@@ -55,24 +54,24 @@ enum TokenType {
     KEYWORD_USING,
     KEYWORD_VIRTUAL,
     KEYWORD_VOID,
+    KEYWORD_VOLATILE,
     KEYWORD_WHILE,
-    ARITHMETIC_OPERATOR,
+    ARTHEMATIC_OPERATOR,
     ASSIGNMENT_OPERATOR,
     COMPARISON_OPERATOR,
     LOGICAL_OPERATOR,
     BITWISE_OPERATOR,
     CONDITIONAL_OPERATOR,
     MEMBER_ACCESS_OPERATOR,
-    TYPE_SIZE_OPERATOR,
     COMMA_OPERATOR,
     SCOPE_RESOLUTION_OPERATOR,
     PREPROCESSOR_OPERATOR,
     ELLIPSIS_OPERATOR,
     POINTER_TO_MEMBER_OPERATOR,
     NUMBER,
-    CHARACTER_LITERAL,
-    STRING_LITERAL,
-    IDENTIFIER,
+    CHAR,
+    STRING,
+    ID,
     LBRACE,
     RBRACE,
     LBRACKET,
@@ -101,6 +100,7 @@ string tokenTypeToTokenClass(int token) {
         case KEYWORD_DOUBLE: return "DOUBLE";
         case KEYWORD_ELSE: return "ELSE";
         case KEYWORD_ENUM: return "ENUM";
+        case KEYWORD_EXTERN: return "EXTERN";
         case KEYWORD_FALSE: return "FALSE";
         case KEYWORD_FLOAT: return "FLOAT";
         case KEYWORD_FOR: return "FOR";
@@ -113,13 +113,11 @@ string tokenTypeToTokenClass(int token) {
         case KEYWORD_NAMESPACE: return "NAMESPACE";
         case KEYWORD_NEW: return "NEW";
         case KEYWORD_NULLPTR: return "NULLPTR";
-        case KEYWORD_PRINTF: return "PRINTF";
         case KEYWORD_PRIVATE: return "PRIVATE";
         case KEYWORD_PROTECTED: return "PROTECTED";
         case KEYWORD_PUBLIC: return "PUBLIC";
         case KEYWORD_REGISTER: return "REGISTER";
         case KEYWORD_RETURN: return "RETURN";
-        case KEYWORD_SCANF: return "SCANF";
         case KEYWORD_SHORT: return "SHORT";
         case KEYWORD_SIGNED: return "SIGNED";
         case KEYWORD_SIZEOF: return "SIZEOF";
@@ -135,25 +133,25 @@ string tokenTypeToTokenClass(int token) {
         case KEYWORD_UNSIGNED: return "UNSIGNED";
         case KEYWORD_USING: return "USING";
         case KEYWORD_VIRTUAL: return "VIRTUAL";
+        case KEYWORD_VOLATILE: return "VOLATILE";
         case KEYWORD_VOID: return "VOID";
         case KEYWORD_WHILE: return "WHILE";
-        case ARITHMETIC_OPERATOR: return "ARITHMETIC_OPERATOR";
+        case ARTHEMATIC_OPERATOR: return "ARTHEMATIC_OPERATOR";
         case ASSIGNMENT_OPERATOR: return "ASSIGNMENT_OPERATOR";
         case COMPARISON_OPERATOR: return "COMPARISON_OPERATOR";
         case LOGICAL_OPERATOR: return "LOGICAL_OPERATOR";
         case BITWISE_OPERATOR: return "BITWISE_OPERATOR";
         case CONDITIONAL_OPERATOR: return "CONDITIONAL_OPERATOR";
         case MEMBER_ACCESS_OPERATOR: return "MEMBER_ACCESS_OPERATOR";
-        case TYPE_SIZE_OPERATOR: return "TYPE_SIZE_OPERATOR";
         case COMMA_OPERATOR: return "COMMA_OPERATOR";
         case SCOPE_RESOLUTION_OPERATOR: return "SCOPE_RESOLUTION_OPERATOR";
         case PREPROCESSOR_OPERATOR: return "PREPROCESSOR_OPERATOR";
         case ELLIPSIS_OPERATOR: return "ELLIPSIS_OPERATOR";
         case POINTER_TO_MEMBER_OPERATOR: return "POINTER_TO_MEMBER_OPERATOR";
         case NUMBER: return "NUMBER";
-        case CHARACTER_LITERAL: return "CHARACTER_LITERAL";
-        case STRING_LITERAL: return "STRING_LITERAL";
-        case IDENTIFIER: return "IDENTIFIER";
+        case CHAR: return "CHARACTER_LITERAL";
+        case STRING: return "STRING_LITERAL";
+        case ID: return "IDENTIFIER";
         case LBRACE: return "LBRACE";
         case RBRACE: return "RBRACE";
         case LBRACKET: return "LBRACKET";
