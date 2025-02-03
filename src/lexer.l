@@ -14,7 +14,15 @@ space   [ \t\v\f\n]+
 %{
 #include "tokenType.h"
 #include <fstream>
+#include <vector>
+#include <iomanip>
 using namespace std;
+
+struct SymbolTableEntry
+{
+    string token;
+    string lexeme;
+};
 %}
 
 %%
@@ -60,11 +68,13 @@ long        {return (KEYWORD_LONG);}
 namespace   {return (KEYWORD_NAMESPACE);}
 new         {return (KEYWORD_NEW);}
 nullptr     {return (KEYWORD_NULLPTR);}
+printf      {return (KEYWORD_PRINTF);}
 private     {return (KEYWORD_PRIVATE);}
 protected   {return (KEYWORD_PROTECTED);}
 public      {return (KEYWORD_PUBLIC);}
 register    {return (KEYWORD_REGISTER);}
 return      {return (KEYWORD_RETURN);}
+scanf       {return (KEYWORD_SCANF);}
 short       {return (KEYWORD_SHORT);}
 signed      {return (KEYWORD_SIGNED);}
 sizeof      {return (KEYWORD_SIZEOF);}
@@ -88,9 +98,39 @@ while       {return (KEYWORD_WHILE);}
 {char}      {return (CHAR);}
 {string}    {return (STRING);}
 
+";"         {return (SEMICOLON);}
+":"         {return (COLON);}
+","         {return (COMMA);}
+"{"         {return (LBRACE);}
+"}"         {return (RBRACE);}
+"("         {return (LPAREN);}
+")"         {return (RPAREN);}
+"["         {return (LBRACKET);}
+"]"         {return (RBRACKET);}
+
 {space}   { /* Ignore Spaces */ }
 .         {cout << "Unrecognized Token: " << yytext << endl;} 
-%% 
+%%
+
+void printSymbolTable(vector<SymbolTableEntry> symbolTable)
+{
+    // cout << "+" << setw(64) << setfill('=') << "+" << "\n";
+    // cout << "|" << setw(31) << setfill(' ') << right << "Symbol " << setw(32) << left << "Table" << "|\n";
+    cout << setw(64) << setfill('=') << left << "+" << "+" << "\n";
+
+    cout << "| " << setw(15) << setfill(' ') << right << "Tok" << setw(15) << left << "en"
+         << "| " << setw(15) << setfill(' ') << right << "Lex" << setw(15) << left << "eme" << "|\n";
+
+    cout << setw(64) << setfill('=') << left << "+" << "+" << "\n";
+
+    for(auto entry : symbolTable)
+    {
+        cout << "| " << setw(30) << setfill(' ') << left << entry.token
+             << "| " << setw(30) << left << entry.lexeme
+             << "|\n";
+        cout << setw(64) << setfill('-') << left << "+" << "+" << "\n";
+    }
+}
 
 
 int main(int argc, char **argv) {
@@ -104,13 +144,18 @@ int main(int argc, char **argv) {
         cout << "Error: Unable to open file " << argv[1] << endl;
         return 1;
     }
+    
+    vector<SymbolTableEntry> symbolTable;
 
     yyFlexLexer* lexer = new yyFlexLexer(&file);
+    
     int token;
     while ((token = lexer->yylex()) != 0) {
-        cout << tokenTypeToTokenClass(token) << " " << lexer->YYText() << endl;
+        symbolTable.push_back({tokenTypeToTokenClass(token), lexer->YYText()});
     } 
 
+    printSymbolTable(symbolTable);
+    
     delete lexer;
     return 0;
 }

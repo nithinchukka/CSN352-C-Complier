@@ -32,11 +32,13 @@ enum TokenType {
     KEYWORD_NAMESPACE,
     KEYWORD_NEW,
     KEYWORD_NULLPTR,
+    KEYWORD_PRINTF,
     KEYWORD_PRIVATE,
     KEYWORD_PROTECTED,
     KEYWORD_PUBLIC,
     KEYWORD_REGISTER,
     KEYWORD_RETURN,
+    KEYWORD_SCANF,
     KEYWORD_SHORT,
     KEYWORD_SIGNED,
     KEYWORD_SIZEOF,
@@ -58,6 +60,15 @@ enum TokenType {
     CHAR,
     STRING,
     ID,
+    LBRACE,
+    RBRACE,
+    LBRACKET,
+    RBRACKET,
+    LPAREN,
+    RPAREN,
+    SEMICOLON,
+    COMMA,
+    COLON,
 };
 
 string tokenTypeToTokenClass(int token) {
@@ -89,11 +100,13 @@ string tokenTypeToTokenClass(int token) {
         case KEYWORD_NAMESPACE: return "NAMESPACE";
         case KEYWORD_NEW: return "NEW";
         case KEYWORD_NULLPTR: return "NULLPTR";
+        case KEYWORD_PRINTF: return "PRINTF";
         case KEYWORD_PRIVATE: return "PRIVATE";
         case KEYWORD_PROTECTED: return "PROTECTED";
         case KEYWORD_PUBLIC: return "PUBLIC";
         case KEYWORD_REGISTER: return "REGISTER";
         case KEYWORD_RETURN: return "RETURN";
+        case KEYWORD_SCANF: return "SCANF";
         case KEYWORD_SHORT: return "SHORT";
         case KEYWORD_SIGNED: return "SIGNED";
         case KEYWORD_SIZEOF: return "SIZEOF";
@@ -115,6 +128,15 @@ string tokenTypeToTokenClass(int token) {
         case CHAR: return "CHARACTER_LITERAL";
         case STRING: return "STRING_LITERAL";
         case ID: return "IDENTIFIER";
+        case LBRACE: return "LBRACE";
+        case RBRACE: return "RBRACE";
+        case LBRACKET: return "LBRACKET";
+        case RBRACKET: return "RBRACKET";
+        case LPAREN: return "LPAREN";
+        case RPAREN: return "RPAREN";
+        case SEMICOLON: return "SEMICOLON";
+        case COMMA: return "COMMA";
+        case COLON: return "COLON";
         default: return "UNKNOWN";
     }
 }
