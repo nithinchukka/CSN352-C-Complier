@@ -5,6 +5,11 @@ if [ -z "$(ls -A test)" ]; then
     exit 1
 fi
 
+make lexer
+echo " "
+
 for file in test/*; do
-    make runlexer FILE="$file"
+    echo "Running $file"
+    echo " "
+    ./build/lexer.out $file
 done
