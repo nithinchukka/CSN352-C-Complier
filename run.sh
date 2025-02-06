@@ -6,10 +6,12 @@ if [ -z "$(ls -A test)" ]; then
 fi
 
 make lexer
-echo " "
+echo " " | tee output.log
 
 for file in test/*; do
-    echo "Running $file"
-    echo " "
-    ./build/lexer.out $file
+    echo "Running $file" | tee -a output.log
+    echo " " | tee -a output.log
+    ./build/lexer.out $file | tee -a output.log
 done
+
+echo "Output saved to output.log"

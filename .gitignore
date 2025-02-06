@@ -34,3 +34,4 @@ build/
 *.code-workspace
 
 test.*
+*.log
