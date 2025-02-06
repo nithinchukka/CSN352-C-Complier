@@ -28,6 +28,7 @@ struct SymbolTableEntry
 %%
 "//"[^\n]*    {/* Ignore Single Line Comments */}
 "/*"            {
+                    // Ignore Multi Line Comments
                     int c;
                     while((c = yyinput()) != 0){
                         if(c == '\n')
@@ -93,59 +94,58 @@ void        {return (KEYWORD_VOID);}
 volatile   {return (KEYWORD_VOLATILE);}
 while       {return (KEYWORD_WHILE);}
 
-"+"         |
-"-"         |
-"*"         |
-"/"         |
-"%"         |
-"--"        |
-"++"        {return (ARTHEMATIC_OPERATOR);}
+"+"         {return (PLUS_OPERATOR);}
+"-"         {return (MINUS_OPERATOR);}
+"*"         {return (MULTIPLY_OPERATOR);}
+"/"         {return (DIVIDE_OPERATOR);}
+"%"         {return (MODULO_OPERATOR);}
+"--"        {return (DECREMENT_OPERATOR);}
+"++"        {return (INCREMENT_OPERATOR);}
 
-"="         |
-"+="        |
-"-="        |
-"*="        |
-"/="        |
-"%="        |
-"&="        |
-"|="        |
-"^="        |
-">>="       |
-"<<="       {return (ASSIGNMENT_OPERATOR);}
+"="         {return (ASSIGNMENT_OPERATOR);}
+"+="        {return (PLUS_ASSIGN_OPERATOR);}
+"-="        {return (MINUS_ASSIGN_OPERATOR);}
+"*="        {return (MULTIPLY_ASSIGN_OPERATOR);}
+"/="        {return (DIVIDE_ASSIGN_OPERATOR);}
+"%="        {return (MODULO_ASSIGN_OPERATOR);}
+"&="        {return (BITWISE_AND_ASSIGN_OPERATOR);}
+"|="        {return (BITWISE_OR_ASSIGN_OPERATOR);}
+"^="        {return (BITWISE_XOR_ASSIGN_OPERATOR);}
+">>="       {return (RIGHT_SHIFT_ASSIGN_OPERATOR);}
+"<<="       {return (LEFT_SHIFT_ASSIGN_OPERATOR);}
 
-"=="        |
-"!="        |
-">"         |
-"<"         |
-">="        |
-"<="        {return (COMPARISON_OPERATOR);}
+"=="        {return (EQUALS_COMPARISON_OPERATOR);}
+"!="        {return (NOT_EQUALS_OPERATOR);}
+">"         {return (GREATER_THAN_OPERATOR);}
+"<"         {return (LESS_THAN_OPERATOR);}
+">="        {return (GREATER_THAN_OR_EQUAL_OPERATOR);}
+"<="        {return (LESS_THAN_OR_EQUAL_OPERATOR);}
 
-"&&"        |
-"||"        |
-"!"         {return (LOGICAL_OPERATOR);}
+"&&"        {return (LOGICAL_AND_OPERATOR);}
+"||"        {return (LOGICAL_OR_OPERATOR);}
+"!"         {return (LOGICAL_NOT_OPERATOR);}
 
-"&"         |
-"|"         |
-"^"         |
-"<<"        |
-">>"        |
-"~"         {return (BITWISE_OPERATOR);}
+"&"         {return (BITWISE_AND_OPERATOR);}
+"|"         {return (BITWISE_OR_OPERATOR);}
+"^"         {return (BITWISE_XOR_OPERATOR);}
+"<<"        {return (LEFT_SHIFT_OPERATOR);}
+">>"        {return (RIGHT_SHIFT_OPERATOR);}
+"~"         {return (BITWISE_NOT_OPERATOR);}
 
-"?"         {return (CONDITIONAL_OPERATOR);}
+"?"         {return (TERNARY_OPERATOR);}
 
-"."         |
-"->"        {return (MEMBER_ACCESS_OPERATOR);}
+"."         {return (DOT_OPERATOR);}
+"->"        {return (ARROW_OPERATOR);}
 
+"::"        {return (SCOPE_RESOLUTION_OPERATOR);}
 
-"::"         {return (SCOPE_RESOLUTION_OPERATOR);}
+"#"         {return (HASH_OPERATOR);}
+"##"        {return (DOUBLE_HASH_OPERATOR);}
 
-"#"          |
-"##"         {return (PREPROCESSOR_OPERATOR);}
+"..."       {return (ELLIPSIS_OPERATOR);}
 
-"..."        {return (ELLIPSIS_OPERATOR);}
-
-".*"         |
-"->*"        {return (POINTER_TO_MEMBER_OPERATOR);}
+".*"        {return (POINTER_TO_MEMBER_DOT_OPERATOR);}
+"->*"       {return (POINTER_TO_MEMBER_ARROW_OPERATOR);}
 
 {id}        {return (ID);}
 {number}    {return (NUMBER);}
@@ -163,13 +163,11 @@ while       {return (KEYWORD_WHILE);}
 "]"         {return (RBRACKET);}
 
 {space}   { /* Ignore Spaces */ }
-.         {cout << "Unrecognized Token: " << yytext << endl;} 
+.         {cout << "Unrecognized Token: " << yytext << " at line no: " << yylineno << endl;} 
 %%
 
 void printSymbolTable(vector<SymbolTableEntry> symbolTable)
 {
-    // cout << "+" << setw(64) << setfill('=') << "+" << "\n";
-    // cout << "|" << setw(31) << setfill(' ') << right << "Symbol " << setw(32) << left << "Table" << "|\n";
     cout << setw(64) << setfill('=') << left << "+" << "+" << "\n";
 
     cout << "| " << setw(15) << setfill(' ') << right << "Tok" << setw(15) << left << "en"
@@ -184,6 +182,7 @@ void printSymbolTable(vector<SymbolTableEntry> symbolTable)
              << "|\n";
         cout << setw(64) << setfill('-') << left << "+" << "+" << "\n";
     }
+    cout << "\n";
 }
 
 
