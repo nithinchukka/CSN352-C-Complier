@@ -1,4 +1,4 @@
-%option noyywrap c++
+%option noyywrap yylineno c++
 
 digit   [0-9]
 digits  {digit}+

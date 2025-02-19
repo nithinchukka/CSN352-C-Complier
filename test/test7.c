@@ -1,6 +1,7 @@
 struct Person {
     int age;
     char name[20];
+    string name = "John";
 };
 
 int main() {
