@@ -25,8 +25,13 @@ compile_commands.json
 
 # Flex/Bison (C++)
 lex.yy.cc
+lex.yy.c
+lex.yy.hh
+lex.yy.h
 y.tab.cc
 y.tab.hh
+y.tab.c
+y.tab.h
 
 # IDEs - VSCode
 build/

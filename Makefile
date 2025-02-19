@@ -1,46 +1,37 @@
 # Directories
-BUILDDIR = build
 SRCDIR = src
+BUILDDIR = build
 
 # Tools
+YACC = yacc
 LEX = flex
 CC = g++
-LDFLAGS = -lfl
-CFLAGS = -I$(SRCDIR)
+LDFLAGS = -lfl -ll -lm
+CFLAGS = -I$(BUILDDIR)
 
 # Files
 LEX_SRC = $(SRCDIR)/lexer.l
-LEX_OUT = $(BUILDDIR)/lex.yy.cc
-LEX_BIN = $(BUILDDIR)/lexer.out
+YACC_SRC = $(SRCDIR)/parser.y
+LEX_OUT = $(BUILDDIR)/lex.yy.c
+YACC_OUT = $(BUILDDIR)/y.tab.cc
+OUTPUT_BIN = $(BUILDDIR)/parser.out
 
 # Create build directory if not exists
 $(shell mkdir -p $(BUILDDIR))
 
 # Default target
-all: lexer
+all: build
 
-# Build lexer
-lexer: $(LEX_SRC)
+# Build parser and lexer
+build: $(LEX_SRC) $(YACC_SRC)
+	$(YACC) -d -o $(YACC_OUT) $(YACC_SRC)
 	$(LEX) -o$(LEX_OUT) $(LEX_SRC)
-	$(CC) $(LEX_OUT) -o $(LEX_BIN) $(CFLAGS) $(LDFLAGS)
-	@echo "Lexer built successfully!"
-
-# Run lexer with input file
-runlexer: lexer
-	@if [ -z "$(FILE)" ]; then \
-		echo "Error: No input file specified."; \
-		echo "Usage: make runlexer FILE=<your_input_file>"; \
-		echo "Example: make runlexer FILE=src/test.c"; \
-		exit 1; \
-	fi
-	@echo "Running lexer on $(FILE)..."
-	@echo " "
-	./$(LEX_BIN) "$(FILE)"
+	$(CC) $(CFLAGS) $(LEX_OUT) $(YACC_OUT) -o $(OUTPUT_BIN) $(LDFLAGS)
+	@echo "Build completed!"
 
 # Clean build artifacts
 clean:
-	rm -rf $(BUILDDIR)/*
-	rmdir $(BUILDDIR)
+	rm -f $(BUILDDIR)/*
 	@echo "Cleaned build files!"
 
-.PHONY: all lexer runlexer clean
+.PHONY: all build clean

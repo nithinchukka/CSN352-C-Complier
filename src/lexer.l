@@ -1,28 +1,17 @@
-%option noyywrap yylineno c++
+%option noyywrap yylineno
 
 digit   [0-9]
 digits  {digit}+
 alpha   [A-Za-z]
-number  {digits}(\.{digits})?([eE][+-]?{digits})?
+integer     {digits}
+float       {digits}"."{digits}([eE][+-]?{digits})?
 id      ({alpha}|_)({alpha}|{digit}|_)*
 char    \'([^\'\\]|\\.)\'
 string  \"([^\"\\]|\\.)*\"
 space   [ \t\v\f\n]+
 
-
-
 %{
-#include "tokenType.h"
-#include <fstream>
-#include <vector>
-#include <iomanip>
-using namespace std;
-
-struct SymbolTableEntry
-{
-    string token;
-    string lexeme;
-};
+    #include "y.tab.hh"
 %}
 
 %%
@@ -42,173 +31,127 @@ struct SymbolTableEntry
                     }
                 }
 
-auto        {return (KEYWORD_AUTO);}
-bool        {return (KEYWORD_BOOL);}
-break       {return (KEYWORD_BREAK);}
-case        {return (KEYWORD_CASE);}
-catch       {return (KEYWORD_CATCH);}
-char        {return (KEYWORD_CHAR);}
-class       {return (KEYWORD_CLASS);}
-const       {return (KEYWORD_CONST);}
-continue    {return (KEYWORD_CONTINUE);}
-default     {return (KEYWORD_DEFAULT);}
-delete      {return (KEYWORD_DELETE);}
-do          {return (KEYWORD_DO);}
-double      {return (KEYWORD_DOUBLE);}
-else        {return (KEYWORD_ELSE);}
-enum        {return (KEYWORD_ENUM);}
-extern      {return (KEYWORD_EXTERN);}
-false       {return (KEYWORD_FALSE);}
-float       {return (KEYWORD_FLOAT);}
-for         {return (KEYWORD_FOR);}
-friend      {return (KEYWORD_FRIEND);}
-goto        {return (KEYWORD_GOTO);}
-if          {return (KEYWORD_IF);}
-inline      {return (KEYWORD_INLINE);}
-int         {return (KEYWORD_INT);}
-long        {return (KEYWORD_LONG);}
-namespace   {return (KEYWORD_NAMESPACE);}
-new         {return (KEYWORD_NEW);}
-nullptr     {return (KEYWORD_NULLPTR);}
-private     {return (KEYWORD_PRIVATE);}
-protected   {return (KEYWORD_PROTECTED);}
-public      {return (KEYWORD_PUBLIC);}
-register    {return (KEYWORD_REGISTER);}
-return      {return (KEYWORD_RETURN);}
-short       {return (KEYWORD_SHORT);}
-signed      {return (KEYWORD_SIGNED);}
-sizeof      {return (KEYWORD_SIZEOF);}
-static      {return (KEYWORD_STATIC);}
-struct      {return (KEYWORD_STRUCT);}
-switch      {return (KEYWORD_SWITCH);}
-this        {return (KEYWORD_THIS);}
-throw       {return (KEYWORD_THROW);}
-true        {return (KEYWORD_TRUE);}
-try         {return (KEYWORD_TRY);}
-typedef     {return (KEYWORD_TYPEDEF);}
-union       {return (KEYWORD_UNION);}
-unsigned    {return (KEYWORD_UNSIGNED);}
-using       {return (KEYWORD_USING);}
-virtual     {return (KEYWORD_VIRTUAL);}
-void        {return (KEYWORD_VOID);}
-volatile   {return (KEYWORD_VOLATILE);}
-while       {return (KEYWORD_WHILE);}
+auto        { yylval.str = strdup(yytext); return (KEYWORD_AUTO); }
+bool        { yylval.str = strdup(yytext); return (KEYWORD_BOOL); }
+break       { yylval.str = strdup(yytext); return (KEYWORD_BREAK); }
+case        { yylval.str = strdup(yytext); return (KEYWORD_CASE); }
+catch       { yylval.str = strdup(yytext); return (KEYWORD_CATCH); }
+char        { yylval.str = strdup(yytext); return (KEYWORD_CHAR); }
+class       { yylval.str = strdup(yytext); return (KEYWORD_CLASS); }
+const       { yylval.str = strdup(yytext); return (KEYWORD_CONST); }
+continue    { yylval.str = strdup(yytext); return (KEYWORD_CONTINUE); }
+default     { yylval.str = strdup(yytext); return (KEYWORD_DEFAULT); }
+delete      { yylval.str = strdup(yytext); return (KEYWORD_DELETE); }
+do          { yylval.str = strdup(yytext); return (KEYWORD_DO); }
+double      { yylval.str = strdup(yytext); return (KEYWORD_DOUBLE); }
+else        { yylval.str = strdup(yytext); return (KEYWORD_ELSE); }
+enum        { yylval.str = strdup(yytext); return (KEYWORD_ENUM); }
+extern      { yylval.str = strdup(yytext); return (KEYWORD_EXTERN); }
+false       { yylval.str = strdup(yytext); return (KEYWORD_FALSE); }
+float       { yylval.str = strdup(yytext); return (KEYWORD_FLOAT); }
+for         { yylval.str = strdup(yytext); return (KEYWORD_FOR); }
+friend      { yylval.str = strdup(yytext); return (KEYWORD_FRIEND); }
+goto        { yylval.str = strdup(yytext); return (KEYWORD_GOTO); }
+if          { yylval.str = strdup(yytext); return (KEYWORD_IF); }
+inline      { yylval.str = strdup(yytext); return (KEYWORD_INLINE); }
+int         { yylval.str = strdup(yytext); return (KEYWORD_INT); }
+long        { yylval.str = strdup(yytext); return (KEYWORD_LONG); }
+namespace   { yylval.str = strdup(yytext); return (KEYWORD_NAMESPACE); }
+new         { yylval.str = strdup(yytext); return (KEYWORD_NEW); }
+nullptr     { yylval.str = strdup(yytext); return (KEYWORD_NULLPTR); }
+private     { yylval.str = strdup(yytext); return (KEYWORD_PRIVATE); }
+protected   { yylval.str = strdup(yytext); return (KEYWORD_PROTECTED); }
+public      { yylval.str = strdup(yytext); return (KEYWORD_PUBLIC); }
+register    { yylval.str = strdup(yytext); return (KEYWORD_REGISTER); }
+return      { yylval.str = strdup(yytext); return (KEYWORD_RETURN); }
+short       { yylval.str = strdup(yytext); return (KEYWORD_SHORT); }
+signed      { yylval.str = strdup(yytext); return (KEYWORD_SIGNED); }
+sizeof      { yylval.str = strdup(yytext); return (KEYWORD_SIZEOF); }
+static      { yylval.str = strdup(yytext); return (KEYWORD_STATIC); }
+struct      { yylval.str = strdup(yytext); return (KEYWORD_STRUCT); }
+switch      { yylval.str = strdup(yytext); return (KEYWORD_SWITCH); }
+this        { yylval.str = strdup(yytext); return (KEYWORD_THIS); }
+throw       { yylval.str = strdup(yytext); return (KEYWORD_THROW); }
+true        { yylval.str = strdup(yytext); return (KEYWORD_TRUE); }
+try         { yylval.str = strdup(yytext); return (KEYWORD_TRY); }
+typedef     { yylval.str = strdup(yytext); return (KEYWORD_TYPEDEF); }
+union       { yylval.str = strdup(yytext); return (KEYWORD_UNION); }
+unsigned    { yylval.str = strdup(yytext); return (KEYWORD_UNSIGNED); }
+using       { yylval.str = strdup(yytext); return (KEYWORD_USING); }
+virtual     { yylval.str = strdup(yytext); return (KEYWORD_VIRTUAL); }
+void        { yylval.str = strdup(yytext); return (KEYWORD_VOID); }
+volatile    { yylval.str = strdup(yytext); return (KEYWORD_VOLATILE); }
+while       { yylval.str = strdup(yytext); return (KEYWORD_WHILE); }
 
-"+"         {return (PLUS_OPERATOR);}
-"-"         {return (MINUS_OPERATOR);}
-"*"         {return (MULTIPLY_OPERATOR);}
-"/"         {return (DIVIDE_OPERATOR);}
-"%"         {return (MODULO_OPERATOR);}
-"--"        {return (DECREMENT_OPERATOR);}
-"++"        {return (INCREMENT_OPERATOR);}
+"+"         { yylval.str = strdup(yytext); return (PLUS_OPERATOR); }
+"-"         { yylval.str = strdup(yytext); return (MINUS_OPERATOR); }
+"*"         { yylval.str = strdup(yytext); return (MULTIPLY_OPERATOR); }
+"/"         { yylval.str = strdup(yytext); return (DIVIDE_OPERATOR); }
+"%"         { yylval.str = strdup(yytext); return (MODULO_OPERATOR); }
+"--"        { yylval.str = strdup(yytext); return (DECREMENT_OPERATOR); }
+"++"        { yylval.str = strdup(yytext); return (INCREMENT_OPERATOR); }
 
-"="         {return (ASSIGNMENT_OPERATOR);}
-"+="        {return (PLUS_ASSIGN_OPERATOR);}
-"-="        {return (MINUS_ASSIGN_OPERATOR);}
-"*="        {return (MULTIPLY_ASSIGN_OPERATOR);}
-"/="        {return (DIVIDE_ASSIGN_OPERATOR);}
-"%="        {return (MODULO_ASSIGN_OPERATOR);}
-"&="        {return (BITWISE_AND_ASSIGN_OPERATOR);}
-"|="        {return (BITWISE_OR_ASSIGN_OPERATOR);}
-"^="        {return (BITWISE_XOR_ASSIGN_OPERATOR);}
-">>="       {return (RIGHT_SHIFT_ASSIGN_OPERATOR);}
-"<<="       {return (LEFT_SHIFT_ASSIGN_OPERATOR);}
+"="         { yylval.str = strdup(yytext); return (ASSIGNMENT_OPERATOR); }
+"+="        { yylval.str = strdup(yytext); return (PLUS_ASSIGN_OPERATOR); }
+"-="        { yylval.str = strdup(yytext); return (MINUS_ASSIGN_OPERATOR); }
+"*="        { yylval.str = strdup(yytext); return (MULTIPLY_ASSIGN_OPERATOR); }
+"/="        { yylval.str = strdup(yytext); return (DIVIDE_ASSIGN_OPERATOR); }
+"%="        { yylval.str = strdup(yytext); return (MODULO_ASSIGN_OPERATOR); }
+"&="        { yylval.str = strdup(yytext); return (BITWISE_AND_ASSIGN_OPERATOR); }
+"|="        { yylval.str = strdup(yytext); return (BITWISE_OR_ASSIGN_OPERATOR); }
+"^="        { yylval.str = strdup(yytext); return (BITWISE_XOR_ASSIGN_OPERATOR); }
+">>="       { yylval.str = strdup(yytext); return (RIGHT_SHIFT_ASSIGN_OPERATOR); }
+"<<="       { yylval.str = strdup(yytext); return (LEFT_SHIFT_ASSIGN_OPERATOR); }
 
-"=="        {return (EQUALS_COMPARISON_OPERATOR);}
-"!="        {return (NOT_EQUALS_OPERATOR);}
-">"         {return (GREATER_THAN_OPERATOR);}
-"<"         {return (LESS_THAN_OPERATOR);}
-">="        {return (GREATER_THAN_OR_EQUAL_OPERATOR);}
-"<="        {return (LESS_THAN_OR_EQUAL_OPERATOR);}
+"=="        { yylval.str = strdup(yytext); return (EQUALS_COMPARISON_OPERATOR); }
+"!="        { yylval.str = strdup(yytext); return (NOT_EQUALS_OPERATOR); }
+">"         { yylval.str = strdup(yytext); return (GREATER_THAN_OPERATOR); }
+"<"         { yylval.str = strdup(yytext); return (LESS_THAN_OPERATOR); }
+">="        { yylval.str = strdup(yytext); return (GREATER_THAN_OR_EQUAL_OPERATOR); }
+"<="        { yylval.str = strdup(yytext); return (LESS_THAN_OR_EQUAL_OPERATOR); }
 
-"&&"        {return (LOGICAL_AND_OPERATOR);}
-"||"        {return (LOGICAL_OR_OPERATOR);}
-"!"         {return (LOGICAL_NOT_OPERATOR);}
+"&&"        { yylval.str = strdup(yytext); return (LOGICAL_AND_OPERATOR); }
+"||"        { yylval.str = strdup(yytext); return (LOGICAL_OR_OPERATOR); }
+"!"         { yylval.str = strdup(yytext); return (LOGICAL_NOT_OPERATOR); }
 
-"&"         {return (BITWISE_AND_OPERATOR);}
-"|"         {return (BITWISE_OR_OPERATOR);}
-"^"         {return (BITWISE_XOR_OPERATOR);}
-"<<"        {return (LEFT_SHIFT_OPERATOR);}
-">>"        {return (RIGHT_SHIFT_OPERATOR);}
-"~"         {return (BITWISE_NOT_OPERATOR);}
+"&"         { yylval.str = strdup(yytext); return (BITWISE_AND_OPERATOR); }
+"|"         { yylval.str = strdup(yytext); return (BITWISE_OR_OPERATOR); }
+"^"         { yylval.str = strdup(yytext); return (BITWISE_XOR_OPERATOR); }
+"<<"        { yylval.str = strdup(yytext); return (LEFT_SHIFT_OPERATOR); }
+">>"        { yylval.str = strdup(yytext); return (RIGHT_SHIFT_OPERATOR); }
+"~"         { yylval.str = strdup(yytext); return (BITWISE_NOT_OPERATOR); }
 
-"?"         {return (TERNARY_OPERATOR);}
+"?"         { yylval.str = strdup(yytext); return (TERNARY_OPERATOR); }
 
-"."         {return (DOT_OPERATOR);}
-"->"        {return (ARROW_OPERATOR);}
+"."         { yylval.str = strdup(yytext); return (DOT_OPERATOR); }
+"->"        { yylval.str = strdup(yytext); return (ARROW_OPERATOR); }
 
-"::"        {return (SCOPE_RESOLUTION_OPERATOR);}
+"::"        { yylval.str = strdup(yytext); return (SCOPE_RESOLUTION_OPERATOR); }
 
-"#"         {return (HASH_OPERATOR);}
-"##"        {return (DOUBLE_HASH_OPERATOR);}
+"#"         { yylval.str = strdup(yytext); return (HASH_OPERATOR); }
+"##"        { yylval.str = strdup(yytext); return (DOUBLE_HASH_OPERATOR); }
 
-"..."       {return (ELLIPSIS_OPERATOR);}
+"..."       { yylval.str = strdup(yytext); return (ELLIPSIS_OPERATOR); }
 
-".*"        {return (POINTER_TO_MEMBER_DOT_OPERATOR);}
-"->*"       {return (POINTER_TO_MEMBER_ARROW_OPERATOR);}
+".*"        { yylval.str = strdup(yytext); return (POINTER_TO_MEMBER_DOT_OPERATOR); }
+"->*"       { yylval.str = strdup(yytext); return (POINTER_TO_MEMBER_ARROW_OPERATOR); }
 
-{id}        {return (ID);}
-{number}    {return (NUMBER);}
-{char}      {return (CHAR);}
-{string}    {return (STRING);}
+{id}        { yylval.str = strdup(yytext); return (ID); }
+{integer}   { yylval.integer = atoi(yytext); return INTEGER; }
+{float}     { yylval.floating = atof(yytext); return FLOAT; }
+{char}      { yylval.str = strdup(yytext); return (CHAR); }
+{string}    { yylval.str = strdup(yytext); return (STRING); }
 
-";"         {return (SEMICOLON);}
-":"         {return (COLON);}
-","         {return (COMMA);}
-"{"         {return (LBRACE);}
-"}"         {return (RBRACE);}
-"("         {return (LPAREN);}
-")"         {return (RPAREN);}
-"["         {return (LBRACKET);}
-"]"         {return (RBRACKET);}
+";"         { yylval.str = strdup(yytext); return (SEMICOLON); }
+":"         { yylval.str = strdup(yytext); return (COLON); }
+","         { yylval.str = strdup(yytext); return (COMMA); }
+"{"         { yylval.str = strdup(yytext); return (LBRACE); }
+"}"         { yylval.str = strdup(yytext); return (RBRACE); }
+"("         { yylval.str = strdup(yytext); return (LPAREN); }
+")"         { yylval.str = strdup(yytext); return (RPAREN); }
+"["         { yylval.str = strdup(yytext); return (LBRACKET); }
+"]"         { yylval.str = strdup(yytext); return (RBRACKET); }
 
 {space}   { /* Ignore Spaces */ }
-.         {cout << "Unrecognized Token: " << yytext << " at line no: " << yylineno << endl;} 
+.         { printf("Unrecognized Token: %s at line no: %d\n", yytext, yylineno); }
 %%
-
-void printSymbolTable(vector<SymbolTableEntry> symbolTable)
-{
-    cout << setw(64) << setfill('=') << left << "+" << "+" << "\n";
-
-    cout << "| " << setw(15) << setfill(' ') << right << "Tok" << setw(15) << left << "en"
-         << "| " << setw(15) << setfill(' ') << right << "Lex" << setw(15) << left << "eme" << "|\n";
-
-    cout << setw(64) << setfill('=') << left << "+" << "+" << "\n";
-
-    for(auto entry : symbolTable)
-    {
-        cout << "| " << setw(30) << setfill(' ') << left << entry.token
-             << "| " << setw(30) << left << entry.lexeme
-             << "|\n";
-        cout << setw(64) << setfill('-') << left << "+" << "+" << "\n";
-    }
-    cout << "\n";
-}
-
-
-int main(int argc, char **argv) {
-    if(argc < 2){
-        cout << "Usage: " << argv[0] << " <input_file>" << endl;
-        return 1;
-    }
-
-    ifstream file(argv[1]);
-    if(!file.is_open()){
-        cout << "Error: Unable to open file " << argv[1] << endl;
-        return 1;
-    }
-    
-    vector<SymbolTableEntry> symbolTable;
-
-    yyFlexLexer* lexer = new yyFlexLexer(&file);
-    
-    int token;
-    while ((token = lexer->yylex()) != 0) {
-        symbolTable.push_back({tokenTypeToTokenClass(token), lexer->YYText()});
-    } 
-
-    printSymbolTable(symbolTable);
-    
-    delete lexer;
-    return 0;
-}
