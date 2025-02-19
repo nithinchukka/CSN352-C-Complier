@@ -124,8 +124,6 @@ while       { yylval.str = strdup(yytext); return (KEYWORD_WHILE); }
 "?"         { yylval.str = strdup(yytext); return (TERNARY_OPERATOR); }
 
 "."         { yylval.str = strdup(yytext); return (DOT_OPERATOR); }
-"->"        { yylval.str = strdup(yytext); return (ARROW_OPERATOR); }
-
 "::"        { yylval.str = strdup(yytext); return (SCOPE_RESOLUTION_OPERATOR); }
 
 "#"         { yylval.str = strdup(yytext); return (HASH_OPERATOR); }
