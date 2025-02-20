@@ -3,4 +3,4 @@
 clear
 make clean
 make 
-./build/parser.out text.txt | tee output.log
+./build/parser.out test.txt | tee output.log

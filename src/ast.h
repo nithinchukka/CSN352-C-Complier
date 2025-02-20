@@ -76,6 +76,11 @@ enum NodeType {
     NODE_CHAR_LITERAL,
     NODE_KEYWORD,
     ARRAY,
+    NODE_CLASS_DECL,
+    NODE_CLASS_FWD_DECL,
+    NODE_CLASS_INHERIT,
+    NODE_VIRTUAL_FUNC,
+    DIMENSION_LIST
 };
 
 using NodeValue = variant<monostate, string, int, double, bool, char>;
@@ -191,6 +196,7 @@ public:
             case NODE_IDENTIFIER: return "IDENTIFIER";
             case NODE_KEYWORD: return "KEYWORD";
             case ARRAY: return "ARRAY";
+            case DIMENSION_LIST: return "DIMENSION_LIST";
             default: return "UNKNOWN";
         }
     }
@@ -200,15 +206,15 @@ public:
         if (holds_alternative<monostate>(value))
             return "(null)";
         if (holds_alternative<string>(value))
-            return "(" + get<string>(value) + ")";
+            return get<string>(value);
         if (holds_alternative<int>(value))
-            return "(" + to_string(get<int>(value)) + ")";
+            return to_string(get<int>(value));
         if (holds_alternative<double>(value))
-            return "(" + to_string(get<double>(value)) + ")";
+            return to_string(get<double>(value));
         if (holds_alternative<bool>(value))
-            return "(" + string(get<bool>(value) ? "true" : "false") + ")";
+            return string(get<bool>(value) ? "true" : "false");
         if (holds_alternative<char>(value))
-            return "('" + string(1, get<char>(value)) + "')";
+            return string(1, get<char>(value));
         return "(unknown)";
     }
 
