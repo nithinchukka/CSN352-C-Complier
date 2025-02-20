@@ -76,11 +76,6 @@ enum NodeType {
     NODE_CHAR_LITERAL,
     NODE_KEYWORD,
     ARRAY,
-    NODE_CLASS_DECL,
-    NODE_CLASS_FWD_DECL,
-    NODE_CLASS_INHERIT,
-    NODE_VIRTUAL_FUNC,
-    DIMENSION_LIST
 };
 
 using NodeValue = variant<monostate, string, int, double, bool, char>;
@@ -196,7 +191,6 @@ public:
             case NODE_IDENTIFIER: return "IDENTIFIER";
             case NODE_KEYWORD: return "KEYWORD";
             case ARRAY: return "ARRAY";
-            case DIMENSION_LIST: return "DIMENSION_LIST";
             default: return "UNKNOWN";
         }
     }

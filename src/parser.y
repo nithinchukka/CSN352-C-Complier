@@ -10,6 +10,8 @@
     #include <bits/stdc++.h>
 	#include "../src/ast.h"
 
+	#include "../src/ast.h"
+
     using namespace std;
     
     void yyerror(const char *s);
