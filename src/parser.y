@@ -105,10 +105,16 @@
 
 primary_expression
 	: ID { $$ = $1; }
+	| qualified_id
 	| INTEGER { $$ = $1;}
     | FLOAT { $$ = $1; }
 	| STRING { $$ = $1; }
 	| CHAR { $$ = $1; }
+	| CHAR
+	| KEYWORD_TRUE  // <-- Add this line
+    | KEYWORD_FALSE // <-- Add this line
+    | KEYWORD_NULLPTR // <-- Add this line
+    | KEYWORD_THIS
 	| LPAREN expression RPAREN { $$ = createNode(NODE_PRIMARY_EXPRESSION, monostate(), $2); }
 	;
 
@@ -122,7 +128,11 @@ postfix_expression
     | postfix_expression POINTER_TO_MEMBER_DOT_OPERATOR ID { $$ = createNode(NODE_POSTFIX_EXPRESSION, monostate(), $1, $3); }
 	| postfix_expression INCREMENT_OPERATOR { $$ = createNode(NODE_POSTFIX_EXPRESSION, monostate(), $1); }
 	| postfix_expression DECREMENT_OPERATOR { $$ = createNode(NODE_POSTFIX_EXPRESSION, monostate(), $1); }
+	    | qualified_id LPAREN argument_expression_list RPAREN
+
 	;
+
+
 
 argument_expression_list
 	: assignment_expression { $$ = $1; $$->type = (NODE_ARGUMENT_EXPRESSION_LIST);}
@@ -136,6 +146,10 @@ unary_expression
 	| unary_operator cast_expression { $$ = createNode(NODE_UNARY_EXPRESSION, monostate(), $1, $2); }
 	| KEYWORD_SIZEOF unary_expression { $$ = createNode(NODE_UNARY_EXPRESSION, monostate(),$1, $2); }
 	| KEYWORD_SIZEOF LPAREN type_name RPAREN { $$ = createNode(NODE_UNARY_EXPRESSION, monostate(), $1, $3);}
+	| KEYWORD_NEW type_name
+    | KEYWORD_NEW type_name LBRACKET expression RBRACKET  // Array allocation
+    | KEYWORD_DELETE cast_expression
+    | KEYWORD_DELETE LBRACKET RBRACKET cast_expression  // Array deallocation
 	;
 
 unary_operator
@@ -221,6 +235,7 @@ assignment_expression
 	;
 
 
+
 assignment_operator
 	: ASSIGNMENT_OPERATOR { $$ = createNode(NODE_ASSIGNMENT_OPERATOR, string($1)); }
 	| MULTIPLY_ASSIGN_OPERATOR { $$ = createNode(NODE_ASSIGNMENT_OPERATOR, string($1)); }
@@ -242,6 +257,7 @@ expression
 
 constant_expression
 	: conditional_expression { $$ = createNode(NODE_CONSTANT_EXPRESSION, monostate(), $1); }
+	| CHAR
 	;
 
 declaration
@@ -252,7 +268,45 @@ declaration
         $$ = createNode(NODE_DECLARATION, monostate(), $1, $2);
 		cout << *$1 << endl;
 		cout << *$2 << endl;
-    };
+    }
+    | class_declaration
+    | namespace_declaration
+    ;
+
+class_declaration
+    : KEYWORD_CLASS ID class_body SEMICOLON
+	| KEYWORD_CLASS ID class_body ID SEMICOLON
+    | KEYWORD_CLASS ID SEMICOLON
+    ;
+
+class_body
+    : LBRACE class_members RBRACE
+    ;
+
+class_members
+    : /* empty */
+    | class_members class_member
+    ;
+
+class_member
+    : access_specifier COLON class_members
+    | function_definition
+    | declaration
+	| KEYWORD_VIRTUAL function_definition  // <-- Add this line
+    | KEYWORD_FRIEND function_definition   // <-- Add this line
+    | KEYWORD_FRIEND declaration
+    ;
+
+access_specifier
+    : KEYWORD_PRIVATE
+    | KEYWORD_PROTECTED
+    | KEYWORD_PUBLIC
+    ;
+namespace_declaration
+    : KEYWORD_NAMESPACE ID LBRACE translation_unit RBRACE
+    | KEYWORD_NAMESPACE ID SEMICOLON
+    ; 
+
 
 
 declaration_specifiers
@@ -265,13 +319,18 @@ declaration_specifiers
 	;
 
 init_declarator_list
-	: init_declarator { $$ = $1; $$->type = (NODE_INIT_DECLARATOR_LIST); }
-	| init_declarator_list COMMA init_declarator { $$ = createNode(NODE_INIT_DECLARATOR_LIST, monostate(), $1, $3);}
-	;
+    : init_declarator { $$ = $1; $$->type = (NODE_INIT_DECLARATOR_LIST); }
+    | init_declarator_list COMMA init_declarator { $$ = createNode(NODE_INIT_DECLARATOR_LIST, monostate(), $1, $3);}
+    | init_declarator LBRACKET constant_expression RBRACKET  // Array declaration with a fixed size
+    | init_declarator LBRACKET RBRACKET  // Dynamic array declaration
+	| init_declarator ASSIGNMENT_OPERATOR STRING
+    ;
+
 
 init_declarator
 	: declarator { $$ = $1; $$->type = (NODE_INIT_DECLARATOR); }
 	| declarator ASSIGNMENT_OPERATOR initializer { $$ = createNode(NODE_INIT_DECLARATOR, monostate(), $1, $3); }
+	| declarator ASSIGNMENT_OPERATOR STRING 
 	;
 
 storage_class_specifier
@@ -364,16 +423,31 @@ declarator
 	: pointer direct_declarator { $$ = createNode(NODE_DECLARATOR, monostate(), $1, $2); }
 	| direct_declarator { $$ = $1; $$->type = (NODE_DECLARATOR); }
 	;
+qualified_id
+    : ID
+    | qualified_id SCOPE_RESOLUTION_OPERATOR ID
+    ;
+
 
 direct_declarator
-	: ID { $$ = $1; $$->type = (NODE_DECLARATOR); }
-	| LPAREN declarator RPAREN { $$ = $2; $$->type = (NODE_DECLARATOR); }
-	| direct_declarator LBRACKET constant_expression RBRACKET { $$ = createNode(ARRAY, monostate(), $1, $3); cout << "ARRAY\n";}
-	| direct_declarator LBRACKET RBRACKET{ $$ = $1; $$->type = (ARRAY); }
-	| direct_declarator LPAREN parameter_type_list RPAREN { $$ = createNode(NODE_DECLARATOR, monostate(), $1, $3); }
-	| direct_declarator LPAREN identifier_list RPAREN { $$ = createNode(NODE_DECLARATOR, monostate(), $1, $3); }
-	| direct_declarator LPAREN RPAREN { $$ = $1; $$->type = (NODE_DECLARATOR); }
-	;
+    : qualified_id
+    | scope_resolution_operator 
+	| ID { $$ = $1; $$->type = (NODE_DECLARATOR); }
+    | LPAREN declarator RPAREN { $$ = $2; $$->type = (NODE_DECLARATOR); }
+    | direct_declarator LBRACKET constant_expression RBRACKET { $$ = createNode(ARRAY, monostate(), $1, $3); cout << "ARRAY\n";}
+    | direct_declarator LBRACKET RBRACKET{ $$ = $1; $$->type = (ARRAY); }
+    | direct_declarator LBRACKET constant_expression RBRACKET direct_declarator  // Multi-dimensional array support
+    | direct_declarator LPAREN parameter_type_list RPAREN { $$ = createNode(NODE_DECLARATOR, monostate(), $1, $3); }
+    | direct_declarator LPAREN identifier_list RPAREN { $$ = createNode(NODE_DECLARATOR, monostate(), $1, $3); }
+    | direct_declarator LPAREN RPAREN { $$ = $1; $$->type = (NODE_DECLARATOR); }
+    ;
+
+
+scope_resolution_operator
+    : SCOPE_RESOLUTION_OPERATOR ID
+    | scope_resolution_operator SCOPE_RESOLUTION_OPERATOR ID
+    ;
+
 
 pointer
 	: MULTIPLY_OPERATOR { $$ = createNode(NODE_POINTER, string($1)); }
@@ -439,6 +513,7 @@ initializer
 	| LBRACE initializer_list COMMA RBRACE {  $$ = $2;$$->type = NODE_INITIALIZER; }
 	;
 
+
 initializer_list
 	: initializer {  $$ = $1;$$->type = NODE_INITIALIZER_LIST; }
 	| initializer_list COMMA initializer { $$ = createNode(NODE_INITIALIZER_LIST, monostate(), $1, $3); }
@@ -451,8 +526,21 @@ statement
 	| selection_statement { $$ = $1; }
 	| iteration_statement { $$ = $1; }
 	| jump_statement { $$ = $1; }
+	| try_catch_statement 
 	;
+try_catch_statement
+    : KEYWORD_TRY compound_statement catch_clauses
+    ;
 
+catch_clauses
+    : catch_clause
+    | catch_clauses catch_clause
+    ;
+
+catch_clause
+    : KEYWORD_CATCH LPAREN parameter_declaration RPAREN compound_statement
+    | KEYWORD_CATCH LPAREN ELLIPSIS_OPERATOR RPAREN compound_statement  // Catch-all handler
+    ;
 labeled_statement
 	: ID COLON statement { $$ = createNode(NODE_LABELED_STATEMENT, monostate(), $1, $3); }
 	| KEYWORD_CASE constant_expression COLON statement { $$ = createNode(NODE_LABELED_STATEMENT,monostate(), $1, $2, $4); }
@@ -499,15 +587,21 @@ iteration_statement
         { $$ = createNode(NODE_ITERATION_STATEMENT, monostate(), $1, $3, $4, $6); }
     | KEYWORD_FOR LPAREN expression_statement expression_statement expression RPAREN statement
         { $$ = createNode(NODE_ITERATION_STATEMENT, monostate(), $1, $3, $4, $5, $7); }
+	| KEYWORD_FOR LPAREN declaration expression_statement RPAREN statement   // Added support for variable declaration inside for loop
+	| KEYWORD_FOR LPAREN declaration expression_statement expression RPAREN statement  // Added support for variable declaration inside for loop
     ;
 
+
 jump_statement
-	: KEYWORD_GOTO ID SEMICOLON { $$ = createNode(NODE_JUMP_STATEMENT, monostate(), $1, $2); }
-	| KEYWORD_CONTINUE SEMICOLON { $$ = $1; $$->type = NODE_JUMP_STATEMENT;}
-	| KEYWORD_BREAK SEMICOLON { $$ = $1; $$->type = NODE_JUMP_STATEMENT; }
-	| KEYWORD_RETURN SEMICOLON { $$ = $1; $$->type = NODE_JUMP_STATEMENT; }
-	| KEYWORD_RETURN expression SEMICOLON { $$ = createNode(NODE_JUMP_STATEMENT, monostate(), $1, $2); }
-	;
+    : KEYWORD_GOTO ID SEMICOLON { $$ = createNode(NODE_JUMP_STATEMENT, monostate(), $1, $2); }
+    | KEYWORD_CONTINUE SEMICOLON { $$ = $1; $$->type = NODE_JUMP_STATEMENT;}
+    | KEYWORD_BREAK SEMICOLON { $$ = $1; $$->type = NODE_JUMP_STATEMENT; }
+    | KEYWORD_RETURN SEMICOLON { $$ = $1; $$->type = NODE_JUMP_STATEMENT; }
+    | KEYWORD_RETURN expression SEMICOLON { $$ = createNode(NODE_JUMP_STATEMENT, monostate(), $1, $2); }
+    | KEYWORD_THROW expression SEMICOLON
+    | KEYWORD_THROW STRING SEMICOLON   // Allow `throw "Exception!"`
+    | KEYWORD_THROW SEMICOLON
+    ;
 
 translation_unit
     : external_declaration {
@@ -516,9 +610,23 @@ translation_unit
     | translation_unit external_declaration {
         $$ = createNode(NODE_TRANSLATION_UNIT, monostate(), $1, $2);
     }
+	| translation_unit namespace_declaration
     ;
 
 
+constructor_initializer
+    : COLON mem_initializer_list
+    ;
+
+mem_initializer_list
+    : mem_initializer
+    | mem_initializer_list COMMA mem_initializer
+    ;
+
+mem_initializer
+    : ID LPAREN argument_expression_list RPAREN
+    | ID LPAREN RPAREN
+    ;
 external_declaration
 	: function_definition {
 		$$ = $1;
@@ -529,26 +637,32 @@ external_declaration
 	;
 
 function_definition
-	: declaration_specifiers declarator declaration_list compound_statement {
+    : declaration_specifiers declarator constructor_initializer declaration_list compound_statement
+    | declaration_specifiers declarator constructor_initializer compound_statement
+    | declaration_specifiers declarator declaration_list compound_statement {
 		cout << 1 << endl;
 		$$ = createNode(NODE_FUNCTION_DEFINITION, monostate(), $1, $2, $3, $4);
 	}
-	| declaration_specifiers declarator compound_statement {
+    | declaration_specifiers declarator compound_statement {
 		cout << 2 << endl;
 		$$ = createNode(NODE_FUNCTION_DEFINITION, monostate(), $1, $2, $3);
 		cout << *$1 << endl;
 		cout << *$2 << endl;
 		//function calls this part...
 	}
-	| declarator declaration_list compound_statement {
+    | declarator constructor_initializer declaration_list compound_statement
+    | declarator constructor_initializer compound_statement
+    | declarator declaration_list compound_statement {
 		cout << 3 << endl;
 		$$ = createNode(NODE_FUNCTION_DEFINITION, monostate(), $1, $2, $3);
 	}
-	| declarator compound_statement {
+    | declarator compound_statement {
 		cout << 4 << endl;
 		$$ = createNode(NODE_FUNCTION_DEFINITION, monostate(), $1, $2);
 	}
-	;
+	| scope_resolution_operator declarator compound_statement
+    ;
+
 
 %%
 
