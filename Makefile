@@ -3,7 +3,7 @@ SRCDIR = src
 BUILDDIR = build
 
 # Tools
-YACC = yacc
+YACC = bison
 LEX = flex
 CC = g++
 LDFLAGS = -lfl -ll -lm

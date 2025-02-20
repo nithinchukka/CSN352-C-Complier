@@ -31,57 +31,57 @@ space   [ \t\v\f\n]+
                     }
                 }
 
-auto        { yylval.str = strdup(yytext); return (KEYWORD_AUTO); }
-bool        { yylval.str = strdup(yytext); return (KEYWORD_BOOL); }
-break       { yylval.str = strdup(yytext); return (KEYWORD_BREAK); }
-case        { yylval.str = strdup(yytext); return (KEYWORD_CASE); }
-catch       { yylval.str = strdup(yytext); return (KEYWORD_CATCH); }
-char        { yylval.str = strdup(yytext); return (KEYWORD_CHAR); }
-class       { yylval.str = strdup(yytext); return (KEYWORD_CLASS); }
-const       { yylval.str = strdup(yytext); return (KEYWORD_CONST); }
-continue    { yylval.str = strdup(yytext); return (KEYWORD_CONTINUE); }
-default     { yylval.str = strdup(yytext); return (KEYWORD_DEFAULT); }
-delete      { yylval.str = strdup(yytext); return (KEYWORD_DELETE); }
-do          { yylval.str = strdup(yytext); return (KEYWORD_DO); }
-double      { yylval.str = strdup(yytext); return (KEYWORD_DOUBLE); }
-else        { yylval.str = strdup(yytext); return (KEYWORD_ELSE); }
-enum        { yylval.str = strdup(yytext); return (KEYWORD_ENUM); }
-extern      { yylval.str = strdup(yytext); return (KEYWORD_EXTERN); }
-false       { yylval.str = strdup(yytext); return (KEYWORD_FALSE); }
-float       { yylval.str = strdup(yytext); return (KEYWORD_FLOAT); }
-for         { yylval.str = strdup(yytext); return (KEYWORD_FOR); }
-friend      { yylval.str = strdup(yytext); return (KEYWORD_FRIEND); }
-goto        { yylval.str = strdup(yytext); return (KEYWORD_GOTO); }
-if          { yylval.str = strdup(yytext); return (KEYWORD_IF); }
-inline      { yylval.str = strdup(yytext); return (KEYWORD_INLINE); }
-int         { yylval.str = strdup(yytext); return (KEYWORD_INT); }
-long        { yylval.str = strdup(yytext); return (KEYWORD_LONG); }
-namespace   { yylval.str = strdup(yytext); return (KEYWORD_NAMESPACE); }
-new         { yylval.str = strdup(yytext); return (KEYWORD_NEW); }
-nullptr     { yylval.str = strdup(yytext); return (KEYWORD_NULLPTR); }
-private     { yylval.str = strdup(yytext); return (KEYWORD_PRIVATE); }
-protected   { yylval.str = strdup(yytext); return (KEYWORD_PROTECTED); }
-public      { yylval.str = strdup(yytext); return (KEYWORD_PUBLIC); }
-register    { yylval.str = strdup(yytext); return (KEYWORD_REGISTER); }
-return      { yylval.str = strdup(yytext); return (KEYWORD_RETURN); }
-short       { yylval.str = strdup(yytext); return (KEYWORD_SHORT); }
-signed      { yylval.str = strdup(yytext); return (KEYWORD_SIGNED); }
-sizeof      { yylval.str = strdup(yytext); return (KEYWORD_SIZEOF); }
-static      { yylval.str = strdup(yytext); return (KEYWORD_STATIC); }
-struct      { yylval.str = strdup(yytext); return (KEYWORD_STRUCT); }
-switch      { yylval.str = strdup(yytext); return (KEYWORD_SWITCH); }
-this        { yylval.str = strdup(yytext); return (KEYWORD_THIS); }
-throw       { yylval.str = strdup(yytext); return (KEYWORD_THROW); }
-true        { yylval.str = strdup(yytext); return (KEYWORD_TRUE); }
-try         { yylval.str = strdup(yytext); return (KEYWORD_TRY); }
-typedef     { yylval.str = strdup(yytext); return (KEYWORD_TYPEDEF); }
-union       { yylval.str = strdup(yytext); return (KEYWORD_UNION); }
-unsigned    { yylval.str = strdup(yytext); return (KEYWORD_UNSIGNED); }
-using       { yylval.str = strdup(yytext); return (KEYWORD_USING); }
-virtual     { yylval.str = strdup(yytext); return (KEYWORD_VIRTUAL); }
-void        { yylval.str = strdup(yytext); return (KEYWORD_VOID); }
-volatile    { yylval.str = strdup(yytext); return (KEYWORD_VOLATILE); }
-while       { yylval.str = strdup(yytext); return (KEYWORD_WHILE); }
+auto        { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_AUTO); }
+bool        { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_BOOL); }
+break       { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_BREAK); }
+case        { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_CASE); }
+catch       { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_CATCH); }
+char        { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_CHAR); }
+class       { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_CLASS); }
+const       { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_CONST); }
+continue    { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_CONTINUE); }
+default     { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_DEFAULT); }
+delete      { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_DELETE); }
+do          { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_DO); }
+double      { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_DOUBLE); }
+else        { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_ELSE); }
+enum        { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_ENUM); }
+extern      { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_EXTERN); }
+false       { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_FALSE); }
+float       { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_FLOAT); }
+for         { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_FOR); }
+friend      { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_FRIEND); }
+goto        { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_GOTO); }
+if          { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_IF); }
+inline      { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_INLINE); }
+int         { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_INT); }
+long        { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_LONG); }
+namespace   { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_NAMESPACE); }
+new         { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_NEW); }
+nullptr     { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_NULLPTR); }
+private     { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_PRIVATE); }
+protected   { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_PROTECTED); }
+public      { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_PUBLIC); }
+register    { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_REGISTER); }
+return      { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_RETURN); }
+short       { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_SHORT); }
+signed      { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_SIGNED); }
+sizeof      { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_SIZEOF); }
+static      { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_STATIC); }
+struct      { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_STRUCT); }
+switch      { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_SWITCH); }
+this        { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_THIS); }
+throw       { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_THROW); }
+true        { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_TRUE); }
+try         { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_TRY); }
+typedef     { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_TYPEDEF); }
+union       { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_UNION); }
+unsigned    { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_UNSIGNED); }
+using       { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_USING); }
+virtual     { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_VIRTUAL); }
+void        { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_VOID); }
+volatile    { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_VOLATILE); }
+while       { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_WHILE); }
 
 "+"         { yylval.str = strdup(yytext); return (PLUS_OPERATOR); }
 "-"         { yylval.str = strdup(yytext); return (MINUS_OPERATOR); }
@@ -129,16 +129,16 @@ while       { yylval.str = strdup(yytext); return (KEYWORD_WHILE); }
 "#"         { yylval.str = strdup(yytext); return (HASH_OPERATOR); }
 "##"        { yylval.str = strdup(yytext); return (DOUBLE_HASH_OPERATOR); }
 
-"..."       { yylval.str = strdup(yytext); return (ELLIPSIS_OPERATOR); }
+"..."       { yylval.node = createNode(NODE_ELLIPSIS, string(yytext)); return (ELLIPSIS_OPERATOR); }
 
 ".*"        { yylval.str = strdup(yytext); return (POINTER_TO_MEMBER_DOT_OPERATOR); }
 "->*"       { yylval.str = strdup(yytext); return (POINTER_TO_MEMBER_ARROW_OPERATOR); }
 
-{id}        { yylval.str = strdup(yytext); return (ID); }
-{integer}   { yylval.integer = atoi(yytext); return INTEGER; }
-{float}     { yylval.floating = atof(yytext); return FLOAT; }
-{char}      { yylval.str = strdup(yytext); return (CHAR); }
-{string}    { yylval.str = strdup(yytext); return (STRING); }
+{id}        { yylval.node = createNode(NODE_IDENTIFIER, string(yytext)); return (ID); }
+{integer}   { yylval.node = createNode(NODE_CONSTANT, stoi(yytext)); return INTEGER; }
+{float}     { yylval.node = createNode(NODE_CONSTANT, stod(yytext)); return FLOAT; }
+{char}      { yylval.node = createNode(NODE_CHAR_LITERAL, yytext); return (ID); }
+{string}    { yylval.node = createNode(NODE_STRING_LITERAL, string(yytext)); return (ID); }
 
 ";"         { yylval.str = strdup(yytext); return (SEMICOLON); }
 ":"         { yylval.str = strdup(yytext); return (COLON); }
@@ -152,4 +152,4 @@ while       { yylval.str = strdup(yytext); return (KEYWORD_WHILE); }
 
 {space}   { /* Ignore Spaces */ }
 .         { printf("Unrecognized Token: %s at line no: %d\n", yytext, yylineno); }
-%%
+%%s
