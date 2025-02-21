@@ -1,25 +1,13 @@
-class MyClass {
-private:
-    int a;
-
-public:
-    MyClass() : a(0) {}
-    
-    void setA(int x) { a = x; }
-    int getA() const { return a; }
-
-    static void staticMethod() {}
-
-    virtual void print() { cout << "a: " << a << endl; }
-
-protected:
-    void setAProtected(int x) { a = x; }
+struct Student {
+    int id;
+    char name[50];
+    float marks;
 };
 
 int main() {
-    MyClass obj;
-    obj.setA(5);
-    obj.print();
-    MyClass::staticMethod();
+    struct Student s1 = {101, "Alice", 89.5};
+    struct Student *ptr = &s1;
+    (*ptr).marks += 5;
+
     return 0;
 }

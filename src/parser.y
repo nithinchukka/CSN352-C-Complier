@@ -666,20 +666,20 @@ function_definition
 void yyerror(const char *s) {
     extern char *yytext;
     extern int yylineno;
-    cerr << "Error: " << s << " at '" << yytext << "' on line " << yylineno << endl;
+    cout << "Error: " << s << " at '" << yytext << "' on line " << yylineno << endl;
 }
 
 
 int main(int argc, char **argv) {
     if (argc < 2) {
-        cerr << "Usage: " << argv[0] << " <input_file>" << endl;
+        cout << "Usage: " << argv[0] << " <input_file>" << endl;
         return 1;
     }
 
     yyin = fopen(argv[1], "r");
 
     if (!yyin) {
-        cerr << "Error opening file" << endl;
+        cout << "Error opening file" << endl;
         return 1;
     }
 
@@ -688,7 +688,7 @@ int main(int argc, char **argv) {
     fclose(yyin);
 
     if (result) {
-        cerr << "Parsing completed with errors." << endl;
+        cout << "Parsing completed with errors." << endl;
         return 1;
     } else {
         cout << "Parsing completed successfully!" << endl;

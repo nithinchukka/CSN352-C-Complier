@@ -1,6 +1,8 @@
+int add(int a, int b) {
+    return a + b;
+}
+
 int main() {
-    // Single line comment
-    int a = 5; /* Multi-line
-                 comment */
+    int result = add(5, 3);
     return 0;
 }
