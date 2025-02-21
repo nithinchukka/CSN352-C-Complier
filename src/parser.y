@@ -78,7 +78,7 @@
 
 %type<node> declaration declaration_specifiers declaration_specifier declarator declaration_list compound_statement struct_declaration_list
 
-%type<node> storage_class_specifier type_specifier struct_specifier
+%type<node> storage_class_specifier type_specifier struct_specifier class_specifier member_declaration_list member_declaration access_specifier
 
 %type<node> struct_declaration struct_declarator_list struct_declarator specifier_qualifier_list type_qualifier constant_expression
 
@@ -258,15 +258,24 @@ declaration
         if(ASTNode::nodeTypeToString($$->children[0]->type) == "STRUCT_SPECIFIER"){
             addStructMembersToSymbolTable($$->children[0]);
         }
+        else if(ASTNode::nodeTypeToString($$->children[0]->type) == "CLASS_SPECIFIER"){
+            addClassMembersToSymbolTable($$->children[0]);
+        }
     }
     | declaration_specifiers init_declarator_list SEMICOLON {
         $$ = createNode(NODE_DECLARATION, monostate(), $1, $2);
         if(ASTNode::nodeTypeToString($1->children[0]->type) == "STRUCT_SPECIFIER"){
             addStructMembersToSymbolTable($1->children[0]);
             addStructVariablesToSymbolTable($1->children[0], $2);
-        }else
-		    addDeclaratorsToSymbolTable($1, $2);
+        }
+        else if(ASTNode::nodeTypeToString($1->children[0]->type) == "CLASS_SPECIFIER"){
+            // addClassMembersToSymbolTable($1->children[0]);
+            addClassVariablesToSymbolTable($1->children[0], $2);
+        }
+        else
+		    addDeclaratorsToSymbolTable($1, $2);  
     };
+
 
 
 declaration_specifiers
@@ -328,8 +337,40 @@ type_specifier
 	| KEYWORD_SIGNED { $$ = $1; }
     | KEYWORD_UNSIGNED { $$ = $1; }
 	| struct_specifier  { $$ = $1;}
+    | class_specifier { $$ = $1; }
 	;
+class_specifier
+    : KEYWORD_CLASS ID LBRACE member_declaration_list RBRACE
+        { 
+            $$ = createNode(NODE_CLASS_SPECIFIER, monostate(), $2, $4); 
+        }
+    | KEYWORD_CLASS LBRACE member_declaration_list RBRACE  // New rule for anonymous class
+        { 
+            $$ = createNode(NODE_CLASS_SPECIFIER, monostate(), $3); 
+        }
+    | KEYWORD_CLASS ID
+        { $$ = createNode(NODE_CLASS_SPECIFIER, monostate(), $2);}
+    ;
 
+member_declaration_list
+    : member_declaration
+        { $$ = createNode(NODE_MEMBER_DECLARATION_LIST, monostate(), $1); }
+    | member_declaration_list member_declaration
+        { $$ = $1; $$->children.push_back($2); }
+    ;
+
+member_declaration
+    : access_specifier COLON
+        { $$ = createNode(NODE_ACCESS_SPECIFIER, monostate(), $1); }
+    | declaration
+        { $$ = $1; }
+    ;
+
+access_specifier
+    : KEYWORD_PUBLIC { $$ = $1; }
+    | KEYWORD_PRIVATE { $$ = $1; }
+    | KEYWORD_PROTECTED { $$ = $1; }
+    ;
 struct_specifier
     : KEYWORD_STRUCT ID LBRACE struct_declaration_list RBRACE  
         { $$ = createNode(NODE_STRUCT_SPECIFIER,monostate(), $1, $2, $4); }

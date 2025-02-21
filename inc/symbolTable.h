@@ -208,4 +208,41 @@ void printSymbolTable() {
     }
 }
 
+void addClassMembersToSymbolTable(ASTNode* classSpecifierNode) {
+    string className = classSpecifierNode->children[0]->valueToString();
+    addToSymbolTable(className, "class");
+    // if (classSpecifierNode->children.size() <= 2 || classSpecifierNode->children[2] == nullptr) {
+    //     return;  // No members
+    // }
+    // ASTNode* memberDeclarationListNode = classSpecifierNode->children[2];
+    // string currentAccess = "private";  // Default access for class
+    // for (ASTNode* memberNode : memberDeclarationListNode->children) {
+    //     if (memberNode == nullptr || memberNode->type != NODE_DECLARATION) continue;  // Skip non-declarations
+    //     if (memberNode->children.size() < 2 || memberNode->children[0] == nullptr || memberNode->children[1] == nullptr) continue;  // Must have type and declarators
+    //     ASTNode* typeNode = memberNode->children[0];
+    //     string memberType = typeNode->valueToString();
+    //     ASTNode* initDeclaratorList = memberNode->children[1];
+    //     for (ASTNode* declaratorNode : initDeclaratorList->children) {
+    //         if (declaratorNode == nullptr || declaratorNode->children.empty()) continue;
+    //         ASTNode* current = declaratorNode->children[0];  // First child is NODE_DECLARATOR
+    //         while (current && current->type == NODE_DECLARATOR && !current->children.empty()) {
+    //             current = current->children[0];
+    //         }
+    //         if (current == nullptr || current->valueToString().empty()) continue;
+    //         string memberName = current->valueToString();
+    //         addToSymbolTable(memberName, memberType + " (" + currentAccess + ")", className);
+    //     }
+    // }
+}
+
+void addClassVariablesToSymbolTable(ASTNode* classSpecifierNode, ASTNode* initDeclaratorList) {
+
+    ASTNode* classNameNode = classSpecifierNode->children[0];
+    string className = "class " + classNameNode->valueToString();
+
+    vector<string> identifiers = extractInitDeclarators(initDeclaratorList);
+    for(const auto id : identifiers) addToSymbolTable(id, className);
+
+    }
+
 #endif

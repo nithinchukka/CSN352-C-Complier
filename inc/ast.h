@@ -77,6 +77,10 @@ enum NodeType {
     ARRAY,
     NODE_BOOLEAN_LITERAL,
     NODE_IO_STATEMENT,
+    NODE_CLASS_SPECIFIER,          // For class definitions (named or anonymous)
+    NODE_MEMBER_DECLARATION_LIST,  // List of member declarations in a class
+    NODE_MEMBER_DECLARATION,       // Individual member declaration (access specifier or declaration)
+    NODE_ACCESS_SPECIFIER
 };
 
 using NodeValue = variant<monostate, string, int, double, bool, char>;
@@ -195,6 +199,10 @@ public:
             case NODE_STRING_LITERAL: return "STRING_LITERAL";
             case NODE_BOOLEAN_LITERAL: return "BOOLEAN_LITERAL";
             case NODE_IO_STATEMENT : return "NODE_IO_STATEMENT";
+            case NODE_CLASS_SPECIFIER: return "CLASS_SPECIFIER";
+        case NODE_MEMBER_DECLARATION_LIST: return "MEMBER_DECLARATION_LIST";
+        case NODE_MEMBER_DECLARATION: return "MEMBER_DECLARATION";
+        case NODE_ACCESS_SPECIFIER: return "ACCESS_SPECIFIER";
             default: return "UNKNOWN";
         }
     }

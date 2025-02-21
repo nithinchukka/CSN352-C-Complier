@@ -1,4 +1,3 @@
-
 // Function for basic arithmetic operations
 void basicArithmetic(int a, int b) {
     printf("\nBasic Arithmetic Operations:\n");
