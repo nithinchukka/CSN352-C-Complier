@@ -45,7 +45,6 @@ delete      { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KE
 do          { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_DO); }
 double      { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_DOUBLE); }
 else        { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_ELSE); }
-enum        { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_ENUM); }
 extern      { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_EXTERN); }
 float       { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_FLOAT); }
 for         { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_FOR); }
@@ -70,7 +69,6 @@ this        { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KE
 throw       { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_THROW); }
 try         { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_TRY); }
 typedef     { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_TYPEDEF); }
-union       { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_UNION); }
 unsigned    { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_UNSIGNED); }
 void        { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_VOID); }
 volatile    { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_VOLATILE); }
@@ -118,9 +116,6 @@ while       { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KE
 
 "."         { yylval.str = strdup(yytext); return (DOT_OPERATOR); }
 "::"        { yylval.str = strdup(yytext); return (SCOPE_RESOLUTION_OPERATOR); }
-
-"#"         { yylval.str = strdup(yytext); return (HASH_OPERATOR); }
-"##"        { yylval.str = strdup(yytext); return (DOUBLE_HASH_OPERATOR); }
 
 "..."       { yylval.node = createNode(NODE_ELLIPSIS, string(yytext)); return (ELLIPSIS_OPERATOR); }
 

@@ -1,99 +1,17 @@
 %code requires {
-	#include "../src/ast.h"
-    #include <string>
-    #include <vector>
-    using std::vector;
-    using std::string;
+	#include "../inc/ast.h"
 }
 
 %{
     #include <bits/stdc++.h>
-	#include "../src/ast.h"
-
-	#include "../src/ast.h"
-
+	#include "../inc/ast.h"
+    #include "../inc/symbolTable.h"
     using namespace std;
     
     void yyerror(const char *s);
     
     extern int yylex();
     extern FILE *yyin;
-
-    vector<tuple<string, string, string>> symbolTable;
-
-    void addToSymbolTable(const string& token, const string& tokenType, const string& extraInfo="") {
-        symbolTable.emplace_back(token, tokenType, extraInfo);
-    }
-
-    void addConstantsToSymbolTable(ASTNode *a){
-            addToSymbolTable(a->valueToString(), ASTNode::nodeTypeToString(a->type));
-    }
-    
-    
-    void addDeclaratorsToSymbolTable(ASTNode *a, ASTNode* b) {
-        string typeSpecifiers;
-        for (ASTNode* specifier : a->children) {
-            if (specifier) {
-                if (!typeSpecifiers.empty()) {
-                    typeSpecifiers += " ";
-                }
-                typeSpecifiers += specifier->valueToString();
-            }
-        }
-
-        for (ASTNode* declarator : b->children) {
-            if (!declarator || declarator->children.empty()) continue;
-
-            string varName;
-            string varType = typeSpecifiers;
-            int pointerCount = 0;
-            vector<string> dimensions;
-
-            ASTNode* current = declarator;
-
-            while (current) {
-                string nodeType = ASTNode::nodeTypeToString(current->type);
-                
-                if (nodeType == "DECLARATOR") {
-                    if (!current->children.empty()) {
-                        current = current->children[0];
-                        continue;
-                    }
-                } else if (nodeType == "POINTER") {
-                    pointerCount++;
-                } else if (nodeType == "ARRAY") {
-                    dimensions.push_back(current->children[1] ? current->children[1]->valueToString() : "");
-                } else {
-                    varName = current->valueToString();
-                }
-                
-                current = current->children.empty() ? nullptr : current->children[0];
-            }
-
-            varType.append(pointerCount, '*');
-
-            for (const string& dim : dimensions) {
-                varType += "[" + dim + "]";
-            }
-
-            addToSymbolTable(varName, varType);
-        }
-    }
-
-void addFunctionToSymbolTable(ASTNode* declarationSpecifiersNode, ASTNode* declaratorNode) {
-    if (!declarationSpecifiersNode || !declaratorNode) return;
-
-    ASTNode* current = declaratorNode;
-    while (current && !current->children.empty()) {
-        current = current->children[0];
-        if (current->type == NODE_IDENTIFIER) {
-            string functionName = current->valueToString();
-            addToSymbolTable(functionName, "function");
-            return;
-        }
-    }
-    cerr << "Error: Function name not found in declarator!" << endl;
-}
 
 %}
 
@@ -108,12 +26,12 @@ void addFunctionToSymbolTable(ASTNode* declarationSpecifiersNode, ASTNode* decla
 %token <node>
     KEYWORD_AUTO KEYWORD_BOOL KEYWORD_BREAK KEYWORD_CASE KEYWORD_CATCH KEYWORD_CHAR 
     KEYWORD_CLASS KEYWORD_CONST KEYWORD_CONTINUE KEYWORD_DEFAULT KEYWORD_DELETE KEYWORD_DO 
-    KEYWORD_DOUBLE KEYWORD_ELSE KEYWORD_ENUM KEYWORD_EXTERN KEYWORD_FLOAT 
+    KEYWORD_DOUBLE KEYWORD_ELSE KEYWORD_EXTERN KEYWORD_FLOAT 
     KEYWORD_FOR KEYWORD_GOTO KEYWORD_IF KEYWORD_INT 
     KEYWORD_LONG KEYWORD_NEW KEYWORD_NULLPTR KEYWORD_PRIVATE KEYWORD_PROTECTED 
     KEYWORD_PUBLIC KEYWORD_REGISTER KEYWORD_RETURN KEYWORD_SHORT KEYWORD_SIGNED KEYWORD_SIZEOF 
     KEYWORD_STATIC KEYWORD_STRUCT KEYWORD_SWITCH KEYWORD_THIS KEYWORD_THROW  
-    KEYWORD_TRY KEYWORD_TYPEDEF KEYWORD_UNION KEYWORD_UNSIGNED 
+    KEYWORD_TRY KEYWORD_TYPEDEF KEYWORD_UNSIGNED 
     KEYWORD_VOID KEYWORD_VOLATILE KEYWORD_WHILE
 
 /* Identifiers and Literals */
@@ -150,8 +68,7 @@ void addFunctionToSymbolTable(ASTNode* declarationSpecifiersNode, ASTNode* decla
 
 /* Other Operators & Symbols */
 %token <str>
-    TERNARY_OPERATOR DOT_OPERATOR  SCOPE_RESOLUTION_OPERATOR 
-    HASH_OPERATOR DOUBLE_HASH_OPERATOR 
+    TERNARY_OPERATOR DOT_OPERATOR  SCOPE_RESOLUTION_OPERATOR  
     POINTER_TO_MEMBER_DOT_OPERATOR POINTER_TO_MEMBER_ARROW_OPERATOR
 
 %nonassoc LOWER_THAN_ELSE
@@ -161,11 +78,11 @@ void addFunctionToSymbolTable(ASTNode* declarationSpecifiersNode, ASTNode* decla
 
 %type<node> declaration declaration_specifiers declaration_specifier declarator declaration_list compound_statement struct_declaration_list
 
-%type<node> storage_class_specifier type_specifier struct_or_union struct_or_union_specifier
+%type<node> storage_class_specifier type_specifier struct_specifier
 
 %type<node> struct_declaration struct_declarator_list struct_declarator specifier_qualifier_list type_qualifier constant_expression
 
-%type<node> enum_specifier enumerator_list enumerator type_qualifier_list parameter_type_list parameter_list parameter_declaration identifier_list type_name abstract_declarator
+%type<node> type_qualifier_list parameter_type_list parameter_list parameter_declaration identifier_list type_name abstract_declarator
 
 %type<node> initializer initializer_list direct_declarator pointer direct_abstract_declarator assignment_expression
 
@@ -339,10 +256,17 @@ constant_expression
 declaration
     : declaration_specifiers SEMICOLON {
         $$ = $1;
+        if(ASTNode::nodeTypeToString($$->children[0]->type) == "STRUCT_SPECIFIER"){
+            addStructMembersToSymbolTable($$->children[0]);
+        }
     }
     | declaration_specifiers init_declarator_list SEMICOLON {
         $$ = createNode(NODE_DECLARATION, monostate(), $1, $2);
-		addDeclaratorsToSymbolTable($1, $2);
+        if(ASTNode::nodeTypeToString($1->children[0]->type) == "STRUCT_SPECIFIER"){
+            addStructMembersToSymbolTable($1->children[0]);
+            addStructVariablesToSymbolTable($1->children[0], $2);
+        }else
+		    addDeclaratorsToSymbolTable($1, $2);
     };
 
 
@@ -403,24 +327,17 @@ type_specifier
 	| KEYWORD_DOUBLE { $$ = $1; }
 	| KEYWORD_SIGNED { $$ = $1; }
     | KEYWORD_UNSIGNED { $$ = $1; }
-	| struct_or_union_specifier  { $$ = $1; }
-	| enum_specifier { $$ = $1; }
+	| struct_specifier  { $$ = $1;}
 	;
 
-struct_or_union_specifier
-    : struct_or_union ID LBRACE struct_declaration_list RBRACE  
-        { $$ = createNode(NODE_STRUCT_OR_UNION_SPECIFIER,monostate(), $1, $2, $4); }
-    | struct_or_union LBRACE struct_declaration_list RBRACE  
-        { $$ = createNode(NODE_STRUCT_OR_UNION_SPECIFIER, monostate(), $1, $3); }
-    | struct_or_union ID  
-        { $$ = createNode(NODE_STRUCT_OR_UNION_SPECIFIER,monostate(), $1, $2); }
+struct_specifier
+    : KEYWORD_STRUCT ID LBRACE struct_declaration_list RBRACE  
+        { $$ = createNode(NODE_STRUCT_SPECIFIER,monostate(), $1, $2, $4); }
+    | KEYWORD_STRUCT LBRACE struct_declaration_list RBRACE  
+        { $$ = createNode(NODE_STRUCT_SPECIFIER, monostate(), $1, $3); }
+    | KEYWORD_STRUCT ID 
+        { $$ = createNode(NODE_STRUCT_SPECIFIER,monostate(), $1, $2); }
     ;
-
-struct_or_union
-    : KEYWORD_STRUCT { $$ = $1; }
-    | KEYWORD_UNION { $$ = $1; }
-    ;
-
 
 struct_declaration_list
     : struct_declaration { 
@@ -459,26 +376,6 @@ struct_declarator
 	| declarator COLON constant_expression { $$ = createNode(NODE_STRUCT_DECLARATOR, monostate(), $1, $3); }
 	;
 
-enum_specifier
-	: KEYWORD_ENUM LBRACE enumerator_list RBRACE { $$ = createNode(NODE_ENUM_SPECIFIER, monostate(), $1, $3); }
-	| KEYWORD_ENUM ID LBRACE enumerator_list RBRACE { $$ = createNode(NODE_ENUM_SPECIFIER, monostate(), $1, $2, $4); }
-	| KEYWORD_ENUM ID { $$ = createNode(NODE_ENUM_SPECIFIER, monostate(), $1, $2); }
-	;
-
-enumerator_list
-    : enumerator { 
-        $$ = createNode(NODE_ENUMERATOR_LIST, monostate(), $1); 
-    }
-    | enumerator_list COMMA enumerator { 
-        $$ = $1;
-        $$->children.push_back($3);
-    }
-    ;
-
-enumerator
-	: ID { $$ = $1; }
-	| ID ASSIGNMENT_OPERATOR constant_expression { $$ = createNode(NODE_ENUMERATOR, monostate(), $1, $3); }
-	;
 
 type_qualifier
 	: KEYWORD_CONST { $$ = $1; }
@@ -721,12 +618,8 @@ translation_unit
 
 
 external_declaration
-	: function_definition {
-		$$ = $1;
-	}
-	| declaration {
-		$$ = $1;
-	}
+	: function_definition { $$ = $1; }
+	| declaration { $$ = $1; }
 	;
 
 function_definition
@@ -757,17 +650,6 @@ void yyerror(const char *s) {
     cerr << "Error: " << s << " at '" << yytext << "' on line " << yylineno << endl;
 }
 
-void printSymbolTable() {
-    cout << left << setw(20) << "Token" << setw(20) << "TokenType" << setw(20) << "Scope" << endl;
-    cout << string(60, '-') << endl;
-
-    for (const auto& entry : symbolTable) {
-        cout << left << setw(20) << get<0>(entry)
-             << setw(20) << get<1>(entry)
-             << setw(20) << get<2>(entry)
-             << endl;
-    }
-}
 
 int main(int argc, char **argv) {
     if (argc < 2) {
