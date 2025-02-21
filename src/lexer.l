@@ -47,7 +47,6 @@ double      { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KE
 else        { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_ELSE); }
 enum        { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_ENUM); }
 extern      { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_EXTERN); }
-false       { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_FALSE); }
 float       { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_FLOAT); }
 for         { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_FOR); }
 goto        { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_GOTO); }
@@ -69,7 +68,6 @@ struct      { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KE
 switch      { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_SWITCH); }
 this        { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_THIS); }
 throw       { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_THROW); }
-true        { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_TRUE); }
 try         { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_TRY); }
 typedef     { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_TYPEDEF); }
 union       { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_UNION); }
@@ -129,11 +127,14 @@ while       { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KE
 ".*"        { yylval.str = strdup(yytext); return (POINTER_TO_MEMBER_DOT_OPERATOR); }
 "->*"       { yylval.str = strdup(yytext); return (POINTER_TO_MEMBER_ARROW_OPERATOR); }
 
-{id}        { yylval.node = createNode(NODE_IDENTIFIER, string(yytext)); return (ID); }
 {integer}   { yylval.node = createNode(NODE_CONSTANT, stoi(yytext)); return INTEGER; }
 {float}     { yylval.node = createNode(NODE_CONSTANT, stod(yytext)); return FLOAT; }
-{char}      { yylval.node = createNode(NODE_CHAR_LITERAL, yytext); return (ID); }
-{string}    { yylval.node = createNode(NODE_STRING_LITERAL, string(yytext)); return (ID); }
+{char}      { yylval.node = createNode(NODE_CHAR_LITERAL, yytext); return (CHAR); }
+{string}    { yylval.node = createNode(NODE_STRING_LITERAL, string(yytext)); return (STRING); }
+true        { yylval.node = createNode(NODE_BOOLEAN_LITERAL, string(yytext) == "true" ? true : false); return (BOOLEAN_LITERAL); }
+false       { yylval.node = createNode(NODE_BOOLEAN_LITERAL, string(yytext) == "false" ? false : true); return (BOOLEAN_LITERAL); }
+{id}        { yylval.node = createNode(NODE_IDENTIFIER, string(yytext)); return (ID); }
+
 
 ";"         { yylval.str = strdup(yytext); return (SEMICOLON); }
 ":"         { yylval.str = strdup(yytext); return (COLON); }
