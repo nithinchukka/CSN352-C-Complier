@@ -198,13 +198,12 @@ void addStructVariablesToSymbolTable(ASTNode* structSpecifierNode, ASTNode* init
 
 
 void printSymbolTable() {
-    cout << left << setw(20) << "Token" << setw(20) << "TokenType" << setw(20) << "Scope" << endl;
+    cout << left << setw(30) << "Token" << setw(30) << "TokenType" << endl;
     cout << string(60, '-') << endl;
 
     for (const auto& entry : symbolTable) {
-        cout << left << setw(20) << get<0>(entry)
-             << setw(20) << get<1>(entry)
-             << setw(20) << get<2>(entry)
+        cout << left << setw(30) << get<0>(entry)
+             << setw(30) << get<1>(entry)
              << endl;
     }
 }

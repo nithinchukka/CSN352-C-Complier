@@ -76,6 +76,7 @@ enum NodeType {
     NODE_KEYWORD,
     ARRAY,
     NODE_BOOLEAN_LITERAL,
+    NODE_IO_STATEMENT,
 };
 
 using NodeValue = variant<monostate, string, int, double, bool, char>;
@@ -193,6 +194,7 @@ public:
             case NODE_CHAR_LITERAL: return "CHAR_LITERAL";
             case NODE_STRING_LITERAL: return "STRING_LITERAL";
             case NODE_BOOLEAN_LITERAL: return "BOOLEAN_LITERAL";
+            case NODE_IO_STATEMENT : return "NODE_IO_STATEMENT";
             default: return "UNKNOWN";
         }
     }

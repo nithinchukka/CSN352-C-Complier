@@ -32,7 +32,7 @@
     KEYWORD_PUBLIC KEYWORD_REGISTER KEYWORD_RETURN KEYWORD_SHORT KEYWORD_SIGNED KEYWORD_SIZEOF 
     KEYWORD_STATIC KEYWORD_STRUCT KEYWORD_SWITCH KEYWORD_THIS KEYWORD_THROW  
     KEYWORD_TRY KEYWORD_TYPEDEF KEYWORD_UNSIGNED 
-    KEYWORD_VOID KEYWORD_VOLATILE KEYWORD_WHILE
+    KEYWORD_VOID KEYWORD_VOLATILE KEYWORD_WHILE KEYWORD_PRINTF KEYWORD_SCANF
 
 /* Identifiers and Literals */
 %token <node> INTEGER FLOAT CHAR STRING ID ELLIPSIS_OPERATOR BOOLEAN_LITERAL
@@ -94,8 +94,7 @@
 
 %type<node> relational_expression equality_expression and_expression exclusive_or_expression inclusive_or_expression
 
-%type<node> logical_and_expression logical_or_expression argument_expression_list assignment_operator try_catch_statement
-
+%type<node> logical_and_expression logical_or_expression argument_expression_list assignment_operator try_catch_statement io_statement
 %start translation_unit
 %%
 
@@ -273,6 +272,7 @@ declaration
 declaration_specifiers
     : declaration_specifier { 
         $$ = createNode(NODE_DECLARATION_SPECIFIERS, monostate(), $1); 
+
     }
     | declaration_specifiers declaration_specifier { 
         $$ = $1;
@@ -350,11 +350,15 @@ struct_declaration_list
     ;
 
 struct_declaration
-	: specifier_qualifier_list struct_declarator_list SEMICOLON { $$ = createNode(NODE_STRUCT_DECLARATION, monostate(), $1, $2); }
-	;
+    : specifier_qualifier_list struct_declarator_list SEMICOLON {
+        $$ = createNode(NODE_STRUCT_DECLARATION, monostate(), $1, $2);
+    }
+    ;
+
+
 
 specifier_qualifier_list
-	: type_specifier specifier_qualifier_list { $$ = createNode(NODE_SPECIFIER_QUALIFIER_LIST, monostate(), $1, $2); }
+	: type_specifier specifier_qualifier_list {$$ = createNode(NODE_SPECIFIER_QUALIFIER_LIST, monostate(), $1, $2); }
 	| type_specifier { $$ = $1; }
 	| type_qualifier specifier_qualifier_list { $$ = createNode(NODE_SPECIFIER_QUALIFIER_LIST, monostate(), $1, $2); }
 	| type_qualifier { $$ = $1; }
@@ -524,8 +528,23 @@ statement
 	| iteration_statement { $$ = $1; }
 	| jump_statement { $$ = $1; }
 	| try_catch_statement {$$ = $1; }
+    | io_statement{$$ = $1;}
 	;
 
+io_statement
+    : KEYWORD_PRINTF LPAREN STRING RPAREN SEMICOLON 
+        { 
+            $$ = createNode(NODE_IO_STATEMENT, monostate(), $1, $3); 
+        }
+    | KEYWORD_PRINTF LPAREN STRING COMMA argument_expression_list RPAREN SEMICOLON 
+        {  
+            $$ = createNode(NODE_IO_STATEMENT, monostate(), $1, $3, $5); 
+        }
+    | KEYWORD_SCANF LPAREN STRING COMMA argument_expression_list RPAREN SEMICOLON 
+        { 
+            $$ = createNode(NODE_IO_STATEMENT, monostate(), $1, $3, $5);
+        }
+    ;
 try_catch_statement
     : KEYWORD_TRY compound_statement catch_clauses
     ;

@@ -73,6 +73,8 @@ unsigned    { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KE
 void        { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_VOID); }
 volatile    { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_VOLATILE); }
 while       { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_WHILE); }
+"printf"    { yylval.node = createNode(NODE_KEYWORD, string("printf")); return (KEYWORD_PRINTF); }
+"scanf"     { yylval.node = createNode(NODE_KEYWORD, string("scanf")); return (KEYWORD_SCANF); }
 
 "+"         { yylval.str = strdup(yytext); return (PLUS_OPERATOR); }
 "-"         { yylval.str = strdup(yytext); return (MINUS_OPERATOR); }
