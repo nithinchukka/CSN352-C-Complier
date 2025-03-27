@@ -1,6 +1,8 @@
 %code requires {
 	#include "../inc/ast.h"
 }
+%define parse.error verbose
+
 
 %{
     #include <bits/stdc++.h>
@@ -30,7 +32,7 @@
     KEYWORD_FOR KEYWORD_GOTO KEYWORD_IF KEYWORD_INT 
     KEYWORD_LONG KEYWORD_NEW KEYWORD_NULLPTR KEYWORD_PRIVATE KEYWORD_PROTECTED 
     KEYWORD_PUBLIC KEYWORD_REGISTER KEYWORD_RETURN KEYWORD_SHORT KEYWORD_SIGNED KEYWORD_SIZEOF 
-    KEYWORD_STATIC KEYWORD_STRUCT KEYWORD_SWITCH KEYWORD_THIS KEYWORD_THROW  
+    KEYWORD_STATIC KEYWORD_STRUCT KEYWORD_SWITCH KEYWORD_THIS KEYWORD_THROW KEYWORD_UNION
     KEYWORD_TRY KEYWORD_TYPEDEF KEYWORD_UNSIGNED 
     KEYWORD_VOID KEYWORD_VOLATILE KEYWORD_WHILE KEYWORD_PRINTF KEYWORD_SCANF
 
@@ -76,9 +78,9 @@
 
 %type<node> translation_unit external_declaration function_definition
 
-%type<node> declaration declaration_specifiers declaration_specifier declarator declaration_list compound_statement struct_declaration_list
+%type<node> declaration declaration_specifiers declarator declaration_list compound_statement struct_declaration_list
 
-%type<node> storage_class_specifier type_specifier struct_specifier class_specifier member_declaration_list member_declaration access_specifier
+%type<node> storage_class_specifier type_specifier struct_or_union_specifier struct_or_union class_specifier member_declaration_list member_declaration access_specifier
 
 %type<node> struct_declaration struct_declarator_list struct_declarator specifier_qualifier_list type_qualifier constant_expression
 
@@ -100,13 +102,13 @@
 
 primary_expression
 	: ID { $$ = $1; }
-	| INTEGER { $$ = $1; }
+	| INTEGER { $$ = $1;}
     | FLOAT { $$ = $1; }
 	| STRING { $$ = $1; }
 	| CHAR { $$ = $1; }
 	| BOOLEAN_LITERAL {$$ = $1; } 
     | KEYWORD_NULLPTR {$$ = $1; }
-    | KEYWORD_THIS
+    | KEYWORD_THIS {$$ = $1; }
 	| LPAREN expression RPAREN { $$ = $2; }
 	;
 
@@ -115,11 +117,11 @@ postfix_expression
 	| postfix_expression LBRACKET expression RBRACKET { $$ = createNode(NODE_POSTFIX_EXPRESSION, monostate(), $1, $3); }
 	| postfix_expression LPAREN RPAREN { $$ = createNode(NODE_POSTFIX_EXPRESSION, monostate(), $1); }
 	| postfix_expression LPAREN argument_expression_list RPAREN { $$ = createNode(NODE_POSTFIX_EXPRESSION, monostate(), $1, $3); }
-	| postfix_expression DOT_OPERATOR ID { $$ = createNode(NODE_POSTFIX_EXPRESSION, monostate(), $1, $3); }
-	| postfix_expression POINTER_TO_MEMBER_ARROW_OPERATOR ID { $$ = createNode(NODE_POSTFIX_EXPRESSION, monostate(), $1, $3); }
-    | postfix_expression POINTER_TO_MEMBER_DOT_OPERATOR ID { $$ = createNode(NODE_POSTFIX_EXPRESSION, monostate(), $1, $3); }
-	| postfix_expression INCREMENT_OPERATOR { $$ = createNode(NODE_POSTFIX_EXPRESSION, monostate(), $1); }
-	| postfix_expression DECREMENT_OPERATOR { $$ = createNode(NODE_POSTFIX_EXPRESSION, monostate(), $1); }
+	| postfix_expression DOT_OPERATOR ID { $$ = createNode(NODE_POSTFIX_EXPRESSION, $2, $1, $3); }
+	| postfix_expression POINTER_TO_MEMBER_ARROW_OPERATOR ID { $$ = createNode(NODE_POSTFIX_EXPRESSION, $2, $1, $3); }
+    | postfix_expression POINTER_TO_MEMBER_DOT_OPERATOR ID { $$ = createNode(NODE_POSTFIX_EXPRESSION, $2, $1, $3); }
+	| postfix_expression INCREMENT_OPERATOR { $$ = createNode(NODE_POSTFIX_EXPRESSION, $2, $1); cout << *$$;}
+	| postfix_expression DECREMENT_OPERATOR { $$ = createNode(NODE_POSTFIX_EXPRESSION, $2, $1); }
 	;
 
 argument_expression_list
@@ -134,8 +136,8 @@ argument_expression_list
 
 unary_expression
 	: postfix_expression { $$ = $1; }
-	| INCREMENT_OPERATOR unary_expression { $$ = createNode(NODE_UNARY_EXPRESSION, monostate(), $2); }
-	| DECREMENT_OPERATOR unary_expression { $$ = createNode(NODE_UNARY_EXPRESSION, monostate(), $2); }
+	| INCREMENT_OPERATOR unary_expression { $$ = createNode(NODE_UNARY_EXPRESSION, $1, $2); cout << *$$ << endl;}
+	| DECREMENT_OPERATOR unary_expression { $$ = createNode(NODE_UNARY_EXPRESSION, $1, $2); }
 	| unary_operator cast_expression { $$ = createNode(NODE_UNARY_EXPRESSION, monostate(), $1, $2); }
 	| KEYWORD_SIZEOF unary_expression { $$ = createNode(NODE_UNARY_EXPRESSION, monostate(),$1, $2); }
 	| KEYWORD_SIZEOF LPAREN type_name RPAREN { $$ = createNode(NODE_UNARY_EXPRESSION, monostate(), $1, $3);}
@@ -147,12 +149,12 @@ unary_expression
 
 
 unary_operator
-	: BITWISE_AND_OPERATOR { $$ = createNode(NODE_UNARY_OPERATOR, monostate()); }
-	| MULTIPLY_OPERATOR { $$ = createNode(NODE_UNARY_OPERATOR, monostate()); }
-	| PLUS_OPERATOR { $$ = createNode(NODE_UNARY_OPERATOR, monostate()); }
-	| MINUS_OPERATOR { $$ = createNode(NODE_UNARY_OPERATOR, monostate()); }
-	| BITWISE_NOT_OPERATOR { $$ = createNode(NODE_UNARY_OPERATOR, monostate()); }
-	| LOGICAL_NOT_OPERATOR { $$ = createNode(NODE_UNARY_OPERATOR, monostate()); }
+	: BITWISE_AND_OPERATOR { $$ = createNode(NODE_UNARY_OPERATOR, $1); }
+	| MULTIPLY_OPERATOR { $$ = createNode(NODE_UNARY_OPERATOR, $1); }
+	| PLUS_OPERATOR { $$ = createNode(NODE_UNARY_OPERATOR, $1); }
+	| MINUS_OPERATOR { $$ = createNode(NODE_UNARY_OPERATOR, $1); }
+	| BITWISE_NOT_OPERATOR { $$ = createNode(NODE_UNARY_OPERATOR, $1); }
+	| LOGICAL_NOT_OPERATOR { $$ = createNode(NODE_UNARY_OPERATOR, $1); }
 	;
 
 cast_expression
@@ -162,85 +164,85 @@ cast_expression
 
 multiplicative_expression
 	: cast_expression { $$ = $1; }
-	| multiplicative_expression MULTIPLY_OPERATOR cast_expression { $$ = createNode(NODE_MULTIPLICATIVE_EXPRESSION, monostate(), $1, $3); }
-	| multiplicative_expression DIVIDE_OPERATOR cast_expression { $$ = createNode(NODE_MULTIPLICATIVE_EXPRESSION, monostate(), $1, $3); }
-	| multiplicative_expression MODULO_OPERATOR cast_expression { $$ = createNode(NODE_MULTIPLICATIVE_EXPRESSION, monostate(), $1, $3); }
+	| multiplicative_expression MULTIPLY_OPERATOR cast_expression { $$ = createNode(NODE_MULTIPLICATIVE_EXPRESSION, string($2), $1, $3); }
+	| multiplicative_expression DIVIDE_OPERATOR cast_expression { $$ = createNode(NODE_MULTIPLICATIVE_EXPRESSION, $2, $1, $3); }
+	| multiplicative_expression MODULO_OPERATOR cast_expression { $$ = createNode(NODE_MULTIPLICATIVE_EXPRESSION, $2, $1, $3); }
 	;
 
 additive_expression
 	: multiplicative_expression { $$ = $1; }
-	| additive_expression PLUS_OPERATOR multiplicative_expression { $$ = createNode(NODE_ADDITIVE_EXPRESSION, monostate(), $1, $3); }
-	| additive_expression MINUS_OPERATOR multiplicative_expression { $$ = createNode(NODE_ADDITIVE_EXPRESSION, monostate(), $1, $3); }
+	| additive_expression PLUS_OPERATOR multiplicative_expression { $$ = createNode(NODE_ADDITIVE_EXPRESSION, $2, $1, $3); }
+	| additive_expression MINUS_OPERATOR multiplicative_expression { $$ = createNode(NODE_ADDITIVE_EXPRESSION, $2, $1, $3); }
 	;
 
 shift_expression
 	: additive_expression { $$ = $1; }
-	| shift_expression LEFT_SHIFT_OPERATOR additive_expression { $$ = createNode(NODE_SHIFT_EXPRESSION, monostate(), $1, $3); }
-	| shift_expression RIGHT_SHIFT_OPERATOR additive_expression { $$ = createNode(NODE_SHIFT_EXPRESSION, monostate(), $1, $3); }
+	| shift_expression LEFT_SHIFT_OPERATOR additive_expression { $$ = createNode(NODE_SHIFT_EXPRESSION, $2, $1, $3); }
+	| shift_expression RIGHT_SHIFT_OPERATOR additive_expression { $$ = createNode(NODE_SHIFT_EXPRESSION, $2, $1, $3); }
 	;
 
 relational_expression
 	: shift_expression { $$ = $1; }
-	| relational_expression LESS_THAN_OPERATOR shift_expression { $$ = createNode(NODE_RELATIONAL_EXPRESSION, monostate(), $1, $3); }
-	| relational_expression GREATER_THAN_OPERATOR shift_expression { $$ = createNode(NODE_RELATIONAL_EXPRESSION, monostate(), $1, $3); }
-	| relational_expression LESS_THAN_OR_EQUAL_OPERATOR shift_expression { $$ = createNode(NODE_RELATIONAL_EXPRESSION, monostate(), $1, $3); }
-	| relational_expression GREATER_THAN_OR_EQUAL_OPERATOR shift_expression { $$ = createNode(NODE_RELATIONAL_EXPRESSION, monostate(), $1, $3); }
+	| relational_expression LESS_THAN_OPERATOR shift_expression { $$ = createNode(NODE_RELATIONAL_EXPRESSION, $2, $1, $3); }
+	| relational_expression GREATER_THAN_OPERATOR shift_expression { $$ = createNode(NODE_RELATIONAL_EXPRESSION, $2, $1, $3); }
+	| relational_expression LESS_THAN_OR_EQUAL_OPERATOR shift_expression { $$ = createNode(NODE_RELATIONAL_EXPRESSION, $2, $1, $3); }
+	| relational_expression GREATER_THAN_OR_EQUAL_OPERATOR shift_expression { $$ = createNode(NODE_RELATIONAL_EXPRESSION, $2, $1, $3); }
 	;
 
 equality_expression
 	: relational_expression { $$ = $1; }
-	| equality_expression EQUALS_COMPARISON_OPERATOR relational_expression { $$ = createNode(NODE_EQUALITY_EXPRESSION, monostate(), $1, $3); }
-	| equality_expression NOT_EQUALS_OPERATOR relational_expression { $$ = createNode(NODE_EQUALITY_EXPRESSION, monostate(), $1, $3); }
+	| equality_expression EQUALS_COMPARISON_OPERATOR relational_expression { $$ = createNode(NODE_EQUALITY_EXPRESSION, $2, $1, $3); }
+	| equality_expression NOT_EQUALS_OPERATOR relational_expression { $$ = createNode(NODE_EQUALITY_EXPRESSION, $2, $1, $3); }
 	;
 
 and_expression
 	: equality_expression { $$ = $1; }
-	| and_expression BITWISE_AND_OPERATOR equality_expression { $$ = createNode(NODE_AND_EXPRESSION, monostate(), $1, $3); }
+	| and_expression BITWISE_AND_OPERATOR equality_expression { $$ = createNode(NODE_AND_EXPRESSION, $2, $1, $3); }
 	;
 
 exclusive_or_expression
 	: and_expression { $$ = $1; }
-	| exclusive_or_expression BITWISE_XOR_OPERATOR and_expression { $$ = createNode(NODE_EXCLUSIVE_OR_EXPRESSION, monostate(), $1, $3); }
+	| exclusive_or_expression BITWISE_XOR_OPERATOR and_expression { $$ = createNode(NODE_EXCLUSIVE_OR_EXPRESSION, $2, $1, $3); }
 	;
 
 inclusive_or_expression
 	: exclusive_or_expression { $$ = $1; }
-	| inclusive_or_expression BITWISE_OR_OPERATOR exclusive_or_expression { $$ = createNode(NODE_INCLUSIVE_OR_EXPRESSION, monostate(), $1, $3); }
+	| inclusive_or_expression BITWISE_OR_OPERATOR exclusive_or_expression { $$ = createNode(NODE_INCLUSIVE_OR_EXPRESSION, $2, $1, $3); }
 	;
 
 logical_and_expression
 	: inclusive_or_expression { $$ = $1; }
-	| logical_and_expression LOGICAL_AND_OPERATOR inclusive_or_expression { $$ = createNode(NODE_LOGICAL_AND_EXPRESSION, monostate(), $1, $3); }
+	| logical_and_expression LOGICAL_AND_OPERATOR inclusive_or_expression { $$ = createNode(NODE_LOGICAL_AND_EXPRESSION, $2, $1, $3); }
 	;
 
 logical_or_expression
 	: logical_and_expression { $$ = $1; }
-	| logical_or_expression LOGICAL_OR_OPERATOR logical_and_expression { $$ = createNode(NODE_LOGICAL_OR_EXPRESSION, monostate(), $1, $3); }
+	| logical_or_expression LOGICAL_OR_OPERATOR logical_and_expression { $$ = createNode(NODE_LOGICAL_OR_EXPRESSION, $2, $1, $3); }
 	;
 
 conditional_expression
 	: logical_or_expression { $$ = $1; }
-	| logical_or_expression TERNARY_OPERATOR expression COLON conditional_expression { $$ = createNode(NODE_CONDITIONAL_EXPRESSION, monostate(), $1, $3, $5); }
+	| logical_or_expression TERNARY_OPERATOR expression COLON conditional_expression { $$ = createNode(NODE_CONDITIONAL_EXPRESSION, "?:", $1, $3, $5); }
 	;
 
 assignment_expression
 	: conditional_expression { $$ = $1; }
-	| unary_expression assignment_operator assignment_expression { $$ = createNode(NODE_ASSIGNMENT_EXPRESSION, monostate(), $1, $2, $3); }
+	| unary_expression assignment_operator assignment_expression { $$ = createNode(NODE_ASSIGNMENT_EXPRESSION, $2->value, $1, $3); }
 	;
 
 
 assignment_operator
-	: ASSIGNMENT_OPERATOR { $$ = createNode(NODE_ASSIGNMENT_OPERATOR, string($1)); }
-	| MULTIPLY_ASSIGN_OPERATOR { $$ = createNode(NODE_ASSIGNMENT_OPERATOR, string($1)); }
-	| DIVIDE_ASSIGN_OPERATOR { $$ = createNode(NODE_ASSIGNMENT_OPERATOR, string($1)); }
-	| MODULO_ASSIGN_OPERATOR { $$ = createNode(NODE_ASSIGNMENT_OPERATOR, string($1)); }
-	| PLUS_ASSIGN_OPERATOR { $$ = createNode(NODE_ASSIGNMENT_OPERATOR, string($1)); }
-	| MINUS_ASSIGN_OPERATOR { $$ = createNode(NODE_ASSIGNMENT_OPERATOR, string($1)); }
-	| LEFT_SHIFT_ASSIGN_OPERATOR { $$ = createNode(NODE_ASSIGNMENT_OPERATOR, string($1)); }
-	| RIGHT_SHIFT_ASSIGN_OPERATOR { $$ = createNode(NODE_ASSIGNMENT_OPERATOR, string($1)); }
-	| BITWISE_AND_ASSIGN_OPERATOR { $$ = createNode(NODE_ASSIGNMENT_OPERATOR, string($1)); }
-	| BITWISE_XOR_ASSIGN_OPERATOR { $$ = createNode(NODE_ASSIGNMENT_OPERATOR, string($1)); }
- 	| BITWISE_OR_ASSIGN_OPERATOR { $$ = createNode(NODE_ASSIGNMENT_OPERATOR, string($1)); }
+	: ASSIGNMENT_OPERATOR { $$ = createNode(NODE_ASSIGNMENT_OPERATOR, $1); }
+	| MULTIPLY_ASSIGN_OPERATOR { $$ = createNode(NODE_ASSIGNMENT_OPERATOR, $1); }
+	| DIVIDE_ASSIGN_OPERATOR { $$ = createNode(NODE_ASSIGNMENT_OPERATOR, $1); }
+	| MODULO_ASSIGN_OPERATOR { $$ = createNode(NODE_ASSIGNMENT_OPERATOR, $1); }
+	| PLUS_ASSIGN_OPERATOR { $$ = createNode(NODE_ASSIGNMENT_OPERATOR, $1); }
+	| MINUS_ASSIGN_OPERATOR { $$ = createNode(NODE_ASSIGNMENT_OPERATOR, $1); }
+	| LEFT_SHIFT_ASSIGN_OPERATOR { $$ = createNode(NODE_ASSIGNMENT_OPERATOR, $1); }
+	| RIGHT_SHIFT_ASSIGN_OPERATOR { $$ = createNode(NODE_ASSIGNMENT_OPERATOR, $1); }
+	| BITWISE_AND_ASSIGN_OPERATOR { $$ = createNode(NODE_ASSIGNMENT_OPERATOR, $1); }
+	| BITWISE_XOR_ASSIGN_OPERATOR { $$ = createNode(NODE_ASSIGNMENT_OPERATOR, $1); }
+ 	| BITWISE_OR_ASSIGN_OPERATOR { $$ = createNode(NODE_ASSIGNMENT_OPERATOR, $1); }
 	;
 
 expression
@@ -264,6 +266,7 @@ declaration
     }
     | declaration_specifiers init_declarator_list SEMICOLON {
         $$ = createNode(NODE_DECLARATION, monostate(), $1, $2);
+        cout << *$$ << endl;
         if(ASTNode::nodeTypeToString($1->children[0]->type) == "STRUCT_SPECIFIER"){
             addStructMembersToSymbolTable($1->children[0]);
             addStructVariablesToSymbolTable($1->children[0], $2);
@@ -279,25 +282,17 @@ declaration
 
 
 declaration_specifiers
-    : declaration_specifier { 
-        $$ = createNode(NODE_DECLARATION_SPECIFIERS, monostate(), $1); 
-
-    }
-    | declaration_specifiers declaration_specifier { 
-        $$ = $1;
-        $$->children.push_back($2);
-    }
-    ;
-
-declaration_specifier
     : storage_class_specifier { $$ = $1; }
+    | storage_class_specifier declaration_specifiers {$$ = createNode(NODE_DECLARATION_SPECIFIERS, monostate(), $1, $2); }
     | type_specifier { $$ = $1; }
+    | type_specifier declaration_specifiers { $$ = createNode(NODE_DECLARATION_SPECIFIERS, monostate(), $1, $2); }
     | type_qualifier { $$ = $1; }
+    | type_qualifier declaration_specifiers { $$ = createNode(NODE_DECLARATION_SPECIFIERS, monostate(), $1, $2); }
     ;
 
 init_declarator_list
     : init_declarator { 
-        $$ = createNode(NODE_INIT_DECLARATOR_LIST, monostate(), $1); 
+        $$ = createNode(NODE_DECLARATOR_LIST, monostate(), $1); 
     }
     | init_declarator_list COMMA init_declarator { 
         $$ = $1;
@@ -307,12 +302,10 @@ init_declarator_list
 
 init_declarator
     : declarator { 
-        $$ = createNode(NODE_INIT_DECLARATOR, monostate(), $1, nullptr); 
+        $$ = createNode(NODE_DECLARATOR, monostate(), $1, nullptr); 
     }
-
-	
     | declarator ASSIGNMENT_OPERATOR initializer { 
-        $$ = createNode(NODE_INIT_DECLARATOR, monostate(), $1, $3);
+        $$ = createNode(NODE_DECLARATOR, $2, $1, $3);
     }
     ;
 
@@ -336,7 +329,7 @@ type_specifier
 	| KEYWORD_DOUBLE { $$ = $1; }
 	| KEYWORD_SIGNED { $$ = $1; }
     | KEYWORD_UNSIGNED { $$ = $1; }
-	| struct_specifier  { $$ = $1;}
+	| struct_or_union_specifier  { $$ = $1;}
     | class_specifier { $$ = $1; }
 	;
 class_specifier
@@ -344,7 +337,7 @@ class_specifier
         { 
             $$ = createNode(NODE_CLASS_SPECIFIER, monostate(), $2, $4); 
         }
-    | KEYWORD_CLASS LBRACE member_declaration_list RBRACE  // New rule for anonymous class
+    | KEYWORD_CLASS LBRACE member_declaration_list RBRACE
         { 
             $$ = createNode(NODE_CLASS_SPECIFIER, monostate(), $3); 
         }
@@ -371,13 +364,18 @@ access_specifier
     | KEYWORD_PRIVATE { $$ = $1; }
     | KEYWORD_PROTECTED { $$ = $1; }
     ;
-struct_specifier
-    : KEYWORD_STRUCT ID LBRACE struct_declaration_list RBRACE  
+struct_or_union_specifier
+    : struct_or_union ID LBRACE struct_declaration_list RBRACE  
         { $$ = createNode(NODE_STRUCT_SPECIFIER,monostate(), $1, $2, $4); }
-    | KEYWORD_STRUCT LBRACE struct_declaration_list RBRACE  
+    | struct_or_union LBRACE struct_declaration_list RBRACE  
         { $$ = createNode(NODE_STRUCT_SPECIFIER, monostate(), $1, $3); }
-    | KEYWORD_STRUCT ID 
+    | struct_or_union ID 
         { $$ = createNode(NODE_STRUCT_SPECIFIER,monostate(), $1, $2); }
+    ;
+
+struct_or_union
+    : KEYWORD_STRUCT { $$ = $1; }
+    | KEYWORD_UNION { $$ = $1; }
     ;
 
 struct_declaration_list
@@ -434,10 +432,11 @@ declarator
             lastPointer = lastPointer->children[0];
         }
         lastPointer->addChild($2);
-        $$ = createNode(NODE_DECLARATOR, monostate(), $1);
+        // $$ = createNode(NODE_DECLARATOR, monostate(), $1);
+        $$ = $1;
     }
     | direct_declarator { 
-        $$ = createNode(NODE_DECLARATOR, monostate(), $1); 
+        $$ = $1; 
     }
     ;
 
@@ -468,10 +467,10 @@ direct_declarator
 
 
 pointer
-	: MULTIPLY_OPERATOR { $$ = createNode(NODE_POINTER, string($1)); }
-	| MULTIPLY_OPERATOR type_qualifier_list { $$ = createNode(NODE_POINTER, string($1), $2); }
-	| MULTIPLY_OPERATOR pointer { $$ = createNode(NODE_POINTER, string($1), $2); }
-	| MULTIPLY_OPERATOR type_qualifier_list pointer { $$ = createNode(NODE_POINTER, string($1), $2, $3); }
+	: MULTIPLY_OPERATOR { $$ = createNode(NODE_POINTER, $1); }
+	| MULTIPLY_OPERATOR type_qualifier_list { $$ = createNode(NODE_POINTER, $1, $2); }
+	| MULTIPLY_OPERATOR pointer { $$ = createNode(NODE_POINTER, $1, $2); }
+	| MULTIPLY_OPERATOR type_qualifier_list pointer { $$ = createNode(NODE_POINTER, $1, $2, $3); }
 	;
 
 type_qualifier_list
@@ -610,7 +609,7 @@ compound_statement
 	: LBRACE RBRACE { $$ = createNode(NODE_COMPOUND_STATEMENT, monostate()); }
 	| LBRACE statement_list RBRACE { $$ = $2; }
 	| LBRACE declaration_list RBRACE { $$ = $2; }
-	| LBRACE declaration_list statement_list RBRACE { $$ = createNode(NODE_COMPOUND_STATEMENT, monostate(), $2, $3); }
+	| LBRACE declaration_list statement_list RBRACE { $$ = createNode(NODE_COMPOUND_STATEMENT, monostate(), $2, $3); cout << *$$ << endl;}
 	;
 
 declaration_list
@@ -625,7 +624,7 @@ declaration_list
 
 statement_list
     : statement { 
-        $$ = createNode(NODE_STATEMENT_LIST, monostate(), $1); 
+        $$ = createNode(NODE_STATEMENT_LIST, monostate(), $1);
     }
     | statement_list statement { 
         $$ = $1;

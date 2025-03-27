@@ -1,9 +1,11 @@
-int main() {
-    int a = 5;
-    int b = 10;
-    int sum = a + b;
-    int product = a * b;
-    int division = b / a;
-    int modulo = b % a;
+int func(int a, int b) {
+    return a + b;
+}
+
+int main(){
+    int num; 
+    scanf("%d", &num);
+    int a = func(num,6);
     return 0;
 }
+

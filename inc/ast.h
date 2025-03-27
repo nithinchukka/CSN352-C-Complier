@@ -5,6 +5,7 @@
 using namespace std;
 
 enum NodeType {
+    NODE_ASSIGNMENT,
     NODE_TRANSLATION_UNIT,
     NODE_PARAMETER_TYPE_LIST,
     NODE_PARAMETER_LIST,
@@ -27,7 +28,6 @@ enum NodeType {
     NODE_ENUMERATOR,
     NODE_DECLARATION_SPECIFIERS,
     NODE_DECLARATION,
-    NODE_DECLARATOR,
     NODE_DIRECT_DECLARATOR,
     NODE_INITIALIZER,
     NODE_INITIALIZER_LIST,
@@ -68,8 +68,8 @@ enum NodeType {
     NODE_TYPE_QUALIFIER_LIST,
     NODE_ELLIPSIS,
     NODE_COMPOUND_STATEMENT,
-    NODE_INIT_DECLARATOR_LIST,
-    NODE_INIT_DECLARATOR,
+    NODE_DECLARATOR_LIST,
+    NODE_DECLARATOR,
     NODE_IDENTIFIER,
     NODE_STRING_LITERAL,
     NODE_CHAR_LITERAL,
@@ -80,7 +80,9 @@ enum NodeType {
     NODE_CLASS_SPECIFIER,          // For class definitions (named or anonymous)
     NODE_MEMBER_DECLARATION_LIST,  // List of member declarations in a class
     NODE_MEMBER_DECLARATION,       // Individual member declaration (access specifier or declaration)
-    NODE_ACCESS_SPECIFIER
+    NODE_ACCESS_SPECIFIER,
+    INTEGER_LITERAL,
+    FLOAT_LITERAL,
 };
 
 using NodeValue = variant<monostate, string, int, double, bool, char>;
@@ -127,6 +129,7 @@ public:
 
     static string nodeTypeToString(NodeType type) {
         switch (type) {
+            case NODE_ASSIGNMENT: return "ASSIGNMENT";
             case NODE_TRANSLATION_UNIT: return "TRANSLATION_UNIT";
             case NODE_PARAMETER_TYPE_LIST: return "PARAMETER_TYPE_LIST";
             case NODE_PARAMETER_LIST: return "PARAMETER_LIST";
@@ -190,8 +193,7 @@ public:
             case NODE_TYPE_QUALIFIER_LIST: return "TYPE_QUALIFIER_LIST";
             case NODE_ELLIPSIS: return "ELLIPSIS";
             case NODE_COMPOUND_STATEMENT: return "COMPOUND_STATEMENT";
-            case NODE_INIT_DECLARATOR_LIST: return "INIT_DECLARATOR_LIST";
-            case NODE_INIT_DECLARATOR: return "INIT_DECLARATOR";
+            case NODE_DECLARATOR_LIST: return "DECLARATOR_LIST";
             case NODE_IDENTIFIER: return "IDENTIFIER";
             case NODE_KEYWORD: return "KEYWORD";
             case ARRAY: return "ARRAY";
@@ -203,6 +205,8 @@ public:
         case NODE_MEMBER_DECLARATION_LIST: return "MEMBER_DECLARATION_LIST";
         case NODE_MEMBER_DECLARATION: return "MEMBER_DECLARATION";
         case NODE_ACCESS_SPECIFIER: return "ACCESS_SPECIFIER";
+        case INTEGER_LITERAL: return "INTEGER_LITERAL";
+        case FLOAT_LITERAL: return "FLOAT_LITERAL";
             default: return "UNKNOWN";
         }
     }
