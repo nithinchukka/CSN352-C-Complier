@@ -14,7 +14,6 @@
     
     extern int yylex();
     extern FILE *yyin;
-
 %}
 
 
@@ -76,7 +75,7 @@
 %nonassoc LOWER_THAN_ELSE
 %nonassoc KEYWORD_ELSE
 
-%type<node> translation_unit external_declaration function_definition
+%type<node> translation_unit external_declaration function_definition constructor_function destructor_function
 
 %type<node> declaration declaration_specifiers declarator declaration_list compound_statement struct_declaration_list
 
@@ -88,13 +87,13 @@
 
 %type<node> initializer initializer_list direct_declarator pointer direct_abstract_declarator assignment_expression
 
-%type<node> statement labeled_statement statement_list expression_statement selection_statement iteration_statement jump_statement
+%type<node> statement labeled_statement expression_statement selection_statement iteration_statement jump_statement block_item block_item_list
 
 %type<node> expression init_declarator init_declarator_list conditional_expression primary_expression postfix_expression
 
 %type<node> unary_expression unary_operator cast_expression multiplicative_expression additive_expression shift_expression
 
-%type<node> relational_expression equality_expression and_expression exclusive_or_expression inclusive_or_expression
+%type<node> relational_expression equality_expression and_expression exclusive_or_expression inclusive_or_expression scope_resolution_statements
 
 %type<node> logical_and_expression logical_or_expression argument_expression_list assignment_operator try_catch_statement io_statement
 %start translation_unit
@@ -120,7 +119,7 @@ postfix_expression
 	| postfix_expression DOT_OPERATOR ID { $$ = createNode(NODE_POSTFIX_EXPRESSION, $2, $1, $3); }
 	| postfix_expression POINTER_TO_MEMBER_ARROW_OPERATOR ID { $$ = createNode(NODE_POSTFIX_EXPRESSION, $2, $1, $3); }
     | postfix_expression POINTER_TO_MEMBER_DOT_OPERATOR ID { $$ = createNode(NODE_POSTFIX_EXPRESSION, $2, $1, $3); }
-	| postfix_expression INCREMENT_OPERATOR { $$ = createNode(NODE_POSTFIX_EXPRESSION, $2, $1); cout << *$$;}
+	| postfix_expression INCREMENT_OPERATOR { $$ = createNode(NODE_POSTFIX_EXPRESSION, $2, $1);}
 	| postfix_expression DECREMENT_OPERATOR { $$ = createNode(NODE_POSTFIX_EXPRESSION, $2, $1); }
 	;
 
@@ -136,7 +135,7 @@ argument_expression_list
 
 unary_expression
 	: postfix_expression { $$ = $1; }
-	| INCREMENT_OPERATOR unary_expression { $$ = createNode(NODE_UNARY_EXPRESSION, $1, $2); cout << *$$ << endl;}
+	| INCREMENT_OPERATOR unary_expression { $$ = createNode(NODE_UNARY_EXPRESSION, $1, $2);}
 	| DECREMENT_OPERATOR unary_expression { $$ = createNode(NODE_UNARY_EXPRESSION, $1, $2); }
 	| unary_operator cast_expression { $$ = createNode(NODE_UNARY_EXPRESSION, monostate(), $1, $2); }
 	| KEYWORD_SIZEOF unary_expression { $$ = createNode(NODE_UNARY_EXPRESSION, monostate(),$1, $2); }
@@ -258,37 +257,42 @@ declaration
     : declaration_specifiers SEMICOLON {
         $$ = $1;
         if(ASTNode::nodeTypeToString($$->children[0]->type) == "STRUCT_SPECIFIER"){
-            addStructMembersToSymbolTable($$->children[0]);
+            // addStructMembersToSymbolTable($$->children[0]);
         }
         else if(ASTNode::nodeTypeToString($$->children[0]->type) == "CLASS_SPECIFIER"){
-            addClassMembersToSymbolTable($$->children[0]);
+            // addClassMembersToSymbolTable($$->children[0]);
         }
     }
     | declaration_specifiers init_declarator_list SEMICOLON {
         $$ = createNode(NODE_DECLARATION, monostate(), $1, $2);
-        cout << *$$ << endl;
-        if(ASTNode::nodeTypeToString($1->children[0]->type) == "STRUCT_SPECIFIER"){
-            addStructMembersToSymbolTable($1->children[0]);
-            addStructVariablesToSymbolTable($1->children[0], $2);
-        }
-        else if(ASTNode::nodeTypeToString($1->children[0]->type) == "CLASS_SPECIFIER"){
-            // addClassMembersToSymbolTable($1->children[0]);
-            addClassVariablesToSymbolTable($1->children[0], $2);
-        }
-        else
-		    addDeclaratorsToSymbolTable($1, $2);  
+        addDeclaratorsToSymbolTable($1, $2);
+        // if(ASTNode::nodeTypeToString($1->children[0]->type) == "STRUCT_SPECIFIER"){
+        //     addStructMembersToSymbolTable($1->children[0]);
+        //     addStructVariablesToSymbolTable($1->children[0], $2);
+        // }
+        // else if(ASTNode::nodeTypeToString($1->children[0]->type) == "CLASS_SPECIFIER"){
+        //     // addClassMembersToSymbolTable($1->children[0]);
+        //     addClassVariablesToSymbolTable($1->children[0], $2);
+        // }
     };
 
-
-
 declaration_specifiers
-    : storage_class_specifier { $$ = $1; }
-    | storage_class_specifier declaration_specifiers {$$ = createNode(NODE_DECLARATION_SPECIFIERS, monostate(), $1, $2); }
-    | type_specifier { $$ = $1; }
-    | type_specifier declaration_specifiers { $$ = createNode(NODE_DECLARATION_SPECIFIERS, monostate(), $1, $2); }
-    | type_qualifier { $$ = $1; }
-    | type_qualifier declaration_specifiers { $$ = createNode(NODE_DECLARATION_SPECIFIERS, monostate(), $1, $2); }
-    ;
+	: storage_class_specifier { $$ = createNode(NODE_DECLARATION_SPECIFIERS, monostate(), $1); }
+	| storage_class_specifier declaration_specifiers { 
+        $2->addChild($1);
+        $$ = $2; 
+    }
+	| type_specifier { $$ = createNode(NODE_DECLARATION_SPECIFIERS, monostate(), $1); }
+	| type_specifier declaration_specifiers { 
+        $2->addChild($1);
+        $$ = $2; 
+    }
+	| type_qualifier { $$ = createNode(NODE_DECLARATION_SPECIFIERS, monostate(), $1); }
+	| type_qualifier declaration_specifiers { 
+        $2->addChild($1);
+        $$ = $2; 
+    }
+	;    
 
 init_declarator_list
     : init_declarator { 
@@ -310,26 +314,26 @@ init_declarator
     ;
 
 storage_class_specifier
-    : KEYWORD_TYPEDEF   { $$ = $1; }
-    | KEYWORD_EXTERN    { $$ = $1; }
-    | KEYWORD_STATIC    { $$ = $1; }
-    | KEYWORD_AUTO      { $$ = $1; }
-    | KEYWORD_REGISTER  { $$ = $1; }
+    : KEYWORD_TYPEDEF   { $$ = $1; $$->type = NODE_STORAGE_CLASS_SPECIFIER; }
+    | KEYWORD_EXTERN    { $$ = $1; $$->type = NODE_STORAGE_CLASS_SPECIFIER; }
+    | KEYWORD_STATIC    { $$ = $1; $$->type = NODE_STORAGE_CLASS_SPECIFIER; }
+    | KEYWORD_AUTO      { $$ = $1; $$->type = NODE_STORAGE_CLASS_SPECIFIER; }
+    | KEYWORD_REGISTER  { $$ = $1; $$->type = NODE_STORAGE_CLASS_SPECIFIER; }
     ;
 
 
 type_specifier
-	: KEYWORD_VOID { $$ = $1; }
-	| KEYWORD_CHAR { $$ = $1; }
-	| KEYWORD_SHORT { $$ = $1; }
-	| KEYWORD_INT { $$ = $1;}
-    | KEYWORD_BOOL { $$ = $1; }
-	| KEYWORD_LONG { $$ = $1; }
-	| KEYWORD_FLOAT { $$ = $1; }
-	| KEYWORD_DOUBLE { $$ = $1; }
-	| KEYWORD_SIGNED { $$ = $1; }
-    | KEYWORD_UNSIGNED { $$ = $1; }
-	| struct_or_union_specifier  { $$ = $1;}
+	: KEYWORD_VOID { $$ = $1; $$->type = NODE_TYPE_SPECIFIER; }
+	| KEYWORD_CHAR { $$ = $1; $$->type = NODE_TYPE_SPECIFIER; }
+    | KEYWORD_SHORT { $$ = $1; $$->type = NODE_TYPE_SPECIFIER; }
+    | KEYWORD_INT { $$ = $1; $$->type = NODE_TYPE_SPECIFIER; }
+    | KEYWORD_BOOL { $$ = $1; $$->type = NODE_TYPE_SPECIFIER; }
+    | KEYWORD_LONG { $$ = $1; $$->type = NODE_TYPE_SPECIFIER; }
+    | KEYWORD_FLOAT { $$ = $1; $$->type = NODE_TYPE_SPECIFIER; }
+    | KEYWORD_DOUBLE { $$ = $1; $$->type = NODE_TYPE_SPECIFIER; }
+    | KEYWORD_SIGNED { $$ = $1; $$->type = NODE_TYPE_SPECIFIER; }
+    | KEYWORD_UNSIGNED { $$ = $1; $$->type = NODE_TYPE_SPECIFIER; }
+    | struct_or_union_specifier { $$ = $1; }
     | class_specifier { $$ = $1; }
 	;
 class_specifier
@@ -356,6 +360,12 @@ member_declaration
     : access_specifier COLON
         { $$ = createNode(NODE_ACCESS_SPECIFIER, monostate(), $1); }
     | declaration
+        { $$ = $1; }
+    | function_definition
+        { $$ = $1; }
+    | constructor_function
+        { $$ = $1; }
+    | destructor_function
         { $$ = $1; }
     ;
 
@@ -421,8 +431,8 @@ struct_declarator
 
 
 type_qualifier
-	: KEYWORD_CONST { $$ = $1; }
-	| KEYWORD_VOLATILE { $$ = $1; }
+	: KEYWORD_CONST { $$ = $1; $$->type = NODE_TYPE_QUALIFIER; }
+	| KEYWORD_VOLATILE { $$ = $1; $$->type = NODE_TYPE_QUALIFIER; }
 	;
 
 declarator
@@ -562,12 +572,15 @@ initializer_list
 
 statement
 	: labeled_statement { $$ = $1; }
-	| compound_statement { $$ = $1; }
+	|{enterScope();} compound_statement { $$ = $2; exitScope();}
 	| expression_statement { $$ = $1; }
 	| selection_statement { $$ = $1; }
 	| iteration_statement { $$ = $1; }
 	| jump_statement { $$ = $1; }
 	| try_catch_statement {$$ = $1; }
+    | ID ID
+    | ID SCOPE_RESOLUTION_OPERATOR ID
+    | ID SCOPE_RESOLUTION_OPERATOR ID ASSIGNMENT_OPERATOR expression SEMICOLON
     | io_statement{$$ = $1;}
 	;
 
@@ -606,11 +619,19 @@ labeled_statement
 	;
 
 compound_statement
-	: LBRACE RBRACE { $$ = createNode(NODE_COMPOUND_STATEMENT, monostate()); }
-	| LBRACE statement_list RBRACE { $$ = $2; }
-	| LBRACE declaration_list RBRACE { $$ = $2; }
-	| LBRACE declaration_list statement_list RBRACE { $$ = createNode(NODE_COMPOUND_STATEMENT, monostate(), $2, $3); cout << *$$ << endl;}
-	;
+    : LBRACE RBRACE { $$ = createNode(NODE_COMPOUND_STATEMENT, monostate()); }
+    | LBRACE block_item_list RBRACE {$$ = $2;}
+    ;
+
+block_item_list
+    : block_item
+    | block_item_list block_item
+    ;
+
+block_item
+    : declaration
+    | statement
+    ;
 
 declaration_list
     : declaration { 
@@ -622,15 +643,6 @@ declaration_list
     }
     ;
 
-statement_list
-    : statement { 
-        $$ = createNode(NODE_STATEMENT_LIST, monostate(), $1);
-    }
-    | statement_list statement { 
-        $$ = $1;
-        $$->children.push_back($2);
-    }
-    ;
 
 expression_statement
 	: SEMICOLON { $$ = createNode(NODE_EXPRESSION_STATEMENT, monostate()); }
@@ -679,27 +691,41 @@ translation_unit
 external_declaration
 	: function_definition { $$ = $1; }
 	| declaration { $$ = $1; }
-	;
+    | scope_resolution_statements;
+    ;
 
-function_definition
-    : declaration_specifiers declarator declaration_list compound_statement {
-        $$ = createNode(NODE_FUNCTION_DEFINITION, monostate(), $1, $2, $3, $4);
-        addFunctionToSymbolTable($1, $2);
-    }
-    | declaration_specifiers declarator compound_statement {
-        $$ = createNode(NODE_FUNCTION_DEFINITION, monostate(), $1, $2, $3);
-        addFunctionToSymbolTable($1, $2);
-    }
-    | declarator declaration_list compound_statement {
-        $$ = createNode(NODE_FUNCTION_DEFINITION, monostate(), $1, $2, $3);
-        addFunctionToSymbolTable(nullptr, $1);
+scope_resolution_statements
+    : ID SCOPE_RESOLUTION_OPERATOR ID SEMICOLON
+    | ID SCOPE_RESOLUTION_OPERATOR ID assignment_operator expression SEMICOLON
+    | ID SCOPE_RESOLUTION_OPERATOR ID LPAREN RPAREN SEMICOLON
+    | ID SCOPE_RESOLUTION_OPERATOR ID LPAREN argument_expression_list RPAREN SEMICOLON
+    ;
+
+constructor_function
+    : declarator declaration_list compound_statement {
+        $$ = createNode(NODE_CONSTRUCTOR_FUNCTION, monostate(), $1, $2, $3);
     }
     | declarator compound_statement {
-        $$ = createNode(NODE_FUNCTION_DEFINITION, monostate(), $1, $2);
-        addFunctionToSymbolTable(nullptr, $1);
+        $$ = createNode(NODE_CONSTRUCTOR_FUNCTION, monostate(), $1, $2);
     }
     ;
 
+function_definition
+    : declaration_specifiers declarator declaration_list {enterScope();} compound_statement {
+        $$ = createNode(NODE_FUNCTION_DEFINITION, monostate(), $1, $2, $3, $5); exitScope();
+        // addFunctionToSymbolTable($1, $2);
+    }
+    | declaration_specifiers declarator {enterScope(); }compound_statement {
+        $$ = createNode(NODE_FUNCTION_DEFINITION, monostate(), $1, $2, $4); exitScope();
+        // addFunctionToSymbolTable($1, $2);
+    }
+    ;
+
+destructor_function
+    : BITWISE_NOT_OPERATOR  declarator compound_statement {
+        $$ = createNode(NODE_DESTRUCTOR_FUNCTION, monostate(),$2, $3);
+    }
+    ;
 
 %%
 
@@ -723,6 +749,9 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    currentTable = new Table();
+    tableStack.push(currentTable);
+    allTables.push_back(currentTable);
     int result = yyparse();
 
     fclose(yyin);
@@ -734,7 +763,7 @@ int main(int argc, char **argv) {
         cout << "Parsing completed successfully!" << endl;
     }
 
-	printSymbolTable();
+    printAllTables();
 
     return 0;
 }
