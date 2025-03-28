@@ -86,6 +86,8 @@ enum NodeType
     FLOAT_LITERAL,
     NODE_DESTRUCTOR_FUNCTION,
     NODE_CONSTRUCTOR_FUNCTION,
+    NODE_BLOCK_ITEM_LIST,
+    NODE_SCOPE_RESOLUTION_STATEMENT,
 };
 
 using NodeValue = variant<monostate, string, int, double, bool, char>;
@@ -303,6 +305,10 @@ public:
             return "DESTRUCTOR";
         case NODE_CONSTRUCTOR_FUNCTION:
             return "CONSTRUCTOR";
+        case NODE_BLOCK_ITEM_LIST:
+            return "BLOCK_ITEM_LIST";
+        case NODE_SCOPE_RESOLUTION_STATEMENT:
+            return "SCOPE_RESOLUTION_STATEMENT";
         default:
             return "UNKNOWN";
         }

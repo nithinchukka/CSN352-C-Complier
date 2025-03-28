@@ -1,125 +1,78 @@
 #ifndef SYMBOL_TABLE_H
 #define SYMBOL_TABLE_H
 
-#include<bits/stdc++.h>
+#include <bits/stdc++.h>
 #include "ast.h"
 using namespace std;
 
+struct Table
+{
+    unordered_map<string, string> symbolTable;
+    Table *parent;
+};
 
-vector<tuple<string, string, string>> symbolTable;
+stack<Table*> tableStack;
+Table *currentTable;
+vector<Table *> allTables;
 
-void addToSymbolTable(const string& token, const string& tokenType, const string& extraInfo="") {
-    symbolTable.emplace_back(token, tokenType, extraInfo);
-}
-
-void addConstantsToSymbolTable(ASTNode *a){
-        addToSymbolTable(a->valueToString(), ASTNode::nodeTypeToString(a->type));
-}
-
-void addStructMembersToSymbolTable(ASTNode *structOrUnionSpecifier) {
-if (!structOrUnionSpecifier) return;
-
-string structName;
-vector<pair<string, string>> members;
-
-for (ASTNode* child : structOrUnionSpecifier->children) {
-    if (!child) continue;
-
-    string nodeType = ASTNode::nodeTypeToString(child->type);
-
-    if (nodeType == "IDENTIFIER") {
-        structName = child->valueToString();
-    } 
-    else if (nodeType == "STRUCT_DECLARATION_LIST") {
-        for (ASTNode* structDecl : child->children) {
-            if (!structDecl) continue;
-
-            string typeSpecifiers;
-            ASTNode* declaratorList = nullptr;
-
-            for (ASTNode* declChild : structDecl->children) {
-                if (!declChild) continue;
-                
-                string declType = ASTNode::nodeTypeToString(declChild->type);
-
-                if (declType == "KEYWORD" || declType == "IDENTIFIER") {
-                    if (!typeSpecifiers.empty()) typeSpecifiers += " ";
-                    typeSpecifiers += declChild->valueToString();
-                } 
-                else if (declType == "STRUCT_DECLARATOR_LIST") {
-                    declaratorList = declChild;
-                }
-            }
-
-            if (!typeSpecifiers.empty() && declaratorList) {
-                for (ASTNode* declarator : declaratorList->children) {
-                    if (!declarator || declarator->children.empty()) continue;
-
-                    string varName;
-                    string varType = typeSpecifiers;
-                    int pointerCount = 0;
-                    vector<string> dimensions;
-
-                    ASTNode* current = declarator;
-
-                    while (current) {
-                        string nodeType = ASTNode::nodeTypeToString(current->type);
-
-                        if (nodeType == "DECLARATOR") {
-                            if (!current->children.empty()) {
-                                current = current->children[0];
-                                continue;
-                            }
-                        } 
-                        else if (nodeType == "POINTER") {
-                            pointerCount++;
-                        } 
-                        else if (nodeType == "ARRAY") {
-                            dimensions.push_back(current->children[1] ? current->children[1]->valueToString() : "");
-                        } 
-                        else {
-                            varName = current->valueToString();
-                        }
-
-                        current = current->children.empty() ? nullptr : current->children[0];
-                    }
-
-                    varType.append(pointerCount, '*');
-
-                    for (const string& dim : dimensions) {
-                        varType += "[" + dim + "]";
-                    }
-
-                    members.emplace_back(varName, varType);
-                }
-            }
+void lookupSymbol(string symbol)
+{
+    Table *temp = currentTable;
+    while (temp != nullptr)
+    {
+        if (temp->symbolTable.find(symbol) != temp->symbolTable.end())
+        {
+            cout << "Symbol found in table" << endl;
+            return;
         }
+        temp = temp->parent;
+    }
+    cout << "Symbol not found in table" << endl;
+}
+
+void enterScope(){
+    Table *newTable = new Table();
+    newTable->parent = currentTable;
+    currentTable = newTable;
+    tableStack.push(newTable);
+    allTables.push_back(newTable);
+}
+
+void exitScope(){
+    if (currentTable->parent == nullptr)
+    {
+        cout << "Cannot exit global scope" << endl;
+        return;
+    }
+    Table *temp = currentTable;
+    currentTable = currentTable->parent;
+    tableStack.pop();
+    // delete temp;
+}
+
+void insertSymbol(string symbol, string type)
+{
+    if (currentTable->symbolTable.find(symbol) != currentTable->symbolTable.end())
+    {
+        cout << "Symbol " << symbol << " already exists in table" << endl;
+        return;
+    }
+    currentTable->symbolTable[symbol] = type;
+}
+
+void printAllTables()
+{
+    int tableId = 0;
+    for (auto table : allTables)
+    {
+        cout << "Table " << tableId++ << " (Scope Level):\n";
+        for (const auto &entry : table->symbolTable)
+        {
+            cout << "  " << entry.first << " -> " << entry.second << endl;
+        }
+        cout << "----------------------\n";
     }
 }
-
-if (!structName.empty()) {
-    addToSymbolTable(structName, "struct");
-}
-
-for (const auto& [varName, varType] : members) {
-    addToSymbolTable(varName, varType);
-}
-}
-
-vector<string> extractInitDeclarators(ASTNode* initDeclaratorList) {
-    vector<string> identifiers;
-    if (!initDeclaratorList) return identifiers;
-
-    for (ASTNode* initDeclarator : initDeclaratorList->children) {
-        ASTNode* declarator = initDeclarator->children[0];
-        while (!declarator->children.empty()) 
-            declarator = declarator->children[0];
-        
-        identifiers.push_back(declarator->valueToString());
-    }
-    return identifiers;
-}
-
 
 void addDeclaratorsToSymbolTable(ASTNode *a, ASTNode* b) {
     string typeSpecifiers;
@@ -167,82 +120,198 @@ void addDeclaratorsToSymbolTable(ASTNode *a, ASTNode* b) {
             varType += "[" + dim + "]";
         }
 
-        addToSymbolTable(varName, varType);
+        insertSymbol(varName, varType);
     }
 }
 
-void addFunctionToSymbolTable(ASTNode* declarationSpecifiersNode, ASTNode* declaratorNode) {
-if (!declarationSpecifiersNode || !declaratorNode) return;
+// vector<tuple<string, string, string>> symbolTable;
 
-ASTNode* current = declaratorNode;
-while (current && !current->children.empty()) {
-    current = current->children[0];
-    if (current->type == NODE_IDENTIFIER) {
-        string functionName = current->valueToString();
-        addToSymbolTable(functionName, "function");
-        return;
+// void addToSymbolTable(const string& token, const string& tokenType, const string& extraInfo="") {
+//     symbolTable.emplace_back(token, tokenType, extraInfo);
+// }
+
+// void addConstantsToSymbolTable(ASTNode *a){
+//         addToSymbolTable(a->valueToString(), ASTNode::nodeTypeToString(a->type));
+// }
+
+// void addStructMembersToSymbolTable(ASTNode *structOrUnionSpecifier) {
+// if (!structOrUnionSpecifier) return;
+
+// string structName;
+// vector<pair<string, string>> members;
+
+// for (ASTNode* child : structOrUnionSpecifier->children) {
+//     if (!child) continue;
+
+//     string nodeType = ASTNode::nodeTypeToString(child->type);
+
+//     if (nodeType == "IDENTIFIER") {
+//         structName = child->valueToString();
+//     }
+//     else if (nodeType == "STRUCT_DECLARATION_LIST") {
+//         for (ASTNode* structDecl : child->children) {
+//             if (!structDecl) continue;
+
+//             string typeSpecifiers;
+//             ASTNode* declaratorList = nullptr;
+
+//             for (ASTNode* declChild : structDecl->children) {
+//                 if (!declChild) continue;
+
+//                 string declType = ASTNode::nodeTypeToString(declChild->type);
+
+//                 if (declType == "KEYWORD" || declType == "IDENTIFIER") {
+//                     if (!typeSpecifiers.empty()) typeSpecifiers += " ";
+//                     typeSpecifiers += declChild->valueToString();
+//                 }
+//                 else if (declType == "STRUCT_DECLARATOR_LIST") {
+//                     declaratorList = declChild;
+//                 }
+//             }
+
+//             if (!typeSpecifiers.empty() && declaratorList) {
+//                 for (ASTNode* declarator : declaratorList->children) {
+//                     if (!declarator || declarator->children.empty()) continue;
+
+//                     string varName;
+//                     string varType = typeSpecifiers;
+//                     int pointerCount = 0;
+//                     vector<string> dimensions;
+
+//                     ASTNode* current = declarator;
+
+//                     while (current) {
+//                         string nodeType = ASTNode::nodeTypeToString(current->type);
+
+//                         if (nodeType == "DECLARATOR") {
+//                             if (!current->children.empty()) {
+//                                 current = current->children[0];
+//                                 continue;
+//                             }
+//                         }
+//                         else if (nodeType == "POINTER") {
+//                             pointerCount++;
+//                         }
+//                         else if (nodeType == "ARRAY") {
+//                             dimensions.push_back(current->children[1] ? current->children[1]->valueToString() : "");
+//                         }
+//                         else {
+//                             varName = current->valueToString();
+//                         }
+
+//                         current = current->children.empty() ? nullptr : current->children[0];
+//                     }
+
+//                     varType.append(pointerCount, '*');
+
+//                     for (const string& dim : dimensions) {
+//                         varType += "[" + dim + "]";
+//                     }
+
+//                     members.emplace_back(varName, varType);
+//                 }
+//             }
+//         }
+//     }
+// }
+
+// if (!structName.empty()) {
+//     addToSymbolTable(structName, "struct");
+// }
+
+// for (const auto& [varName, varType] : members) {
+//     addToSymbolTable(varName, varType);
+// }
+// }
+
+vector<string> extractInitDeclarators(ASTNode *initDeclaratorList)
+{
+    vector<string> identifiers;
+    if (!initDeclaratorList)
+        return identifiers;
+
+    for (ASTNode *initDeclarator : initDeclaratorList->children)
+    {
+        ASTNode *declarator = initDeclarator->children[0];
+        while (!declarator->children.empty())
+            declarator = declarator->children[0];
+
+        identifiers.push_back(declarator->valueToString());
     }
-}
-cerr << "Error: Function name not found in declarator!" << endl;
-}
-
-void addStructVariablesToSymbolTable(ASTNode* structSpecifierNode, ASTNode* initDeclaratorList) {
-    if (!structSpecifierNode || !initDeclaratorList) return;
-    ASTNode* structNameNode = structSpecifierNode->children[1];
-    string structName = "struct " + structNameNode->valueToString();
-
-    vector<string> identifiers = extractInitDeclarators(initDeclaratorList);
-    
-    for(const auto id : identifiers) addToSymbolTable(id, structName);
+    return identifiers;
 }
 
+// void addFunctionToSymbolTable(ASTNode* declarationSpecifiersNode, ASTNode* declaratorNode) {
+// if (!declarationSpecifiersNode || !declaratorNode) return;
 
-void printSymbolTable() {
-    cout << left << setw(30) << "Token" << setw(30) << "TokenType" << endl;
-    cout << string(60, '-') << endl;
+// ASTNode* current = declaratorNode;
+// while (current && !current->children.empty()) {
+//     current = current->children[0];
+//     if (current->type == NODE_IDENTIFIER) {
+//         string functionName = current->valueToString();
+//         addToSymbolTable(functionName, "function");
+//         return;
+//     }
+// }
+// cerr << "Error: Function name not found in declarator!" << endl;
+// }
 
-    for (const auto& entry : symbolTable) {
-        cout << left << setw(30) << get<0>(entry)
-             << setw(30) << get<1>(entry)
-             << endl;
-    }
-}
+// void addStructVariablesToSymbolTable(ASTNode* structSpecifierNode, ASTNode* initDeclaratorList) {
+//     if (!structSpecifierNode || !initDeclaratorList) return;
+//     ASTNode* structNameNode = structSpecifierNode->children[1];
+//     string structName = "struct " + structNameNode->valueToString();
 
-void addClassMembersToSymbolTable(ASTNode* classSpecifierNode) {
-    string className = classSpecifierNode->children[0]->valueToString();
-    addToSymbolTable(className, "class");
-    // if (classSpecifierNode->children.size() <= 2 || classSpecifierNode->children[2] == nullptr) {
-    //     return;  // No members
-    // }
-    // ASTNode* memberDeclarationListNode = classSpecifierNode->children[2];
-    // string currentAccess = "private";  // Default access for class
-    // for (ASTNode* memberNode : memberDeclarationListNode->children) {
-    //     if (memberNode == nullptr || memberNode->type != NODE_DECLARATION) continue;  // Skip non-declarations
-    //     if (memberNode->children.size() < 2 || memberNode->children[0] == nullptr || memberNode->children[1] == nullptr) continue;  // Must have type and declarators
-    //     ASTNode* typeNode = memberNode->children[0];
-    //     string memberType = typeNode->valueToString();
-    //     ASTNode* initDeclaratorList = memberNode->children[1];
-    //     for (ASTNode* declaratorNode : initDeclaratorList->children) {
-    //         if (declaratorNode == nullptr || declaratorNode->children.empty()) continue;
-    //         ASTNode* current = declaratorNode->children[0];  // First child is NODE_DECLARATOR
-    //         while (current && current->type == NODE_DECLARATOR && !current->children.empty()) {
-    //             current = current->children[0];
-    //         }
-    //         if (current == nullptr || current->valueToString().empty()) continue;
-    //         string memberName = current->valueToString();
-    //         addToSymbolTable(memberName, memberType + " (" + currentAccess + ")", className);
-    //     }
-    // }
-}
+//     vector<string> identifiers = extractInitDeclarators(initDeclaratorList);
 
-void addClassVariablesToSymbolTable(ASTNode* classSpecifierNode, ASTNode* initDeclaratorList) {
+//     for(const auto id : identifiers) addToSymbolTable(id, structName);
+// }
 
-    ASTNode* classNameNode = classSpecifierNode->children[0];
-    string className = "class " + classNameNode->valueToString();
+// void printSymbolTable() {
+//     cout << left << setw(30) << "Token" << setw(30) << "TokenType" << endl;
+//     cout << string(60, '-') << endl;
 
-    vector<string> identifiers = extractInitDeclarators(initDeclaratorList);
-    for(const auto id : identifiers) addToSymbolTable(id, className);
+//     for (const auto& entry : symbolTable) {
+//         cout << left << setw(30) << get<0>(entry)
+//              << setw(30) << get<1>(entry)
+//              << endl;
+//     }
+// }
 
-    }
+// void addClassMembersToSymbolTable(ASTNode* classSpecifierNode) {
+//     string className = classSpecifierNode->children[0]->valueToString();
+//     addToSymbolTable(className, "class");
+//     // if (classSpecifierNode->children.size() <= 2 || classSpecifierNode->children[2] == nullptr) {
+//     //     return;  // No members
+//     // }
+//     // ASTNode* memberDeclarationListNode = classSpecifierNode->children[2];
+//     // string currentAccess = "private";  // Default access for class
+//     // for (ASTNode* memberNode : memberDeclarationListNode->children) {
+//     //     if (memberNode == nullptr || memberNode->type != NODE_DECLARATION) continue;  // Skip non-declarations
+//     //     if (memberNode->children.size() < 2 || memberNode->children[0] == nullptr || memberNode->children[1] == nullptr) continue;  // Must have type and declarators
+//     //     ASTNode* typeNode = memberNode->children[0];
+//     //     string memberType = typeNode->valueToString();
+//     //     ASTNode* initDeclaratorList = memberNode->children[1];
+//     //     for (ASTNode* declaratorNode : initDeclaratorList->children) {
+//     //         if (declaratorNode == nullptr || declaratorNode->children.empty()) continue;
+//     //         ASTNode* current = declaratorNode->children[0];  // First child is NODE_DECLARATOR
+//     //         while (current && current->type == NODE_DECLARATOR && !current->children.empty()) {
+//     //             current = current->children[0];
+//     //         }
+//     //         if (current == nullptr || current->valueToString().empty()) continue;
+//     //         string memberName = current->valueToString();
+//     //         addToSymbolTable(memberName, memberType + " (" + currentAccess + ")", className);
+//     //     }
+//     // }
+// }
+
+// void addClassVariablesToSymbolTable(ASTNode* classSpecifierNode, ASTNode* initDeclaratorList) {
+
+//     ASTNode* classNameNode = classSpecifierNode->children[0];
+//     string className = "class " + classNameNode->valueToString();
+
+//     vector<string> identifiers = extractInitDeclarators(initDeclaratorList);
+//     for(const auto id : identifiers) addToSymbolTable(id, className);
+
+//     }
 
 #endif

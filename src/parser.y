@@ -95,7 +95,8 @@
 
 %type<node> relational_expression equality_expression and_expression exclusive_or_expression inclusive_or_expression scope_resolution_statements
 
-%type<node> logical_and_expression logical_or_expression argument_expression_list assignment_operator try_catch_statement io_statement
+%type<node> logical_and_expression logical_or_expression argument_expression_list assignment_operator try_catch_statement io_statement scope_resolution_statement
+
 %start translation_unit
 %%
 
@@ -256,12 +257,12 @@ constant_expression
 declaration
     : declaration_specifiers SEMICOLON {
         $$ = $1;
-        if(ASTNode::nodeTypeToString($$->children[0]->type) == "STRUCT_SPECIFIER"){
-            // addStructMembersToSymbolTable($$->children[0]);
-        }
-        else if(ASTNode::nodeTypeToString($$->children[0]->type) == "CLASS_SPECIFIER"){
-            // addClassMembersToSymbolTable($$->children[0]);
-        }
+        // if(ASTNode::nodeTypeToString($$->children[0]->type) == "STRUCT_SPECIFIER"){
+        //     // addStructMembersToSymbolTable($$->children[0]);
+        // }
+        // else if(ASTNode::nodeTypeToString($$->children[0]->type) == "CLASS_SPECIFIER"){
+        //     // addClassMembersToSymbolTable($$->children[0]);
+        // }
     }
     | declaration_specifiers init_declarator_list SEMICOLON {
         $$ = createNode(NODE_DECLARATION, monostate(), $1, $2);
@@ -360,8 +361,6 @@ member_declaration
     : access_specifier COLON
         { $$ = createNode(NODE_ACCESS_SPECIFIER, monostate(), $1); }
     | declaration
-        { $$ = $1; }
-    | function_definition
         { $$ = $1; }
     | constructor_function
         { $$ = $1; }
@@ -578,10 +577,13 @@ statement
 	| iteration_statement { $$ = $1; }
 	| jump_statement { $$ = $1; }
 	| try_catch_statement {$$ = $1; }
-    | ID ID
-    | ID SCOPE_RESOLUTION_OPERATOR ID
-    | ID SCOPE_RESOLUTION_OPERATOR ID ASSIGNMENT_OPERATOR expression SEMICOLON
     | io_statement{$$ = $1;}
+    | scope_resolution_statement { $$ = $1; }
+    ;
+
+scope_resolution_statement
+    : ID SCOPE_RESOLUTION_OPERATOR ID SEMICOLON { $$ = createNode(NODE_SCOPE_RESOLUTION_STATEMENT, monostate(), $1, $3); }
+    | ID SCOPE_RESOLUTION_OPERATOR ID ASSIGNMENT_OPERATOR expression SEMICOLON { $$ = createNode(NODE_SCOPE_RESOLUTION_STATEMENT, $4, $1, $3, $5); }
 	;
 
 io_statement
@@ -620,17 +622,17 @@ labeled_statement
 
 compound_statement
     : LBRACE RBRACE { $$ = createNode(NODE_COMPOUND_STATEMENT, monostate()); }
-    | LBRACE block_item_list RBRACE {$$ = $2;}
+    | LBRACE block_item_list RBRACE {$$ = $2; cout << *$2 << endl;}
     ;
 
 block_item_list
-    : block_item
-    | block_item_list block_item
+    : block_item { $$ = createNode(NODE_BLOCK_ITEM_LIST, monostate(), $1); }
+    | block_item_list block_item { $$ = $1; $$->children.push_back($2); }
     ;
 
 block_item
-    : declaration
-    | statement
+    : declaration {$$ = $1;}
+    | statement {$$ = $1;}
     ;
 
 declaration_list
@@ -640,7 +642,7 @@ declaration_list
     | declaration_list declaration { 
         $$ = $1;
         $$->children.push_back($2);
-    }
+    } 
     ;
 
 
@@ -683,7 +685,7 @@ translation_unit
         $$ = $1;
     }
     | translation_unit external_declaration {
-        $$ = createNode(NODE_TRANSLATION_UNIT, monostate(), $1, $2);
+        $$ = createNode(NODE_TRANSLATION_UNIT, monostate(), $1, $2); cout << *$$ << endl;
     }
     ;
 
@@ -691,7 +693,8 @@ translation_unit
 external_declaration
 	: function_definition { $$ = $1; }
 	| declaration { $$ = $1; }
-    | scope_resolution_statements;
+    | ID init_declarator_list SEMICOLON {}
+    | scope_resolution_statements
     ;
 
 scope_resolution_statements
@@ -708,6 +711,7 @@ constructor_function
     | declarator compound_statement {
         $$ = createNode(NODE_CONSTRUCTOR_FUNCTION, monostate(), $1, $2);
     }
+    | function_definition {$$ = $1; $$->type = NODE_CONSTRUCTOR_FUNCTION;}
     ;
 
 function_definition
