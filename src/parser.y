@@ -14,6 +14,7 @@
     
     extern int yylex();
     extern FILE *yyin;
+    extern unordered_set<string> classOrStructOrUnion;
 %}
 
 
@@ -33,7 +34,7 @@
     KEYWORD_PUBLIC KEYWORD_REGISTER KEYWORD_RETURN KEYWORD_SHORT KEYWORD_SIGNED KEYWORD_SIZEOF 
     KEYWORD_STATIC KEYWORD_STRUCT KEYWORD_SWITCH KEYWORD_THIS KEYWORD_THROW KEYWORD_UNION
     KEYWORD_TRY KEYWORD_TYPEDEF KEYWORD_UNSIGNED 
-    KEYWORD_VOID KEYWORD_VOLATILE KEYWORD_WHILE KEYWORD_PRINTF KEYWORD_SCANF
+    KEYWORD_VOID KEYWORD_VOLATILE KEYWORD_WHILE KEYWORD_PRINTF KEYWORD_SCANF TYPE_NAME
 
 /* Identifiers and Literals */
 %token <node> INTEGER FLOAT CHAR STRING ID ELLIPSIS_OPERATOR BOOLEAN_LITERAL
@@ -238,7 +239,7 @@ assignment_operator
 	| MODULO_ASSIGN_OPERATOR { $$ = createNode(NODE_ASSIGNMENT_OPERATOR, $1); }
 	| PLUS_ASSIGN_OPERATOR { $$ = createNode(NODE_ASSIGNMENT_OPERATOR, $1); }
 	| MINUS_ASSIGN_OPERATOR { $$ = createNode(NODE_ASSIGNMENT_OPERATOR, $1); }
-	| LEFT_SHIFT_ASSIGN_OPERATOR { $$ = createNode(NODE_ASSIGNMENT_OPERATOR, $1); }
+	| LEFT_SHIFT_ASSIGN_OPERATOR { $$ = createNode(NODE_ASSIGNMENT_OPERATOR, $1); } 
 	| RIGHT_SHIFT_ASSIGN_OPERATOR { $$ = createNode(NODE_ASSIGNMENT_OPERATOR, $1); }
 	| BITWISE_AND_ASSIGN_OPERATOR { $$ = createNode(NODE_ASSIGNMENT_OPERATOR, $1); }
 	| BITWISE_XOR_ASSIGN_OPERATOR { $$ = createNode(NODE_ASSIGNMENT_OPERATOR, $1); }
@@ -257,24 +258,37 @@ constant_expression
 declaration
     : declaration_specifiers SEMICOLON {
         $$ = $1;
-        // if(ASTNode::nodeTypeToString($$->children[0]->type) == "STRUCT_SPECIFIER"){
-        //     // addStructMembersToSymbolTable($$->children[0]);
-        // }
-        // else if(ASTNode::nodeTypeToString($$->children[0]->type) == "CLASS_SPECIFIER"){
-        //     // addClassMembersToSymbolTable($$->children[0]);
-        // }
+        if($$->children.size() && $$->children[0]->type == NODE_STRUCT_OR_UNION_SPECIFIER){
+            for(auto child : $1->children[0]->children){
+                if(child->type == NODE_STRUCT_DECLARATION_LIST){
+                    enterScope();
+                    addStructMembersToSymbolTable(child);
+                    exitScope();
+                    break;
+                }else if(child->type == NODE_IDENTIFIER){
+                    insertSymbol(child->valueToString(), "struct");
+                }
+            }
+        }else{
+
+        }
     }
     | declaration_specifiers init_declarator_list SEMICOLON {
         $$ = createNode(NODE_DECLARATION, monostate(), $1, $2);
-        addDeclaratorsToSymbolTable($1, $2);
-        // if(ASTNode::nodeTypeToString($1->children[0]->type) == "STRUCT_SPECIFIER"){
-        //     addStructMembersToSymbolTable($1->children[0]);
-        //     addStructVariablesToSymbolTable($1->children[0], $2);
-        // }
-        // else if(ASTNode::nodeTypeToString($1->children[0]->type) == "CLASS_SPECIFIER"){
-        //     // addClassMembersToSymbolTable($1->children[0]);
-        //     addClassVariablesToSymbolTable($1->children[0], $2);
-        // }
+        if($1->children[0]->type == NODE_STRUCT_OR_UNION_SPECIFIER){
+            for(auto child : $1->children[0]->children){
+                if(child->type == NODE_STRUCT_DECLARATION_LIST){
+                    enterScope();
+                    addStructMembersToSymbolTable(child);
+                    exitScope();
+                    break;
+                }else if(child->type == NODE_IDENTIFIER){
+                    insertSymbol(child->valueToString(), "struct");
+                }
+            }
+        }else{
+            addDeclaratorsToSymbolTable($1, $2);
+        }
     };
 
 declaration_specifiers
@@ -334,20 +348,29 @@ type_specifier
     | KEYWORD_DOUBLE { $$ = $1; $$->type = NODE_TYPE_SPECIFIER; }
     | KEYWORD_SIGNED { $$ = $1; $$->type = NODE_TYPE_SPECIFIER; }
     | KEYWORD_UNSIGNED { $$ = $1; $$->type = NODE_TYPE_SPECIFIER; }
+    | TYPE_NAME {$$ = $1; $$->type = NODE_TYPE_SPECIFIER;}
     | struct_or_union_specifier { $$ = $1; }
-    | class_specifier { $$ = $1; }
+    | class_specifier { $$ = $1;}
 	;
+
 class_specifier
-    : KEYWORD_CLASS ID LBRACE member_declaration_list RBRACE
-        { 
+    : KEYWORD_CLASS ID LBRACE member_declaration_list RBRACE 
+        {
+            classOrStructOrUnion.insert($2->valueToString());
+            enterScope();
             $$ = createNode(NODE_CLASS_SPECIFIER, monostate(), $2, $4); 
+            exitScope();
         }
     | KEYWORD_CLASS LBRACE member_declaration_list RBRACE
-        { 
-            $$ = createNode(NODE_CLASS_SPECIFIER, monostate(), $3); 
+        {
+            enterScope();
+            $$ = createNode(NODE_CLASS_SPECIFIER, monostate(), $1, $3); 
+            exitScope();
         }
     | KEYWORD_CLASS ID
-        { $$ = createNode(NODE_CLASS_SPECIFIER, monostate(), $2);}
+        {   classOrStructOrUnion.insert($2->valueToString());
+            $$ = createNode(NODE_CLASS_SPECIFIER, monostate(), $1, $2);
+        }
     ;
 
 member_declaration_list
@@ -364,6 +387,7 @@ member_declaration
         { $$ = $1; }
     | constructor_function
         { $$ = $1; }
+    | function_definition {$$ = $1;}
     | destructor_function
         { $$ = $1; }
     ;
@@ -373,13 +397,18 @@ access_specifier
     | KEYWORD_PRIVATE { $$ = $1; }
     | KEYWORD_PROTECTED { $$ = $1; }
     ;
+
 struct_or_union_specifier
     : struct_or_union ID LBRACE struct_declaration_list RBRACE  
-        { $$ = createNode(NODE_STRUCT_SPECIFIER,monostate(), $1, $2, $4); }
+        {   classOrStructOrUnion.insert($2->valueToString());
+            $$ = createNode(NODE_STRUCT_OR_UNION_SPECIFIER,monostate(), $1, $2, $4); 
+        }
     | struct_or_union LBRACE struct_declaration_list RBRACE  
-        { $$ = createNode(NODE_STRUCT_SPECIFIER, monostate(), $1, $3); }
+        { $$ = createNode(NODE_STRUCT_OR_UNION_SPECIFIER, monostate(), $1, $3); }
     | struct_or_union ID 
-        { $$ = createNode(NODE_STRUCT_SPECIFIER,monostate(), $1, $2); }
+        {   classOrStructOrUnion.insert($2->valueToString());
+            $$ = createNode(NODE_STRUCT_OR_UNION_SPECIFIER,monostate(), $1, $2); 
+        }
     ;
 
 struct_or_union
@@ -402,8 +431,6 @@ struct_declaration
         $$ = createNode(NODE_STRUCT_DECLARATION, monostate(), $1, $2);
     }
     ;
-
-
 
 specifier_qualifier_list
 	: type_specifier specifier_qualifier_list {$$ = createNode(NODE_SPECIFIER_QUALIFIER_LIST, monostate(), $1, $2); }
@@ -571,7 +598,7 @@ initializer_list
 
 statement
 	: labeled_statement { $$ = $1; }
-	|{enterScope();} compound_statement { $$ = $2; exitScope();}
+	| {enterScope();} compound_statement { $$ = $2; exitScope();}
 	| expression_statement { $$ = $1; }
 	| selection_statement { $$ = $1; }
 	| iteration_statement { $$ = $1; }
@@ -601,7 +628,7 @@ io_statement
         }
     ;
 try_catch_statement
-    : KEYWORD_TRY compound_statement catch_clauses
+    : KEYWORD_TRY {enterScope();} compound_statement {exitScope();} catch_clauses
     ;
 
 catch_clauses
@@ -610,8 +637,8 @@ catch_clauses
     ;
 
 catch_clause
-    : KEYWORD_CATCH LPAREN parameter_declaration RPAREN compound_statement
-    | KEYWORD_CATCH LPAREN ELLIPSIS_OPERATOR RPAREN compound_statement
+    : KEYWORD_CATCH LPAREN parameter_declaration RPAREN {enterScope();} compound_statement {exitScope();}
+    | KEYWORD_CATCH LPAREN ELLIPSIS_OPERATOR RPAREN {enterScope();} compound_statement {exitScope();}
     ;	
 
 labeled_statement
@@ -622,7 +649,7 @@ labeled_statement
 
 compound_statement
     : LBRACE RBRACE { $$ = createNode(NODE_COMPOUND_STATEMENT, monostate()); }
-    | LBRACE block_item_list RBRACE {$$ = $2; cout << *$2 << endl;}
+    | LBRACE block_item_list RBRACE {$$ = $2; }
     ;
 
 block_item_list
@@ -652,7 +679,7 @@ expression_statement
 	;
 
 selection_statement
-    : KEYWORD_IF LPAREN expression RPAREN statement %prec LOWER_THAN_ELSE 
+    : KEYWORD_IF LPAREN expression RPAREN statement LOWER_THAN_ELSE 
         { $$ = createNode(NODE_SELECTION_STATEMENT,monostate(), $1, $3, $5); }
     | KEYWORD_IF LPAREN expression RPAREN statement KEYWORD_ELSE statement 
         { $$ = createNode(NODE_SELECTION_STATEMENT,monostate() , $1, $3, $5, $7); }
@@ -685,16 +712,15 @@ translation_unit
         $$ = $1;
     }
     | translation_unit external_declaration {
-        $$ = createNode(NODE_TRANSLATION_UNIT, monostate(), $1, $2); cout << *$$ << endl;
+        $$ = createNode(NODE_TRANSLATION_UNIT, monostate(), $1, $2);
     }
     ;
 
 
 external_declaration
-	: function_definition { $$ = $1; }
+	: function_definition { $$ = $1; addFunction($$->children[0], $$->children[1]);}
 	| declaration { $$ = $1; }
-    | ID init_declarator_list SEMICOLON {}
-    | scope_resolution_statements
+    | scope_resolution_statements {}
     ;
 
 scope_resolution_statements
@@ -705,29 +731,36 @@ scope_resolution_statements
     ;
 
 constructor_function
-    : declarator declaration_list compound_statement {
-        $$ = createNode(NODE_CONSTRUCTOR_FUNCTION, monostate(), $1, $2, $3);
+    : ID LPAREN {enterScope();} parameter_list RPAREN compound_statement {
+        $$ = createNode(NODE_CONSTRUCTOR_FUNCTION, monostate(), $1, $4, $6);
+        addFunctionParameters($4);
+        exitScope();
     }
-    | declarator compound_statement {
-        $$ = createNode(NODE_CONSTRUCTOR_FUNCTION, monostate(), $1, $2);
+    | ID LPAREN RPAREN {enterScope();} compound_statement {
+        $$ = createNode(NODE_CONSTRUCTOR_FUNCTION, monostate(), $1, $5); exitScope();
     }
-    | function_definition {$$ = $1; $$->type = NODE_CONSTRUCTOR_FUNCTION;}
     ;
 
 function_definition
-    : declaration_specifiers declarator declaration_list {enterScope();} compound_statement {
-        $$ = createNode(NODE_FUNCTION_DEFINITION, monostate(), $1, $2, $3, $5); exitScope();
+    : declaration_specifiers declarator {enterScope();}  declaration_list compound_statement {
+        $$ = createNode(NODE_FUNCTION_DEFINITION, monostate(), $1, $2, $4, $5); exitScope();
+        // TODO 
         // addFunctionToSymbolTable($1, $2);
     }
-    | declaration_specifiers declarator {enterScope(); }compound_statement {
-        $$ = createNode(NODE_FUNCTION_DEFINITION, monostate(), $1, $2, $4); exitScope();
-        // addFunctionToSymbolTable($1, $2);
+    | declaration_specifiers declarator {enterScope();} compound_statement {
+        $$ = createNode(NODE_FUNCTION_DEFINITION, monostate(), $1, $2, $4);
+        ASTNode* decl = $2;
+        while(decl->type != NODE_DECLARATOR){
+            decl = decl->children[0];
+        }
+        addFunctionParameters(decl->children[1]);
+        exitScope();
     }
     ;
 
 destructor_function
-    : BITWISE_NOT_OPERATOR  declarator compound_statement {
-        $$ = createNode(NODE_DESTRUCTOR_FUNCTION, monostate(),$2, $3);
+    : BITWISE_NOT_OPERATOR ID LPAREN RPAREN {enterScope();} compound_statement {
+        $$ = createNode(NODE_DESTRUCTOR_FUNCTION, monostate(),$2, $6); exitScope();
     }
     ;
 
@@ -755,6 +788,7 @@ int main(int argc, char **argv) {
 
     currentTable = new Table();
     tableStack.push(currentTable);
+    offsetStack.push(0);
     allTables.push_back(currentTable);
     int result = yyparse();
 

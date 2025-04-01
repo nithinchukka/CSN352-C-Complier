@@ -18,7 +18,7 @@ enum NodeType
     NODE_DIRECT_ABSTRACT_DECLARATOR,
     NODE_TYPE_SPECIFIER,
     NODE_STORAGE_CLASS_SPECIFIER,
-    NODE_STRUCT_SPECIFIER,
+    NODE_STRUCT_OR_UNION_SPECIFIER,
     NODE_STRUCT_DECLARATION_LIST,
     NODE_STRUCT_DECLARATION,
     NODE_SPECIFIER_QUALIFIER_LIST,
@@ -88,6 +88,7 @@ enum NodeType
     NODE_CONSTRUCTOR_FUNCTION,
     NODE_BLOCK_ITEM_LIST,
     NODE_SCOPE_RESOLUTION_STATEMENT,
+    NODE_TYPE,
 };
 
 using NodeValue = variant<monostate, string, int, double, bool, char>;
@@ -97,20 +98,11 @@ class ASTNode
 public:
     NodeType type;
     NodeValue value;
+    int offset = 0;
     vector<ASTNode *> children;
 
     ASTNode(NodeType type, NodeValue value = monostate()) : type(type), value(value)
     {
-    }
-
-    ~ASTNode()
-    {
-        cout << "Deleting Node: " << nodeTypeToString(type) << endl;
-        for (ASTNode *child : children)
-        {
-            delete child;
-        }
-        children.clear();
     }
 
     void addChild(ASTNode *child)
@@ -169,7 +161,7 @@ public:
             return "TYPE_SPECIFIER";
         case NODE_STORAGE_CLASS_SPECIFIER:
             return "STORAGE_CLASS_SPECIFIER";
-        case NODE_STRUCT_SPECIFIER:
+        case NODE_STRUCT_OR_UNION_SPECIFIER:
             return "STRUCT_SPECIFIER";
         case NODE_STRUCT_DECLARATION_LIST:
             return "STRUCT_DECLARATION_LIST";
@@ -309,6 +301,8 @@ public:
             return "BLOCK_ITEM_LIST";
         case NODE_SCOPE_RESOLUTION_STATEMENT:
             return "SCOPE_RESOLUTION_STATEMENT";
+        case NODE_TYPE:
+            return "TYPE";
         default:
             return "UNKNOWN";
         }

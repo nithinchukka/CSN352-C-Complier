@@ -11,7 +11,8 @@ struct Table
     Table *parent;
 };
 
-stack<Table*> tableStack;
+stack<Table *> tableStack;
+stack<int> offsetStack;
 Table *currentTable;
 vector<Table *> allTables;
 
@@ -30,15 +31,18 @@ void lookupSymbol(string symbol)
     cout << "Symbol not found in table" << endl;
 }
 
-void enterScope(){
+void enterScope()
+{
     Table *newTable = new Table();
     newTable->parent = currentTable;
     currentTable = newTable;
     tableStack.push(newTable);
+    offsetStack.push(0);
     allTables.push_back(newTable);
 }
 
-void exitScope(){
+void exitScope()
+{
     if (currentTable->parent == nullptr)
     {
         cout << "Cannot exit global scope" << endl;
@@ -47,6 +51,7 @@ void exitScope(){
     Table *temp = currentTable;
     currentTable = currentTable->parent;
     tableStack.pop();
+    offsetStack.pop();
     // delete temp;
 }
 
@@ -74,53 +79,258 @@ void printAllTables()
     }
 }
 
-void addDeclaratorsToSymbolTable(ASTNode *a, ASTNode* b) {
+void addDeclaratorsToSymbolTable(ASTNode *a, ASTNode *b)
+{
     string typeSpecifiers;
-    for (ASTNode* specifier : a->children) {
-        if (specifier) {
-            if (!typeSpecifiers.empty()) {
-                typeSpecifiers += " ";
+    if (a->children[0]->type == NODE_STRUCT_OR_UNION_SPECIFIER || a->children[0]->type == NODE_CLASS_SPECIFIER)
+    {
+        ASTNode *specifier = a->children[0];
+        if (specifier->children[1]->type != NODE_IDENTIFIER)
+            typeSpecifiers = specifier->children[0]->valueToString();
+        else
+            typeSpecifiers = specifier->children[1]->valueToString();
+    }
+    else
+    {
+        for (ASTNode *specifier : a->children)
+        {
+            if (specifier)
+            {
+                if (!typeSpecifiers.empty())
+                {
+                    typeSpecifiers += " ";
+                }
+                typeSpecifiers += specifier->valueToString();
             }
-            typeSpecifiers += specifier->valueToString();
         }
     }
 
-    for (ASTNode* declarator : b->children) {
-        if (!declarator || declarator->children.empty()) continue;
+    for (ASTNode *declarator : b->children)
+    {
+        if (!declarator || declarator->children.empty())
+            continue;
 
         string varName;
         string varType = typeSpecifiers;
         int pointerCount = 0;
         vector<string> dimensions;
 
-        ASTNode* current = declarator;
+        ASTNode *current = declarator;
 
-        while (current) {
+        while (current)
+        {
             string nodeType = ASTNode::nodeTypeToString(current->type);
-            
-            if (nodeType == "DECLARATOR") {
-                if (!current->children.empty()) {
+
+            if (nodeType == "DECLARATOR")
+            {
+                if (!current->children.empty())
+                {
                     current = current->children[0];
                     continue;
                 }
-            } else if (nodeType == "POINTER") {
+            }
+            else if (nodeType == "POINTER")
+            {
                 pointerCount++;
-            } else if (nodeType == "ARRAY") {
+            }
+            else if (nodeType == "ARRAY")
+            {
                 dimensions.push_back(current->children[1] ? current->children[1]->valueToString() : "");
-            } else {
+            }
+            else
+            {
                 varName = current->valueToString();
             }
-            
+
             current = current->children.empty() ? nullptr : current->children[0];
         }
 
         varType.append(pointerCount, '*');
 
-        for (const string& dim : dimensions) {
+        for (const string &dim : dimensions)
+        {
             varType += "[" + dim + "]";
         }
 
         insertSymbol(varName, varType);
+    }
+}
+
+void addFunctionParameters(ASTNode *parameterList)
+{
+    if (parameterList == nullptr)
+        return;
+
+    for (ASTNode *paramDecl : parameterList->children)
+    {
+        if (!paramDecl)
+            continue;
+
+        string typeSpecifiers;
+        ASTNode *declSpecs = nullptr;
+
+        for (ASTNode *child : paramDecl->children)
+        {
+            if (child && ASTNode::nodeTypeToString(child->type) == "DECLARATION_SPECIFIERS")
+            {
+                declSpecs = child;
+                break;
+            }
+        }
+
+        if (declSpecs)
+        {
+            for (ASTNode *specifier : declSpecs->children)
+            {
+                if (specifier)
+                {
+                    if (!typeSpecifiers.empty())
+                    {
+                        typeSpecifiers += " ";
+                    }
+                    typeSpecifiers += specifier->valueToString();
+                }
+            }
+        }
+
+        string varName;
+        string varType = typeSpecifiers;
+        int pointerCount = 0;
+        vector<string> dimensions;
+
+        for (ASTNode *child : paramDecl->children)
+        {
+            string nodeType = ASTNode::nodeTypeToString(child->type);
+
+            if (nodeType == "ARRAY")
+            {
+                varName = child->children[0]->valueToString();
+                dimensions.push_back(child->children[1] ? child->children[1]->valueToString() : "");
+            }
+            else if (nodeType == "POINTER")
+            {
+                pointerCount++;
+                varName = child->children[0]->valueToString();
+            }
+            else if (nodeType == "IDENTIFIER")
+            {
+                varName = child->valueToString();
+            }
+        }
+
+        varType.append(pointerCount, '*');
+
+        for (const string &dim : dimensions)
+        {
+            varType += "[" + dim + "]";
+        }
+
+        if (!varName.empty())
+        {
+            insertSymbol(varName, varType);
+        }
+    }
+}
+
+void addFunction(ASTNode *funcDeclSpec, ASTNode *declarator)
+{
+    string typeSpecifiers;
+    for (ASTNode *specifier : funcDeclSpec->children)
+    {
+        if (specifier)
+        {
+            if (!typeSpecifiers.empty())
+            {
+                typeSpecifiers += " ";
+            }
+            typeSpecifiers += specifier->valueToString();
+        }
+    }
+
+    string funcName;
+    string returnType = typeSpecifiers;
+    int pointerCount = 0;
+
+    ASTNode *current = declarator;
+    while (current)
+    {
+        string nodeType = ASTNode::nodeTypeToString(current->type);
+
+        if (nodeType == "IDENTIFIER")
+        {
+            funcName = current->valueToString();
+            break;
+        }
+        else if (nodeType == "POINTER")
+        {
+            pointerCount++;
+        }
+
+        current = current->children.empty() ? nullptr : current->children[0];
+    }
+
+    returnType.append(pointerCount, '*');
+
+    if (!funcName.empty())
+    {
+        insertSymbol(funcName, returnType);
+    }
+}
+
+void addStructMembersToSymbolTable(ASTNode *structDeclList) {
+    if (!structDeclList || structDeclList->type != NODE_STRUCT_DECLARATION_LIST) {
+        return;
+    }
+
+    for (ASTNode *structDecl : structDeclList->children) {
+        ASTNode *typeSpec = structDecl->children[0];
+        ASTNode *declaratorList = structDecl->children[1];
+
+        bool isNestedStruct = false;
+        if (typeSpec->type == NODE_STRUCT_OR_UNION_SPECIFIER) {
+            for (ASTNode *child : typeSpec->children) {
+                if (child->type == NODE_STRUCT_DECLARATION_LIST) {
+                    std::cout << "Error: Nested struct definition is not allowed." << std::endl;
+                    isNestedStruct = true;
+                    break;
+                }
+            }
+        }
+
+        if (isNestedStruct) {
+            continue;
+        }
+
+        std::string typeStr;
+        if (typeSpec->type == NODE_TYPE_SPECIFIER) {
+            typeStr = typeSpec->valueToString();
+        } else if (typeSpec->type == NODE_STRUCT_OR_UNION_SPECIFIER) {
+            typeStr = "struct " + typeSpec->children[1]->valueToString();
+        }
+
+        for (ASTNode *declarator : declaratorList->children) {
+            std::string memberName;
+            std::string memberType = typeStr;
+            int pointerCount = 0;
+
+            ASTNode *current = declarator;
+            while (current) {
+                std::string nodeType = ASTNode::nodeTypeToString(current->type);
+                if (nodeType == "IDENTIFIER") {
+                    memberName = current->valueToString();
+                    break;
+                } else if (nodeType == "POINTER") {
+                    pointerCount++;
+                }
+                current = current->children.empty() ? nullptr : current->children[0];
+            }
+
+            memberType.append(pointerCount, '*');
+
+            if (!memberName.empty()) {
+                insertSymbol(memberName, memberType);
+            }
+        }
     }
 }
 

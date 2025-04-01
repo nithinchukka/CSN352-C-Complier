@@ -12,6 +12,7 @@ space   [ \t\v\f\n]+
 
 %{
     #include "y.tab.hh"
+    unordered_set<string> classOrStructOrUnion;
 %}
 
 %%
@@ -32,26 +33,26 @@ space   [ \t\v\f\n]+
                 }
 
 auto        { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_AUTO); }
-bool        { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_BOOL); }
+bool        { yylval.node = createNode(NODE_KEYWORD, string(yytext)); yylval.node->offset = 1; return (KEYWORD_BOOL); }
 break       { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_BREAK); }
 case        { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_CASE); }
 catch       { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_CATCH); }
-char        { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_CHAR); }
+char        { yylval.node = createNode(NODE_KEYWORD, string(yytext)); yylval.node->offset = 1; return (KEYWORD_CHAR); }
 class       { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_CLASS); }
 const       { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_CONST); }
 continue    { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_CONTINUE); }
 default     { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_DEFAULT); }
 delete      { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_DELETE); }
 do          { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_DO); }
-double      { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_DOUBLE); }
+double      { yylval.node = createNode(NODE_KEYWORD, string(yytext)); yylval.node->offset = 8; return (KEYWORD_DOUBLE); }
 else        { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_ELSE); }
 extern      { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_EXTERN); }
-float       { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_FLOAT); }
+float       { yylval.node = createNode(NODE_KEYWORD, string(yytext)); yylval.node->offset = 4; return (KEYWORD_FLOAT); }
 for         { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_FOR); }
 goto        { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_GOTO); }
 if          { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_IF); }
-int         { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_INT); }
-long        { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_LONG); }
+int         { yylval.node = createNode(NODE_KEYWORD, string(yytext)); yylval.node->offset = 4; return (KEYWORD_INT); }
+long        { yylval.node = createNode(NODE_KEYWORD, string(yytext)); yylval.node->offset = 8; return (KEYWORD_LONG); }
 new         { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_NEW); }
 nullptr     { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_NULLPTR); }
 private     { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_PRIVATE); }
@@ -59,7 +60,7 @@ protected   { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KE
 public      { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_PUBLIC); }
 register    { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_REGISTER); }
 return      { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_RETURN); }
-short       { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_SHORT); }
+short       { yylval.node = createNode(NODE_KEYWORD, string(yytext)); yylval.node->offset = 2; return (KEYWORD_SHORT); }
 signed      { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_SIGNED); }
 sizeof      { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_SIZEOF); }
 static      { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_STATIC); }
@@ -131,7 +132,15 @@ while       { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KE
 {string}    { yylval.node = createNode(NODE_STRING_LITERAL, string(yytext)); return (STRING); }
 true        { yylval.node = createNode(NODE_BOOLEAN_LITERAL, string(yytext) == "true" ? true : false); return (BOOLEAN_LITERAL); }
 false       { yylval.node = createNode(NODE_BOOLEAN_LITERAL, string(yytext) == "false" ? false : true); return (BOOLEAN_LITERAL); }
-{id}        { yylval.node = createNode(NODE_IDENTIFIER, string(yytext)); return (ID); }
+{id}        { if(classOrStructOrUnion.count(yytext) > 0){
+                    yylval.node = createNode(NODE_TYPE, yytext); 
+                    return (TYPE_NAME);
+                }
+                else{
+                    yylval.node = createNode(NODE_IDENTIFIER, yytext); 
+                    return (ID); 
+                }
+            }
 
 
 ";"         { yylval.str = strdup(yytext); return (SEMICOLON); }
