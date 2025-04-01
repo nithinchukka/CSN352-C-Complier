@@ -1,9 +1,6 @@
-int foo(int a, int b){
-    int x;
-    return x;
-}
-
-
 int main(){
-
+    int a;
+    int b;
+    int c,d;
+    a=b+c;
 }

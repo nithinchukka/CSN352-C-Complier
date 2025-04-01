@@ -15,6 +15,163 @@
     extern int yylex();
     extern FILE *yyin;
     extern unordered_set<string> classOrStructOrUnion;
+
+
+
+
+    bool isValidVariableDeclaration(vector<ASTNode*>& nodes,bool isfunction = false) {
+    int storageClassCount = 0;
+    int typeSpecifierCount = 0; // Base types (int, char, etc.)
+    int typeModifierCount = 0;  // signed, unsigned, long
+    int qualifierCount = 0;
+
+    // Valid sets for each category
+    unordered_set<string> storageClasses = {
+         "extern", "static", "auto", "register"
+    };
+    unordered_set<string> baseTypes = {
+        "void", "char", "short", "int", "bool", "long", "float", "double"
+    };
+    unordered_set<string> typeModifiers = {
+        "signed", "unsigned", "long"
+    };
+    unordered_set<string> qualifiers = {
+        "const", "volatile"
+    };
+
+    // Track specific modifiers to enforce valid combos
+    bool hasLong = false;
+    bool hasSignedOrUnsigned = false;
+
+    // Process each node
+    for (const auto& node : nodes) {
+        std::string val = node->valueToString();
+
+        if (node->type == NODE_STORAGE_CLASS_SPECIFIER) {
+            if (!storageClasses.count(val)) return false; // Unknown storage class
+            storageClassCount++;
+            if (storageClassCount > 1) return false; // Too many storage classes
+
+        } else if (node->type == NODE_TYPE_SPECIFIER) {
+            if (baseTypes.count(val)) {
+                typeSpecifierCount++;
+                if (val == "long") hasLong = true;
+            } else if (typeModifiers.count(val)) {
+                typeModifierCount++;
+                if (val == "long") hasLong = true;
+                if (val == "signed" || val == "unsigned") hasSignedOrUnsigned = true;
+            } else {
+                return false; // Unknown type specifier
+            }
+
+        } else if (node->type == NODE_TYPE_QUALIFIER) {
+            if (!qualifiers.count(val)) return false; // Unknown qualifier
+            qualifierCount++;
+
+        } else {
+            return false; // Unknown node type
+        }
+    }
+
+    // Validate counts and combinations
+    if (typeSpecifierCount == 0) return false; // Must have at least one base type
+    if (typeSpecifierCount > 1) return false; // Can't have multiple base types (e.g., int float)
+
+    // Handle type modifier rules
+    if (typeModifierCount > 2) return false; // e.g., "unsigned signed long" is too many
+    if (hasLong && typeModifierCount > 1 && typeSpecifierCount == 1) {
+        // "long long" is valid in C++, but "long long int" is max
+        if (typeModifierCount == 2 && hasSignedOrUnsigned) return false; // e.g., "unsigned long long"
+    }
+
+    // "void" can't be a variable type (only for functions)
+    if(!isfunction){
+        if (nodes.size() == 1 && nodes[0]->valueToString() == "void") return false;
+    }
+    // If we get here, the combination is valid
+    return true;
+}
+
+
+bool isTypeCompatible(int lhstype, int rhstype, string op, bool lhsIsConst = false) {
+    // Define type categories by storage class numbers
+    std::unordered_set<int> integerTypes = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}; // char to unsigned long long
+    std::unordered_set<int> floatingTypes = {12, 13, 14}; // float, double, long double
+    std::unordered_set<int> numericTypes = integerTypes;
+    numericTypes.insert(floatingTypes.begin(), floatingTypes.end());
+
+    // Check if types are numeric or integer
+    bool lhsIsNumeric = numericTypes.count(lhstype);
+    bool rhsIsNumeric = numericTypes.count(rhstype);
+    bool lhsIsInteger = integerTypes.count(lhstype);
+    bool rhsIsInteger = integerTypes.count(rhstype);
+
+    // Validate type numbers (1-14 are valid)
+    if (lhstype < 1 || lhstype > 14 || rhstype < 1 || rhstype > 14) {
+        return false; // Invalid storage class
+    }
+
+    // Arithmetic operators
+    if (op == "+" || op == "-" || op == "*" || op == "/") {
+        return lhsIsNumeric && rhsIsNumeric; // Both must be numeric
+    }
+    if (op == "%") {
+        return lhsIsInteger && rhsIsInteger; // Both must be integers
+    }
+
+    // Comparison operators
+    if (op == "==" || op == "!=" || op == "<" || op == ">" || op == "<=" || op == ">=") {
+        return lhsIsNumeric && rhsIsNumeric; // Both must be numeric
+    }
+
+    // Assignment operator
+    if (op == "=") {
+        if (lhsIsConst) return false; // Cannot assign to const
+        if (lhstype == rhstype) return true; // Exact match
+        if (lhsIsNumeric && rhsIsNumeric) return true; // Numeric conversion
+        return false;
+    }
+
+    // Compound arithmetic operators
+    if (op == "+=" || op == "-=" || op == "*=" || op == "/=") {
+        if (lhsIsConst) return false; // Cannot modify const
+        return lhsIsNumeric && rhsIsNumeric; // Both must be numeric
+    }
+
+    // Compound bitwise operators
+    if (op == "^=" || op == "&=" || op == "|=") {
+        if (lhsIsConst) return false; // Cannot modify const
+        return lhsIsInteger && rhsIsInteger; // Both must be integers
+    }
+
+    // Shift operators
+    if (op == "<<=" || op == ">>=") {
+        if (lhsIsConst) return false; // Cannot modify const
+        return lhsIsInteger && rhsIsInteger; // Both must be integers
+    }
+
+    // Unknown operator
+    return false;
+}
+
+// Helper function to map type string to number (for testing)
+int getStorageClass(const std::string& type) {
+    if (type == "char") return 1;
+    if (type == "short") return 2;
+    if (type == "int") return 3;
+    if (type == "long") return 4;
+    if (type == "unsigned char") return 5;
+    if (type == "unsigned short") return 6;
+    if (type == "unsigned int") return 7;
+    if (type == "unsigned long") return 8;
+    if (type == "bool") return 9;
+    if (type == "long long") return 10;
+    if (type == "unsigned long long") return 11;
+    if (type == "float") return 12;
+    if (type == "double") return 13;
+    if (type == "long double") return 14;
+    return -1; // Invalid type
+}
 %}
 
 
@@ -103,11 +260,11 @@
 
 primary_expression
 	: ID { $$ = $1; }
-	| INTEGER { $$ = $1;}
-    | FLOAT { $$ = $1; }
-	| STRING { $$ = $1; }
-	| CHAR { $$ = $1; }
-	| BOOLEAN_LITERAL {$$ = $1; } 
+	| INTEGER { $$ = $1;$$->storageClass=3;}
+    | FLOAT { $$ = $1;$$->storageClass=6;}
+	| STRING { $$ = $1; $$->storageClass=8;}
+	| CHAR { $$ = $1;$$->storageClass=1; }
+	| BOOLEAN_LITERAL {$$ = $1;$$->storageClass=3; } 
     | KEYWORD_NULLPTR {$$ = $1; }
     | KEYWORD_THIS {$$ = $1; }
 	| LPAREN expression RPAREN { $$ = $2; }
@@ -136,7 +293,7 @@ argument_expression_list
     ;
 
 unary_expression
-	: postfix_expression { $$ = $1; }
+	: postfix_expression { $$ = $1; $$->type=NODE_UNARY_EXPRESSION;}
 	| INCREMENT_OPERATOR unary_expression { $$ = createNode(NODE_UNARY_EXPRESSION, $1, $2);}
 	| DECREMENT_OPERATOR unary_expression { $$ = createNode(NODE_UNARY_EXPRESSION, $1, $2); }
 	| unary_operator cast_expression { $$ = createNode(NODE_UNARY_EXPRESSION, monostate(), $1, $2); }
@@ -155,7 +312,7 @@ unary_operator
 	| PLUS_OPERATOR { $$ = createNode(NODE_UNARY_OPERATOR, $1); }
 	| MINUS_OPERATOR { $$ = createNode(NODE_UNARY_OPERATOR, $1); }
 	| BITWISE_NOT_OPERATOR { $$ = createNode(NODE_UNARY_OPERATOR, $1); }
-	| LOGICAL_NOT_OPERATOR { $$ = createNode(NODE_UNARY_OPERATOR, $1); }
+	| LOGICAL_NOT_OPERATOR { $$ = createNode(NODE_UNARY_OPERATOR,$1); }
 	;
 
 cast_expression
@@ -165,60 +322,150 @@ cast_expression
 
 multiplicative_expression
 	: cast_expression { $$ = $1; }
-	| multiplicative_expression MULTIPLY_OPERATOR cast_expression { $$ = createNode(NODE_MULTIPLICATIVE_EXPRESSION, string($2), $1, $3); }
-	| multiplicative_expression DIVIDE_OPERATOR cast_expression { $$ = createNode(NODE_MULTIPLICATIVE_EXPRESSION, $2, $1, $3); }
-	| multiplicative_expression MODULO_OPERATOR cast_expression { $$ = createNode(NODE_MULTIPLICATIVE_EXPRESSION, $2, $1, $3); }
+	| multiplicative_expression MULTIPLY_OPERATOR cast_expression { 
+        $$ = createNode(NODE_MULTIPLICATIVE_EXPRESSION, string($2), $1, $3);
+        bool b=isTypeCompatible($1->storageClass, $3->storageClass, "*",$1->isConst);
+        if(b){
+          $$->storageClass = $1->storageClass;  
+        } }
+	| multiplicative_expression DIVIDE_OPERATOR cast_expression { 
+        $$ = createNode(NODE_MULTIPLICATIVE_EXPRESSION, $2, $1, $3);
+        bool b=isTypeCompatible($1->storageClass, $3->storageClass, "/",$1->isConst);
+        if(b){
+          $$->storageClass = $1->storageClass;  
+        } }
+	| multiplicative_expression MODULO_OPERATOR cast_expression { 
+        $$ = createNode(NODE_MULTIPLICATIVE_EXPRESSION, $2, $1, $3);
+        bool b=isTypeCompatible($1->storageClass, $3->storageClass, "%",$1->isConst);
+        if(b){
+          $$->storageClass = $1->storageClass;  
+        } }
 	;
 
 additive_expression
 	: multiplicative_expression { $$ = $1; }
-	| additive_expression PLUS_OPERATOR multiplicative_expression { $$ = createNode(NODE_ADDITIVE_EXPRESSION, $2, $1, $3); }
-	| additive_expression MINUS_OPERATOR multiplicative_expression { $$ = createNode(NODE_ADDITIVE_EXPRESSION, $2, $1, $3); }
+	| additive_expression PLUS_OPERATOR multiplicative_expression {
+         $$ = createNode(NODE_ADDITIVE_EXPRESSION, $2, $1, $3);
+         bool b=isTypeCompatible($1->storageClass, $3->storageClass, "+",$1->isConst);
+        if(b){
+          $$->storageClass = $1->storageClass;  
+        } }
+	| additive_expression MINUS_OPERATOR multiplicative_expression { 
+        $$ = createNode(NODE_ADDITIVE_EXPRESSION, $2, $1, $3);
+        bool b=isTypeCompatible($1->storageClass, $3->storageClass, "-",$1->isConst);
+        if(b){
+          $$->storageClass = $1->storageClass;  
+        } }
 	;
 
 shift_expression
 	: additive_expression { $$ = $1; }
-	| shift_expression LEFT_SHIFT_OPERATOR additive_expression { $$ = createNode(NODE_SHIFT_EXPRESSION, $2, $1, $3); }
-	| shift_expression RIGHT_SHIFT_OPERATOR additive_expression { $$ = createNode(NODE_SHIFT_EXPRESSION, $2, $1, $3); }
+	| shift_expression LEFT_SHIFT_OPERATOR additive_expression { 
+        $$ = createNode(NODE_SHIFT_EXPRESSION, $2, $1, $3); 
+        bool b=isTypeCompatible($1->storageClass, $3->storageClass, "<<",$1->isConst);
+        if(b){
+          $$->storageClass = $1->storageClass;  
+        }}
+	| shift_expression RIGHT_SHIFT_OPERATOR additive_expression {
+         $$ = createNode(NODE_SHIFT_EXPRESSION, $2, $1, $3);
+         bool b=isTypeCompatible($1->storageClass, $3->storageClass, ">>",$1->isConst);
+        if(b){
+          $$->storageClass = $1->storageClass;  
+        } }
 	;
 
 relational_expression
 	: shift_expression { $$ = $1; }
-	| relational_expression LESS_THAN_OPERATOR shift_expression { $$ = createNode(NODE_RELATIONAL_EXPRESSION, $2, $1, $3); }
-	| relational_expression GREATER_THAN_OPERATOR shift_expression { $$ = createNode(NODE_RELATIONAL_EXPRESSION, $2, $1, $3); }
-	| relational_expression LESS_THAN_OR_EQUAL_OPERATOR shift_expression { $$ = createNode(NODE_RELATIONAL_EXPRESSION, $2, $1, $3); }
-	| relational_expression GREATER_THAN_OR_EQUAL_OPERATOR shift_expression { $$ = createNode(NODE_RELATIONAL_EXPRESSION, $2, $1, $3); }
+	| relational_expression LESS_THAN_OPERATOR shift_expression {
+         $$ = createNode(NODE_RELATIONAL_EXPRESSION, $2, $1, $3);
+         bool b=isTypeCompatible($1->storageClass, $3->storageClass, "<",$1->isConst);
+        if(b){
+          $$->storageClass = $1->storageClass;  
+        } }
+	| relational_expression GREATER_THAN_OPERATOR shift_expression { 
+        $$ = createNode(NODE_RELATIONAL_EXPRESSION, $2, $1, $3);
+        bool b=isTypeCompatible($1->storageClass, $3->storageClass, ">",$1->isConst);
+        if(b){
+          $$->storageClass = $1->storageClass;  
+        } }
+	| relational_expression LESS_THAN_OR_EQUAL_OPERATOR shift_expression {
+         $$ = createNode(NODE_RELATIONAL_EXPRESSION, $2, $1, $3); 
+         bool b=isTypeCompatible($1->storageClass, $3->storageClass, "<+",$1->isConst);
+        if(b){
+          $$->storageClass = $1->storageClass;  
+        }}
+	| relational_expression GREATER_THAN_OR_EQUAL_OPERATOR shift_expression { 
+        $$ = createNode(NODE_RELATIONAL_EXPRESSION, $2, $1, $3);
+        bool b=isTypeCompatible($1->storageClass, $3->storageClass, ">=",$1->isConst);
+        if(b){
+          $$->storageClass = $1->storageClass;  
+        } }
 	;
 
 equality_expression
 	: relational_expression { $$ = $1; }
-	| equality_expression EQUALS_COMPARISON_OPERATOR relational_expression { $$ = createNode(NODE_EQUALITY_EXPRESSION, $2, $1, $3); }
-	| equality_expression NOT_EQUALS_OPERATOR relational_expression { $$ = createNode(NODE_EQUALITY_EXPRESSION, $2, $1, $3); }
+	| equality_expression EQUALS_COMPARISON_OPERATOR relational_expression { 
+        $$ = createNode(NODE_EQUALITY_EXPRESSION, $2, $1, $3);
+        bool b=isTypeCompatible($1->storageClass, $3->storageClass, "==",$1->isConst);
+        if(b){
+          $$->storageClass = $1->storageClass;  
+        } }
+	| equality_expression NOT_EQUALS_OPERATOR relational_expression { 
+        $$ = createNode(NODE_EQUALITY_EXPRESSION, $2, $1, $3);
+        bool b=isTypeCompatible($1->storageClass, $3->storageClass, "!=",$1->isConst);
+        if(b){
+          $$->storageClass = $1->storageClass;  
+        } }
 	;
 
 and_expression
 	: equality_expression { $$ = $1; }
-	| and_expression BITWISE_AND_OPERATOR equality_expression { $$ = createNode(NODE_AND_EXPRESSION, $2, $1, $3); }
+	| and_expression BITWISE_AND_OPERATOR equality_expression { 
+        $$ = createNode(NODE_AND_EXPRESSION, $2, $1, $3); 
+        bool b=isTypeCompatible($1->storageClass, $3->storageClass, "&",$1->isConst);
+        if(b){
+          $$->storageClass = $1->storageClass;  
+        }}
 	;
 
 exclusive_or_expression
 	: and_expression { $$ = $1; }
-	| exclusive_or_expression BITWISE_XOR_OPERATOR and_expression { $$ = createNode(NODE_EXCLUSIVE_OR_EXPRESSION, $2, $1, $3); }
+	| exclusive_or_expression BITWISE_XOR_OPERATOR and_expression { 
+        $$ = createNode(NODE_EXCLUSIVE_OR_EXPRESSION, $2, $1, $3); 
+        bool b=isTypeCompatible($1->storageClass, $3->storageClass, "^",$1->isConst);
+        if(b){
+          $$->storageClass = $1->storageClass;  
+        }}
 	;
 
 inclusive_or_expression
 	: exclusive_or_expression { $$ = $1; }
-	| inclusive_or_expression BITWISE_OR_OPERATOR exclusive_or_expression { $$ = createNode(NODE_INCLUSIVE_OR_EXPRESSION, $2, $1, $3); }
+	| inclusive_or_expression BITWISE_OR_OPERATOR exclusive_or_expression {
+         $$ = createNode(NODE_INCLUSIVE_OR_EXPRESSION, $2, $1, $3);
+         bool b=isTypeCompatible($1->storageClass, $3->storageClass, "|",$1->isConst);
+        if(b){
+          $$->storageClass = $1->storageClass;  
+        } }
 	;
 
 logical_and_expression
 	: inclusive_or_expression { $$ = $1; }
-	| logical_and_expression LOGICAL_AND_OPERATOR inclusive_or_expression { $$ = createNode(NODE_LOGICAL_AND_EXPRESSION, $2, $1, $3); }
+	| logical_and_expression LOGICAL_AND_OPERATOR inclusive_or_expression { 
+        $$ = createNode(NODE_LOGICAL_AND_EXPRESSION, $2, $1, $3); 
+        bool b=isTypeCompatible($1->storageClass, $3->storageClass, "&&",$1->isConst);
+        if(b){
+          $$->storageClass = $1->storageClass;  
+        }}
 	;
 
 logical_or_expression
 	: logical_and_expression { $$ = $1; }
-	| logical_or_expression LOGICAL_OR_OPERATOR logical_and_expression { $$ = createNode(NODE_LOGICAL_OR_EXPRESSION, $2, $1, $3); }
+	| logical_or_expression LOGICAL_OR_OPERATOR logical_and_expression { 
+        $$ = createNode(NODE_LOGICAL_OR_EXPRESSION, $2, $1, $3); 
+        bool b=isTypeCompatible($1->storageClass, $3->storageClass, "||",$1->isConst);
+        if(b){
+          $$->storageClass = $1->storageClass;  
+        }}
 	;
 
 conditional_expression
@@ -228,7 +475,12 @@ conditional_expression
 
 assignment_expression
 	: conditional_expression { $$ = $1; }
-	| unary_expression assignment_operator assignment_expression { $$ = createNode(NODE_ASSIGNMENT_EXPRESSION, $2->value, $1, $3); }
+	| unary_expression assignment_operator assignment_expression { 
+        $$ = createNode(NODE_ASSIGNMENT_EXPRESSION, $2->value, $1, $3);
+        bool b=isTypeCompatible($1->storageClass, $3->storageClass, string($2->valueToString()),$1->isConst);
+        if(b){
+          $$->storageClass = $1->storageClass;  
+        } }
 	;
 
 
@@ -257,6 +509,7 @@ constant_expression
 
 declaration
     : declaration_specifiers SEMICOLON {
+        cout<<isValidVariableDeclaration($1->children,false) << endl;
         $$ = $1;
         if($$->children.size() && $$->children[0]->type == NODE_STRUCT_OR_UNION_SPECIFIER){
             for(auto child : $1->children[0]->children){
@@ -274,7 +527,9 @@ declaration
         }
     }
     | declaration_specifiers init_declarator_list SEMICOLON {
+        cout<<isValidVariableDeclaration($1->children,false) << endl;
         $$ = createNode(NODE_DECLARATION, monostate(), $1, $2);
+        
         if($1->children[0]->type == NODE_STRUCT_OR_UNION_SPECIFIER){
             for(auto child : $1->children[0]->children){
                 if(child->type == NODE_STRUCT_DECLARATION_LIST){
@@ -289,23 +544,35 @@ declaration
         }else{
             addDeclaratorsToSymbolTable($1, $2);
         }
+        cout << *$$ << endl;
     };
 
 declaration_specifiers
 	: storage_class_specifier { $$ = createNode(NODE_DECLARATION_SPECIFIERS, monostate(), $1); }
 	| storage_class_specifier declaration_specifiers { 
-        $2->addChild($1);
-        $$ = $2; 
+        $$ = createNode(NODE_DECLARATION_SPECIFIERS, monostate(), $1);
+        for(auto child : $2->children){
+            $$->addChild(child);
+        }
+        // $2->addChild($1);
+        // $$ = $2; 
     }
 	| type_specifier { $$ = createNode(NODE_DECLARATION_SPECIFIERS, monostate(), $1); }
 	| type_specifier declaration_specifiers { 
-        $2->addChild($1);
-        $$ = $2; 
+        $$ = createNode(NODE_DECLARATION_SPECIFIERS, monostate(), $1);
+        for(auto child : $2->children){
+            $$->addChild(child);
+        }
+        // $2->addChild($1);
+        // $$ = $2; 
     }
 	| type_qualifier { $$ = createNode(NODE_DECLARATION_SPECIFIERS, monostate(), $1); }
 	| type_qualifier declaration_specifiers { 
-        $2->addChild($1);
-        $$ = $2; 
+        $$ = createNode(NODE_DECLARATION_SPECIFIERS, monostate(), $1);
+        for(auto child : $2->children){
+            $$->addChild(child);
+        }
+         
     }
 	;    
 
@@ -324,7 +591,7 @@ init_declarator
         $$ = createNode(NODE_DECLARATOR, monostate(), $1, nullptr); 
     }
     | declarator ASSIGNMENT_OPERATOR initializer { 
-        $$ = createNode(NODE_DECLARATOR, $2, $1, $3);
+        $$ = createNode(NODE_DECLARATOR, $2, $1, $3);   
     }
     ;
 
@@ -433,9 +700,9 @@ struct_declaration
     ;
 
 specifier_qualifier_list
-	: type_specifier specifier_qualifier_list {$$ = createNode(NODE_SPECIFIER_QUALIFIER_LIST, monostate(), $1, $2); }
+	: type_specifier specifier_qualifier_list {$$ = createNode(NODE_SPECIFIER_QUALIFIER_LIST, monostate(), $1, $2);}
 	| type_specifier { $$ = $1; }
-	| type_qualifier specifier_qualifier_list { $$ = createNode(NODE_SPECIFIER_QUALIFIER_LIST, monostate(), $1, $2); }
+	| type_qualifier specifier_qualifier_list { $$ = createNode(NODE_SPECIFIER_QUALIFIER_LIST, monostate(), $1, $2);}
 	| type_qualifier { $$ = $1; }
 	;
 
@@ -719,7 +986,7 @@ translation_unit
 
 external_declaration
 	: function_definition { $$ = $1; addFunction($$->children[0], $$->children[1]);}
-	| declaration { $$ = $1; }
+	| declaration { $$ = $1;}
     | scope_resolution_statements {}
     ;
 
@@ -743,11 +1010,15 @@ constructor_function
 
 function_definition
     : declaration_specifiers declarator {enterScope();}  declaration_list compound_statement {
+         cout<<isValidVariableDeclaration($1->children,true) << endl;
+
         $$ = createNode(NODE_FUNCTION_DEFINITION, monostate(), $1, $2, $4, $5); exitScope();
         // TODO 
         // addFunctionToSymbolTable($1, $2);
     }
     | declaration_specifiers declarator {enterScope();} compound_statement {
+         cout<<isValidVariableDeclaration($1->children,true) << endl;
+
         $$ = createNode(NODE_FUNCTION_DEFINITION, monostate(), $1, $2, $4);
         ASTNode* decl = $2;
         while(decl->type != NODE_DECLARATOR){

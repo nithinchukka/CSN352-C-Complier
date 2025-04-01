@@ -100,7 +100,12 @@ public:
     NodeValue value;
     int offset = 0;
     vector<ASTNode *> children;
-
+    bool isFunction;       
+    int paramCount;
+    bool isConst=false; 
+    bool isStatic;
+    bool isVolatile;
+    int storageClass=-1;//"char", "short", "int", "long", "unsigned char", "unsigned short", "unsigned int", "unsigned long", "bool", "long long", "unsigned long long","float", "double", "long double"
     ASTNode(NodeType type, NodeValue value = monostate()) : type(type), value(value)
     {
     }
