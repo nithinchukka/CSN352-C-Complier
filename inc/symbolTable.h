@@ -15,20 +15,36 @@ stack<Table *> tableStack;
 stack<int> offsetStack;
 Table *currentTable;
 vector<Table *> allTables;
-
-void lookupSymbol(string symbol)
+int getStorageClass(const std::string& type) {
+    if (type == "char") return 1;
+    if (type == "short") return 2;
+    if (type == "int") return 3;
+    if (type == "long") return 4;
+    if (type == "unsigned char") return 5;
+    if (type == "unsigned short") return 6;
+    if (type == "unsigned int") return 7;
+    if (type == "unsigned long") return 8;
+    if (type == "bool") return 9;
+    if (type == "long long") return 10;
+    if (type == "unsigned long long") return 11;
+    if (type == "float") return 12;
+    if (type == "double") return 13;
+    if (type == "long double") return 14;
+    return 100; // Invalid type
+}
+int lookupSymbol(string symbol)
 {
     Table *temp = currentTable;
     while (temp != nullptr)
     {
         if (temp->symbolTable.find(symbol) != temp->symbolTable.end())
         {
-            cout << "Symbol found in table" << endl;
-            return;
+            return getStorageClass(temp->symbolTable[symbol]);
         }
         temp = temp->parent;
     }
     cout << "Symbol not found in table" << endl;
+    return -1;
 }
 
 void enterScope()

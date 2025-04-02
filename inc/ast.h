@@ -106,6 +106,8 @@ public:
     bool isStatic;
     bool isVolatile;
     int storageClass=-1;//"char", "short", "int", "long", "unsigned char", "unsigned short", "unsigned int", "unsigned long", "bool", "long long", "unsigned long long","float", "double", "long double"
+    vector<int> dimensions;
+     
     ASTNode(NodeType type, NodeValue value = monostate()) : type(type), value(value)
     {
     }

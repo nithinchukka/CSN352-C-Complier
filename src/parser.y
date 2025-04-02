@@ -3,28 +3,20 @@
 }
 %define parse.error verbose
 
-
 %{
     #include <bits/stdc++.h>
 	#include "../inc/ast.h"
     #include "../inc/symbolTable.h"
     using namespace std;
-    
     void yyerror(const char *s);
-    
     extern int yylex();
     extern FILE *yyin;
     extern unordered_set<string> classOrStructOrUnion;
-
-
-
-
     bool isValidVariableDeclaration(vector<ASTNode*>& nodes,bool isfunction = false) {
     int storageClassCount = 0;
     int typeSpecifierCount = 0; // Base types (int, char, etc.)
     int typeModifierCount = 0;  // signed, unsigned, long
     int qualifierCount = 0;
-
     // Valid sets for each category
     unordered_set<string> storageClasses = {
          "extern", "static", "auto", "register"
@@ -38,20 +30,16 @@
     unordered_set<string> qualifiers = {
         "const", "volatile"
     };
-
     // Track specific modifiers to enforce valid combos
     bool hasLong = false;
     bool hasSignedOrUnsigned = false;
-
     // Process each node
     for (const auto& node : nodes) {
         std::string val = node->valueToString();
-
         if (node->type == NODE_STORAGE_CLASS_SPECIFIER) {
             if (!storageClasses.count(val)) return false; // Unknown storage class
             storageClassCount++;
             if (storageClassCount > 1) return false; // Too many storage classes
-
         } else if (node->type == NODE_TYPE_SPECIFIER) {
             if (baseTypes.count(val)) {
                 typeSpecifierCount++;
@@ -63,27 +51,22 @@
             } else {
                 return false; // Unknown type specifier
             }
-
         } else if (node->type == NODE_TYPE_QUALIFIER) {
             if (!qualifiers.count(val)) return false; // Unknown qualifier
             qualifierCount++;
-
         } else {
             return false; // Unknown node type
         }
     }
-
     // Validate counts and combinations
     if (typeSpecifierCount == 0) return false; // Must have at least one base type
     if (typeSpecifierCount > 1) return false; // Can't have multiple base types (e.g., int float)
-
     // Handle type modifier rules
     if (typeModifierCount > 2) return false; // e.g., "unsigned signed long" is too many
     if (hasLong && typeModifierCount > 1 && typeSpecifierCount == 1) {
         // "long long" is valid in C++, but "long long int" is max
         if (typeModifierCount == 2 && hasSignedOrUnsigned) return false; // e.g., "unsigned long long"
     }
-
     // "void" can't be a variable type (only for functions)
     if(!isfunction){
         if (nodes.size() == 1 && nodes[0]->valueToString() == "void") return false;
@@ -91,26 +74,21 @@
     // If we get here, the combination is valid
     return true;
 }
-
-
 bool isTypeCompatible(int lhstype, int rhstype, string op, bool lhsIsConst = false) {
     // Define type categories by storage class numbers
     std::unordered_set<int> integerTypes = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}; // char to unsigned long long
     std::unordered_set<int> floatingTypes = {12, 13, 14}; // float, double, long double
     std::unordered_set<int> numericTypes = integerTypes;
     numericTypes.insert(floatingTypes.begin(), floatingTypes.end());
-
     // Check if types are numeric or integer
     bool lhsIsNumeric = numericTypes.count(lhstype);
     bool rhsIsNumeric = numericTypes.count(rhstype);
     bool lhsIsInteger = integerTypes.count(lhstype);
     bool rhsIsInteger = integerTypes.count(rhstype);
-
     // Validate type numbers (1-14 are valid)
     if (lhstype < 1 || lhstype > 14 || rhstype < 1 || rhstype > 14) {
         return false; // Invalid storage class
     }
-
     // Arithmetic operators
     if (op == "+" || op == "-" || op == "*" || op == "/") {
         return lhsIsNumeric && rhsIsNumeric; // Both must be numeric
@@ -118,59 +96,113 @@ bool isTypeCompatible(int lhstype, int rhstype, string op, bool lhsIsConst = fal
     if (op == "%") {
         return lhsIsInteger && rhsIsInteger; // Both must be integers
     }
-
     // Comparison operators
     if (op == "==" || op == "!=" || op == "<" || op == ">" || op == "<=" || op == ">=") {
         return lhsIsNumeric && rhsIsNumeric; // Both must be numeric
     }
-
     // Assignment operator
     if (op == "=") {
         if (lhsIsConst) return false; // Cannot assign to const
         if (lhstype == rhstype) return true; // Exact match
-        if (lhsIsNumeric && rhsIsNumeric) return true; // Numeric conversion
+        if (lhsIsNumeric && rhsIsNumeric){
+            if(rhstype>lhstype){
+                return false;
+            }
+            else{
+                return true;
+            }
+        } // Numeric conversion
         return false;
     }
-
     // Compound arithmetic operators
     if (op == "+=" || op == "-=" || op == "*=" || op == "/=") {
         if (lhsIsConst) return false; // Cannot modify const
         return lhsIsNumeric && rhsIsNumeric; // Both must be numeric
     }
-
     // Compound bitwise operators
     if (op == "^=" || op == "&=" || op == "|=") {
         if (lhsIsConst) return false; // Cannot modify const
         return lhsIsInteger && rhsIsInteger; // Both must be integers
     }
-
     // Shift operators
     if (op == "<<=" || op == ">>=") {
         if (lhsIsConst) return false; // Cannot modify const
         return lhsIsInteger && rhsIsInteger; // Both must be integers
     }
-
     // Unknown operator
     return false;
 }
 
 // Helper function to map type string to number (for testing)
-int getStorageClass(const std::string& type) {
-    if (type == "char") return 1;
-    if (type == "short") return 2;
-    if (type == "int") return 3;
-    if (type == "long") return 4;
-    if (type == "unsigned char") return 5;
-    if (type == "unsigned short") return 6;
-    if (type == "unsigned int") return 7;
-    if (type == "unsigned long") return 8;
-    if (type == "bool") return 9;
-    if (type == "long long") return 10;
-    if (type == "unsigned long long") return 11;
-    if (type == "float") return 12;
-    if (type == "double") return 13;
-    if (type == "long double") return 14;
-    return -1; // Invalid type
+void checkInitializerLevel(ASTNode* initList, const std::string& baseType, std::vector<int>& dimensions, int level) {
+    int vecSize = dimensions.size();
+
+    // Allow first dimension to be 0 (inferred), but others must be specified
+    for (int i = 1; i < vecSize; i++) {
+        if (dimensions[i] == 0) {
+            std::cout << "Invalid Declaration: dimension " << i << " cannot be unspecified" << std::endl;
+            return;
+        }
+    }
+
+    // Check if we've exceeded the expected number of dimensions
+    if (level >= vecSize) {
+        std::cerr << "Too many nesting levels at level " << level << std::endl;
+        return;
+    }
+
+    // Infer first dimension if unspecified
+    if (level == 0 && dimensions[0] == 0) {
+        dimensions[0] = initList->children.size();  // Update dimensions[0] based on initializer
+    }
+
+    // Check number of children matches the current dimension
+    if (initList->children.size() != dimensions[level]) {
+        std::cerr << "Dimension mismatch at level " << level << ": expected " 
+                  << dimensions[level] << ", got " << initList->children.size() << std::endl;
+        return;
+    }
+
+    if (level == vecSize - 1) {
+        // Innermost level: check scalar types
+        for (ASTNode* child : initList->children) {
+            if (child->type != NODE_UNARY_EXPRESSION) {
+                std::cerr << "Expected scalar at level " << level << ", got " << child->type << std::endl;
+                return;
+            }
+            // Check type (assuming storageClass 3 means "int")
+            if (child->storageClass != 3) {
+                std::cerr << "Type mismatch at level " << level << ": expected " 
+                          << baseType << ", got " << child->storageClass << std::endl;
+            }
+        }
+    } else {
+        // Recurse into nested initializer lists
+        for (ASTNode* child : initList->children) {
+            if (child->type != NODE_INITIALIZER_LIST) {
+                std::cerr << "Expected nested initializer list at level " << level << std::endl;
+                return;
+            }
+            checkInitializerLevel(child, baseType, dimensions, level + 1);
+        }
+    }
+}
+
+vector<int> findArrayDimensions(ASTNode* arr){
+    if (!arr || arr->children.empty())
+        return{};
+
+    vector<int> dimensions;
+    ASTNode *current = arr;
+    while (current)
+    {
+        string nodeType = ASTNode::nodeTypeToString(current->type);
+        if (nodeType == "ARRAY")
+            dimensions.push_back(stoi(current->children[1] ? current->children[1]->valueToString() : "0"));
+        current = current->children.empty() ? nullptr : current->children[0];
+    }
+    reverse(dimensions.begin(),dimensions.end());
+    return dimensions;
 }
 %}
 
@@ -259,12 +291,12 @@ int getStorageClass(const std::string& type) {
 %%
 
 primary_expression
-	: ID { $$ = $1; }
+	: ID { $$ = $1;$$->storageClass = lookupSymbol($$->valueToString());}
 	| INTEGER { $$ = $1;$$->storageClass=3;}
-    | FLOAT { $$ = $1;$$->storageClass=6;}
-	| STRING { $$ = $1; $$->storageClass=8;}
+    | FLOAT { $$ = $1;$$->storageClass=12;}
+	| STRING { $$ = $1; $$->storageClass=100;}
 	| CHAR { $$ = $1;$$->storageClass=1; }
-	| BOOLEAN_LITERAL {$$ = $1;$$->storageClass=3; } 
+	| BOOLEAN_LITERAL {$$ = $1;$$->storageClass=9; } 
     | KEYWORD_NULLPTR {$$ = $1; }
     | KEYWORD_THIS {$$ = $1; }
 	| LPAREN expression RPAREN { $$ = $2; }
@@ -465,7 +497,8 @@ logical_or_expression
         bool b=isTypeCompatible($1->storageClass, $3->storageClass, "||",$1->isConst);
         if(b){
           $$->storageClass = $1->storageClass;  
-        }}
+        }
+    }
 	;
 
 conditional_expression
@@ -509,7 +542,7 @@ constant_expression
 
 declaration
     : declaration_specifiers SEMICOLON {
-        cout<<isValidVariableDeclaration($1->children,false) << endl;
+        isValidVariableDeclaration($1->children,false);
         $$ = $1;
         if($$->children.size() && $$->children[0]->type == NODE_STRUCT_OR_UNION_SPECIFIER){
             for(auto child : $1->children[0]->children){
@@ -527,9 +560,8 @@ declaration
         }
     }
     | declaration_specifiers init_declarator_list SEMICOLON {
-        cout<<isValidVariableDeclaration($1->children,false) << endl;
+        isValidVariableDeclaration($1->children,false);
         $$ = createNode(NODE_DECLARATION, monostate(), $1, $2);
-        
         if($1->children[0]->type == NODE_STRUCT_OR_UNION_SPECIFIER){
             for(auto child : $1->children[0]->children){
                 if(child->type == NODE_STRUCT_DECLARATION_LIST){
@@ -541,10 +573,24 @@ declaration
                     insertSymbol(child->valueToString(), "struct");
                 }
             }
-        }else{
+        }
+        else if($2->children[0]->children[0]->type==ARRAY){
+            int size = $2->children[0]->children.size();
+            if(size > 1){
+                ASTNode* iniList = $2->children[0]->children[1];
+                vector<int> hp = findArrayDimensions($2->children[0]->children[0]);
+                checkInitializerLevel(iniList,"int",hp,0);
+            }
+        }
+        else{
+            int size = $2->children.size();
+            cout << "hi";
+            for(int i=0;i<size;i++){
+                //if($2->children[i]->storageClass == -1)continue;
+                bool b = isTypeCompatible($1->storageClass,$2->children[i]->storageClass,"=");
+            }
             addDeclaratorsToSymbolTable($1, $2);
         }
-        cout << *$$ << endl;
     };
 
 declaration_specifiers
@@ -557,16 +603,15 @@ declaration_specifiers
         // $2->addChild($1);
         // $$ = $2; 
     }
-	| type_specifier { $$ = createNode(NODE_DECLARATION_SPECIFIERS, monostate(), $1); }
+	| type_specifier { $$ = createNode(NODE_DECLARATION_SPECIFIERS, monostate(), $1);$$->storageClass = $1->storageClass;}
 	| type_specifier declaration_specifiers { 
         $$ = createNode(NODE_DECLARATION_SPECIFIERS, monostate(), $1);
         for(auto child : $2->children){
             $$->addChild(child);
         }
-        // $2->addChild($1);
         // $$ = $2; 
     }
-	| type_qualifier { $$ = createNode(NODE_DECLARATION_SPECIFIERS, monostate(), $1); }
+	| type_qualifier { $$ = createNode(NODE_DECLARATION_SPECIFIERS, monostate(), $1); $$->storageClass = $1->storageClass;}
 	| type_qualifier declaration_specifiers { 
         $$ = createNode(NODE_DECLARATION_SPECIFIERS, monostate(), $1);
         for(auto child : $2->children){
@@ -592,6 +637,7 @@ init_declarator
     }
     | declarator ASSIGNMENT_OPERATOR initializer { 
         $$ = createNode(NODE_DECLARATOR, $2, $1, $3);   
+        $$->storageClass = $3->storageClass;
     }
     ;
 
@@ -605,14 +651,14 @@ storage_class_specifier
 
 
 type_specifier
-	: KEYWORD_VOID { $$ = $1; $$->type = NODE_TYPE_SPECIFIER; }
-	| KEYWORD_CHAR { $$ = $1; $$->type = NODE_TYPE_SPECIFIER; }
-    | KEYWORD_SHORT { $$ = $1; $$->type = NODE_TYPE_SPECIFIER; }
-    | KEYWORD_INT { $$ = $1; $$->type = NODE_TYPE_SPECIFIER; }
-    | KEYWORD_BOOL { $$ = $1; $$->type = NODE_TYPE_SPECIFIER; }
-    | KEYWORD_LONG { $$ = $1; $$->type = NODE_TYPE_SPECIFIER; }
-    | KEYWORD_FLOAT { $$ = $1; $$->type = NODE_TYPE_SPECIFIER; }
-    | KEYWORD_DOUBLE { $$ = $1; $$->type = NODE_TYPE_SPECIFIER; }
+	: KEYWORD_VOID { $$ = $1; $$->type = NODE_TYPE_SPECIFIER; $$->storageClass = 0;}
+	| KEYWORD_CHAR { $$ = $1; $$->type = NODE_TYPE_SPECIFIER; $$->storageClass = 1;}
+    | KEYWORD_SHORT { $$ = $1; $$->type = NODE_TYPE_SPECIFIER; $$->storageClass = 2;}
+    | KEYWORD_INT { $$ = $1; $$->type = NODE_TYPE_SPECIFIER; $$->storageClass = 3;}
+    | KEYWORD_BOOL { $$ = $1; $$->type = NODE_TYPE_SPECIFIER; $$->storageClass = 9;}
+    | KEYWORD_LONG { $$ = $1; $$->type = NODE_TYPE_SPECIFIER; $$->storageClass = 4;}
+    | KEYWORD_FLOAT { $$ = $1; $$->type = NODE_TYPE_SPECIFIER; $$->storageClass = 12;}
+    | KEYWORD_DOUBLE { $$ = $1; $$->type = NODE_TYPE_SPECIFIER; $$->storageClass = 13;}
     | KEYWORD_SIGNED { $$ = $1; $$->type = NODE_TYPE_SPECIFIER; }
     | KEYWORD_UNSIGNED { $$ = $1; $$->type = NODE_TYPE_SPECIFIER; }
     | TYPE_NAME {$$ = $1; $$->type = NODE_TYPE_SPECIFIER;}
@@ -722,7 +768,6 @@ struct_declarator
 	| declarator COLON constant_expression { $$ = createNode(NODE_STRUCT_DECLARATOR, monostate(), $1, $3); }
 	;
 
-
 type_qualifier
 	: KEYWORD_CONST { $$ = $1; $$->type = NODE_TYPE_QUALIFIER; }
 	| KEYWORD_VOLATILE { $$ = $1; $$->type = NODE_TYPE_QUALIFIER; }
@@ -743,7 +788,6 @@ declarator
     }
     ;
 
-
 direct_declarator
     : ID { 
         $$ = $1;
@@ -751,8 +795,8 @@ direct_declarator
     | LPAREN declarator RPAREN { 
         $$ = $2;
     }
-    | direct_declarator LBRACKET constant_expression RBRACKET { 
-        $$ = createNode(ARRAY, monostate(), $1, $3);  
+    | direct_declarator LBRACKET INTEGER RBRACKET { 
+        $$ = createNode(ARRAY, monostate(), $1, $3);
     }
     | direct_declarator LBRACKET RBRACKET { 
         $$ = createNode(ARRAY, monostate(), $1, nullptr); 
@@ -767,7 +811,6 @@ direct_declarator
         $$ = createNode(NODE_DECLARATOR, monostate(), $1, nullptr); 
     }
     ;
-
 
 pointer
 	: MULTIPLY_OPERATOR { $$ = createNode(NODE_POINTER, $1); }
@@ -785,7 +828,6 @@ type_qualifier_list
         $$->children.push_back($2);
     }
     ;
-
 
 parameter_type_list
     : parameter_list { 
@@ -849,7 +891,7 @@ direct_abstract_declarator
 
 initializer
 	: assignment_expression { $$ = $1; }
-	| LBRACE initializer_list RBRACE {  $$ = $2; }
+	| LBRACE initializer_list RBRACE {  $$ = $2;}
 	| LBRACE initializer_list COMMA RBRACE {  $$ = $2; }
 	;
 
@@ -860,6 +902,10 @@ initializer_list
     | initializer_list COMMA initializer { 
         $$ = $1;
         $$->children.push_back($3);
+        // int size = $$->children.size();
+        // for(int i=0;i<size;i++){
+        //     cout << $$->children[i]->valueToString() << " ";
+        // }
     }
     ;
 
@@ -1009,15 +1055,8 @@ constructor_function
     ;
 
 function_definition
-    : declaration_specifiers declarator {enterScope();}  declaration_list compound_statement {
-         cout<<isValidVariableDeclaration($1->children,true) << endl;
-
-        $$ = createNode(NODE_FUNCTION_DEFINITION, monostate(), $1, $2, $4, $5); exitScope();
-        // TODO 
-        // addFunctionToSymbolTable($1, $2);
-    }
     | declaration_specifiers declarator {enterScope();} compound_statement {
-         cout<<isValidVariableDeclaration($1->children,true) << endl;
+        isValidVariableDeclaration($1->children,true);
 
         $$ = createNode(NODE_FUNCTION_DEFINITION, monostate(), $1, $2, $4);
         ASTNode* decl = $2;
@@ -1034,7 +1073,6 @@ destructor_function
         $$ = createNode(NODE_DESTRUCTOR_FUNCTION, monostate(),$2, $6); exitScope();
     }
     ;
-
 %%
 
 void yyerror(const char *s) {
@@ -1071,8 +1109,6 @@ int main(int argc, char **argv) {
     } else {
         cout << "Parsing completed successfully!" << endl;
     }
-
     printAllTables();
-
     return 0;
 }

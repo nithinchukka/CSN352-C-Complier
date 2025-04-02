@@ -1,6 +1,3 @@
 int main(){
-    int a;
-    int b;
-    int c,d;
-    a=b+c;
+    int arr[][2] = {{1,2},{3,4},{4}};
 }
