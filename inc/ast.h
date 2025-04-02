@@ -100,14 +100,18 @@ public:
     NodeValue value;
     int offset = 0;
     vector<ASTNode *> children;
-    bool isFunction;       
-    int paramCount;
-    bool isConst=false; 
-    bool isStatic;
-    bool isVolatile;
-    int storageClass=-1;//"char", "short", "int", "long", "unsigned char", "unsigned short", "unsigned int", "unsigned long", "bool", "long long", "unsigned long long","float", "double", "long double"
+    int typeCategory = -1; // var = 0, pointer = 1, arr = 2,  func = 3, struct = 4, union = 5, class = 6
+    bool isConst = false;
+    bool isStatic = false;
+    bool isVolatile = false;
+    bool isUnsigned = false;
+    int typeSpecifier = -1; //"char", "short", "int", "long", "bool", "float", "double"
+    int storageClass = -1;  // -1: none, 0: extern, 1: static, 2: auto, 3: register
+    int paramCount = 0;
+    int pointerLevel = 0;
+    vector<int> paramTypes;
     vector<int> dimensions;
-     
+
     ASTNode(NodeType type, NodeValue value = monostate()) : type(type), value(value)
     {
     }
