@@ -7,7 +7,7 @@ using namespace std;
 
 struct Table
 {
-    unordered_map<string, ASTNode*> symbolTable;
+    vector<pair<string,ASTNode*>> symbolTable;
     Table *parent;
 };
 
@@ -15,6 +15,7 @@ stack<Table *> tableStack;
 stack<int> offsetStack;
 Table *currentTable;
 vector<Table *> allTables;
+
 int getStorageClass(const std::string& type) {
     if (type == "char") return 1;
     if (type == "short") return 2;
@@ -32,20 +33,26 @@ int getStorageClass(const std::string& type) {
     if (type == "long double") return 14;
     return 100; // Invalid type
 }
+
+
 int lookupSymbol(string symbol)
 {
     Table *temp = currentTable;
     while (temp != nullptr)
     {
-        if (temp->symbolTable.find(symbol) != temp->symbolTable.end())
+        for (const auto &entry : temp->symbolTable)
         {
-            return temp->symbolTable[symbol]->typeSpecifier;
+            if (entry.first == symbol)
+            {
+                return entry.second->typeSpecifier;
+            }
         }
         temp = temp->parent;
     }
     cout << "Symbol " << symbol << " not found in table" << endl;
     return -1;
 }
+
 
 void enterScope()
 {
@@ -73,13 +80,17 @@ void exitScope()
 
 void insertSymbol(string symbol, ASTNode* node)
 {
-    if (currentTable->symbolTable.find(symbol) != currentTable->symbolTable.end())
+    for (const auto &entry : currentTable->symbolTable)
     {
-        cout << "Symbol " << symbol << " already exists in table" << endl;
-        return;
+        if (entry.first == symbol)
+        {
+            cout << "Symbol " << symbol << " already exists in table" << endl;
+            return;
+        }
     }
-    currentTable->symbolTable[symbol] = node;
+    currentTable->symbolTable.emplace_back(symbol, node);
 }
+
 
 void printAllTables() {
     int tableId = 0;

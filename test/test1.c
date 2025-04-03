@@ -1,5 +1,6 @@
-int *a, *b;
+struct Point{
+    int b;
+    int *c;
+};
 
-int main() {
-    int *arr[2] = {a, b};
-}
+int x, y;

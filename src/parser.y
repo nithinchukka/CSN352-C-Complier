@@ -12,7 +12,7 @@
     extern int yylex();
     extern FILE *yyin;
     extern unordered_set<string> classOrStructOrUnion;
-
+    map<string, vector<pair<string, ASTNode*>>> alphaSymbolTable;
 struct DeclaratorInfo {
     int typeCategory = -1; // var = 0, func = 1, struct = 2, enum = 3, class = 4
     int storageClass = -1; // -1: none, 0: extern, 1: static, 2: auto, 3: register
@@ -23,6 +23,7 @@ struct DeclaratorInfo {
     bool isUnsigned = false;
     bool hasLong = false;
     bool isValid = false;
+    bool isCustomType = false; // true if it's a class, struct, or union
 };
 
 DeclaratorInfo isValidVariableDeclaration(vector<ASTNode*>& nodes, bool isFunction = false) {
@@ -48,13 +49,20 @@ DeclaratorInfo isValidVariableDeclaration(vector<ASTNode*>& nodes, bool isFuncti
             if (val == "static") declInfo.isStatic = true;
             storageClassCount++;
             if (storageClassCount > 1) return {};
-
         } else if (node->type == NODE_TYPE_SPECIFIER) {
-            if (baseTypes.count(val)) {
-                if (declInfo.typeSpecifier != -1) return {}; // More than one base type
+            if (classOrStructOrUnion.count(val)) {
+                if (declInfo.typeSpecifier != -1) return {};
+                declInfo.typeCategory = 4;
+                declInfo.typeSpecifier = 8;
+                declInfo.isCustomType = true;
+                typeSpecifierCount++;
+            }
+            else if (baseTypes.count(val)) {
+                if (declInfo.typeSpecifier != -1) return {};
                 declInfo.typeSpecifier = baseTypes[val];
                 typeSpecifierCount++;
-            } else if (typeModifiers.count(val)) {
+            }
+            else if (typeModifiers.count(val)) {
                 typeModifierCount++;
                 if (val == "unsigned") declInfo.isUnsigned = true;
                 if (val == "signed") hasSignedOrUnsigned = true;
@@ -74,7 +82,7 @@ DeclaratorInfo isValidVariableDeclaration(vector<ASTNode*>& nodes, bool isFuncti
     if (typeSpecifierCount == 0) return {};
     if (typeModifierCount > 2) return {};
 
-    if (!isFunction && declInfo.typeSpecifier == 0) return {}; // void variable is invalid
+    if (!isFunction && declInfo.typeSpecifier == 0) return {};
     declInfo.isValid = true;
     return declInfo;
 }
@@ -316,13 +324,13 @@ bool checkInvalidReturn(ASTNode* node, int returnType = -1) {
 %nonassoc LOWER_THAN_ELSE
 %nonassoc KEYWORD_ELSE
 
-%type<node> translation_unit external_declaration function_definition constructor_function destructor_function
+%type<node> translation_unit external_declaration function_definition constructor_function destructor_function struct_type_specifier
 
 %type<node> declaration declaration_specifiers declarator compound_statement struct_declaration_list
 
 %type<node> storage_class_specifier type_specifier struct_or_union_specifier struct_or_union class_specifier member_declaration_list member_declaration access_specifier
 
-%type<node> struct_declaration struct_declarator_list struct_declarator specifier_qualifier_list type_qualifier constant_expression
+%type<node> struct_declaration struct_declarator_list specifier_qualifier_list type_qualifier constant_expression
 
 %type<node> type_qualifier_list parameter_type_list parameter_list parameter_declaration identifier_list type_name abstract_declarator
 
@@ -379,7 +387,7 @@ unary_expression
 	: postfix_expression { $$ = $1; $$->type=NODE_UNARY_EXPRESSION;}
 	| INCREMENT_OPERATOR unary_expression { $$ = createNode(NODE_UNARY_EXPRESSION, $1, $2);}
 	| DECREMENT_OPERATOR unary_expression { $$ = createNode(NODE_UNARY_EXPRESSION, $1, $2); }
-	| unary_operator cast_expression { $$ = createNode(NODE_UNARY_EXPRESSION, monostate(), $1, $2); }
+	| unary_operator cast_expression { $$ = createNode(NODE_UNARY_EXPRESSION, monostate(), $1, $2);}
 	| KEYWORD_SIZEOF unary_expression { $$ = createNode(NODE_UNARY_EXPRESSION, monostate(),$1, $2); }
 	| KEYWORD_SIZEOF LPAREN type_name RPAREN { $$ = createNode(NODE_UNARY_EXPRESSION, monostate(), $1, $3);}
 	| KEYWORD_NEW LPAREN type_name RPAREN { $$ = createNode(NODE_UNARY_EXPRESSION, monostate(), $3); }
@@ -467,6 +475,7 @@ relational_expression
         } }
 	| relational_expression GREATER_THAN_OPERATOR shift_expression { 
         $$ = createNode(NODE_RELATIONAL_EXPRESSION, $2, $1, $3);
+        cout << "hello" << endl;
         bool b=isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, ">",$1->isConst);
         if(b){
           $$->typeSpecifier = $1->typeSpecifier;  
@@ -592,48 +601,15 @@ constant_expression
 
 declaration
     : declaration_specifiers SEMICOLON {
-        // cout<<isValidVariableDeclaration($1->children,false) << endl;
         $$ = $1;
-        if($$->children.size() && $$->children[0]->type == NODE_STRUCT_OR_UNION_SPECIFIER){
-            for(auto child : $1->children[0]->children){
-                if(child->type == NODE_STRUCT_DECLARATION_LIST){
-                    enterScope();
-                    // addStructMembersToSymbolTable(child);
-                    exitScope();
-                    break;
-                }else if(child->type == NODE_IDENTIFIER){
-                    // insertSymbol(child->valueToString(), "struct");
-                }
-            }
-        }else{
-
-        }
     }
     | declaration_specifiers init_declarator_list SEMICOLON 
     {
         $$ = createNode(NODE_DECLARATION, monostate(), $1, $2);
+        cout << *$$ << endl;
         DeclaratorInfo declInfo = isValidVariableDeclaration($1->children, false);
         if (declInfo.isValid)
         {
-            if (!$$->children.empty() && $$->children[0]->type == NODE_STRUCT_OR_UNION_SPECIFIER)
-            {
-                for (auto child : $1->children[0]->children)
-                {
-                    if (child->type == NODE_STRUCT_DECLARATION_LIST)
-                    {
-                        enterScope();
-                        // addStructMembersToSymbolTable(child);
-                        exitScope();
-                        break;
-                    }
-                    else if (child->type == NODE_IDENTIFIER)
-                    {
-                        // insertSymbol(child->valueToString(), "struct");
-                    }
-                }
-            }
-else
-{
     for (auto child : $2->children)
     {
         if (child->type != NODE_DECLARATOR) continue;
@@ -656,9 +632,13 @@ else
 
         // Check for duplicate declaration
         auto checkDuplicate = [&](const string &name) {
-            if (currentTable->symbolTable.count(name)) {
-                cerr << "Error: Duplicate declaration of '" << name << "'\n";
-                return true;
+            for (const auto &entry : currentTable->symbolTable)
+            {
+                if (entry.first == name)
+                {
+                    cerr << "Error: Duplicate declaration of '" << name << "'\n";
+                    return true;
+                }
             }
             return false;
         };
@@ -756,7 +736,6 @@ else
                 cerr << "Error: " << (size == 2 ? "Type mismatch in initialization" : "Invalid declarator syntax") << " for '" << varName << "'\n";
             }
         }
-    }
 }        }
     };
 
@@ -819,6 +798,12 @@ storage_class_specifier
 
 
 type_specifier
+	: struct_type_specifier { $$ = $1; }
+    | struct_or_union_specifier { $$ = $1; }
+    | class_specifier { $$ = $1;}
+	;
+
+struct_type_specifier
 	: KEYWORD_VOID { $$ = $1; $$->type = NODE_TYPE_SPECIFIER; $$->storageClass = 0;}
 	| KEYWORD_CHAR { $$ = $1; $$->type = NODE_TYPE_SPECIFIER; $$->storageClass = 1;}
     | KEYWORD_SHORT { $$ = $1; $$->type = NODE_TYPE_SPECIFIER; $$->storageClass = 2;}
@@ -830,8 +815,6 @@ type_specifier
     | KEYWORD_SIGNED { $$ = $1; $$->type = NODE_TYPE_SPECIFIER; }
     | KEYWORD_UNSIGNED { $$ = $1; $$->type = NODE_TYPE_SPECIFIER; }
     | TYPE_NAME {$$ = $1; $$->type = NODE_TYPE_SPECIFIER;}
-    | struct_or_union_specifier { $$ = $1; }
-    | class_specifier { $$ = $1;}
 	;
 
 class_specifier
@@ -880,17 +863,30 @@ access_specifier
     ;
 
 struct_or_union_specifier
-    : struct_or_union ID LBRACE struct_declaration_list RBRACE  
-        {   classOrStructOrUnion.insert($2->valueToString());
-            $$ = createNode(NODE_STRUCT_OR_UNION_SPECIFIER,monostate(), $1, $2, $4); 
-        }
-    | struct_or_union LBRACE struct_declaration_list RBRACE  
-        { $$ = createNode(NODE_STRUCT_OR_UNION_SPECIFIER, monostate(), $1, $3); }
-    | struct_or_union ID 
-        {   classOrStructOrUnion.insert($2->valueToString());
-            $$ = createNode(NODE_STRUCT_OR_UNION_SPECIFIER,monostate(), $1, $2); 
-        }
-    ;
+    : struct_or_union ID {
+            string varName = $2->valueToString();
+            classOrStructOrUnion.insert(varName);
+            auto checkDuplicate = [&](const string &name) {
+            for (const auto &entry : currentTable->symbolTable)
+            {
+                if (entry.first == name)
+                {
+                    cerr << "Error: Duplicate declaration of '" << name << "'\n";
+                    return true;
+                }
+            }
+            return false;
+            };
+            if(!checkDuplicate(varName)){
+                insertSymbol(varName, $2);
+            }
+            $2->typeCategory = 4;
+            enterScope();
+            alphaSymbolTable[varName] = currentTable->symbolTable;
+    } LBRACE struct_declaration_list RBRACE {
+            $$ = createNode(NODE_STRUCT_OR_UNION_SPECIFIER,monostate(), $1, $2, $5);
+            exitScope();
+    };
 
 struct_or_union
     : KEYWORD_STRUCT { $$ = $1; }
@@ -910,32 +906,157 @@ struct_declaration_list
 struct_declaration
     : specifier_qualifier_list struct_declarator_list SEMICOLON {
         $$ = createNode(NODE_STRUCT_DECLARATION, monostate(), $1, $2);
+        DeclaratorInfo declInfo = isValidVariableDeclaration($1->children, false);
+        if (declInfo.isValid)
+        {
+    for (auto child : $2->children)
+    {
+        if (child->type != NODE_DECLARATOR) continue;
+
+        ASTNode *firstChild = child->children[0];
+        string varName;
+        ASTNode *identifierNode = firstChild;
+
+        // Helper function to set common node attributes
+        auto setNodeAttributes = [&](ASTNode *node, int typeCategory, int pointerLevel = 0) {
+            node->typeCategory = typeCategory;
+            node->pointerLevel = pointerLevel;
+            node->storageClass = declInfo.storageClass;
+            node->typeSpecifier = declInfo.typeSpecifier;
+            node->isConst = declInfo.isConst;
+            node->isStatic = declInfo.isStatic;
+            node->isVolatile = declInfo.isVolatile;
+            node->isUnsigned = declInfo.isUnsigned;
+        };
+
+        // Check for duplicate declaration
+        auto checkDuplicate = [&](const string &name) {
+            for (const auto &entry : currentTable->symbolTable)
+            {
+                if (entry.first == name)
+                {
+                    cerr << "Error: Duplicate declaration of '" << name << "'\n";
+                    return true;
+                }
+            }
+            return false;
+        };
+
+        if (firstChild->type == ARRAY) // Pointer-to-array (e.g., int (*arr)[3])
+        {
+            vector<int> dimensions = findArrayDimensions(firstChild);
+            while (identifierNode && identifierNode->type == ARRAY) {
+                if (identifierNode->children.empty()) break;
+                identifierNode = identifierNode->children[0];
+            }
+            varName = identifierNode->valueToString();
+            if (checkDuplicate(varName)) continue;
+
+            int size = child->children.size();
+            if (size == 1 || size == 2) {
+                bool validDims = all_of(dimensions.begin(), dimensions.end(), [](int d) { return d != -1; });
+                if (!validDims) {
+                    cerr << "Invalid declaration dimension cannot be empty\n";
+                    continue;
+                }
+                if (size == 2 && !checkInitializerLevel(child->children[1], declInfo.typeSpecifier, dimensions, 0)) {
+                    cout << "Error\n";
+                    continue;
+                }
+                setNodeAttributes(identifierNode, 2); // Array
+                identifierNode->dimensions = dimensions;
+                insertSymbol(varName, identifierNode);
+            }
+        }
+        else if (firstChild->type == NODE_POINTER) // Pointers, including array of pointers
+        {
+            int pointerDepth = 0;
+            while (identifierNode && identifierNode->type == NODE_POINTER) {
+                pointerDepth++;
+                if (identifierNode->children.empty()) break;
+                identifierNode = identifierNode->children[0];
+            }
+            varName = identifierNode->valueToString();
+
+            if (identifierNode->type == ARRAY) // Array of pointers (e.g., int *arr[3])
+            {
+                vector<int> dimensions = findArrayDimensions(identifierNode);
+                varName = identifierNode->children[0]->valueToString();
+                if (checkDuplicate(varName)) continue;
+
+                int size = child->children.size();
+                if (size == 1 || size == 2) {
+                    bool validDims = all_of(dimensions.begin(), dimensions.end(), [](int d) { return d != -1; });
+                    if (!validDims) {
+                        cerr << "Invalid declaration dimension cannot be empty\n";
+                        continue;
+                    }
+                    if (size == 2 && !checkInitializerLevel(child->children[1], declInfo.typeSpecifier, dimensions, pointerDepth)) {
+                        cerr << "Error: Invalid initializer for array of pointers '" << varName << "'\n";
+                        continue;
+                    }
+                    setNodeAttributes(identifierNode, 2, pointerDepth);
+                    identifierNode->dimensions = dimensions;
+                    insertSymbol(varName, identifierNode);
+                }
+            }
+            else // Regular pointer (e.g., int *p)
+            {
+                if (checkDuplicate(varName)) continue;
+                int size = child->children.size();
+                if (size == 1 || (size == 2 && true /* Replace with isPointerCompatible */)) {
+                    setNodeAttributes(identifierNode, 1, pointerDepth);
+                    insertSymbol(varName, identifierNode);
+                }
+                else {
+                    cerr << "Error: Invalid pointer " << (size == 2 ? "initialization" : "declarator syntax") << " for '" << varName << "'\n";
+                }
+            }
+        }
+        else // Regular variable (e.g., int x)
+        {
+            varName = firstChild->valueToString();
+            if (checkDuplicate(varName)) continue;
+
+            int size = child->children.size();
+            if (size == 1) {
+                if (declInfo.isConst) {
+                    cerr << "Error: Const variable '" << varName << "' must be initialized\n";
+                    continue;
+                }
+                setNodeAttributes(identifierNode, 0);
+                insertSymbol(varName, identifierNode);
+            }
+            else if (size == 2 && isTypeCompatible(declInfo.typeSpecifier, child->children[1]->typeSpecifier, "=")) {
+                setNodeAttributes(identifierNode, 0);
+                insertSymbol(varName, identifierNode);
+            }
+            else {
+                cerr << "Error: " << (size == 2 ? "Type mismatch in initialization" : "Invalid declarator syntax") << " for '" << varName << "'\n";
+            }
+        }
+}        }
     }
     ;
 
 specifier_qualifier_list
-	: type_specifier specifier_qualifier_list {$$ = createNode(NODE_SPECIFIER_QUALIFIER_LIST, monostate(), $1, $2);}
-	| type_specifier { $$ = $1; }
-	| type_qualifier specifier_qualifier_list { $$ = createNode(NODE_SPECIFIER_QUALIFIER_LIST, monostate(), $1, $2);}
-	| type_qualifier { $$ = $1; }
+	: struct_type_specifier specifier_qualifier_list {$$ = $2; $2->addChild($1);}
+	| struct_type_specifier { $$ = createNode(NODE_SPECIFIER_QUALIFIER_LIST, monostate(), $1); }
+	| type_qualifier specifier_qualifier_list { $$ = $2; $2->addChild($1); }
+	| type_qualifier { $$ = createNode(NODE_SPECIFIER_QUALIFIER_LIST, monostate(), $1); }
 	;
 
 struct_declarator_list
-    : struct_declarator { 
-        $$ = createNode(NODE_STRUCT_DECLARATOR_LIST, monostate(), $1); 
+    : declarator { 
+        ASTNode* temp = createNode(NODE_DECLARATOR, monostate(), $1);
+        $$ = createNode(NODE_STRUCT_DECLARATOR_LIST, monostate(), temp); 
     }
-    | struct_declarator_list COMMA struct_declarator { 
-        $$ = $1;
-        $$->children.push_back($3);
+    | struct_declarator_list COMMA declarator { 
+        ASTNode* temp = createNode(NODE_DECLARATOR, monostate(), $3);
+        $$->children.push_back(temp);
     }
     ;
-
-struct_declarator
-	: declarator { $$ = $1; }
-	| COLON constant_expression { $$ = $2; }
-	| declarator COLON constant_expression { $$ = createNode(NODE_STRUCT_DECLARATOR, monostate(), $1, $3); }
-	;
-
+    
 type_qualifier
 	: KEYWORD_CONST { $$ = $1; $$->type = NODE_TYPE_QUALIFIER; }
 	| KEYWORD_VOLATILE { $$ = $1; $$->type = NODE_TYPE_QUALIFIER; }
@@ -950,6 +1071,7 @@ declarator
         lastPointer->addChild($2);
         // $$ = createNode(NODE_DECLARATOR, monostate(), $1);
         $$ = $1;
+        $$->pointerLevel++;
     }
     | direct_declarator { 
         $$ = $1; 
@@ -964,16 +1086,16 @@ direct_declarator
         $$ = $2;
     }
     | direct_declarator LBRACKET INTEGER RBRACKET { 
-        $$ = createNode(ARRAY, monostate(), $1, $3);
+        $$ = createNode(ARRAY, monostate(), $1, $3); // restricted to constant expression
     }
-    | direct_declarator LBRACKET RBRACKET { 
+    | direct_declarator LBRACKET RBRACKET {  // array of unknown size
         $$ = createNode(ARRAY, monostate(), $1, nullptr); 
     }
     | direct_declarator LPAREN parameter_type_list RPAREN { 
-        $$ = createNode(NODE_DECLARATOR, monostate(), $1, $3); 
+        $$ = createNode(NODE_DECLARATOR, monostate(), $1, $3); // func declaration
     }
     | direct_declarator LPAREN identifier_list RPAREN { 
-        $$ = createNode(NODE_DECLARATOR, monostate(), $1, $3); 
+        $$ = createNode(NODE_DECLARATOR, monostate(), $1, $3);  // func call??
     }
     | direct_declarator LPAREN RPAREN { 
         $$ = createNode(NODE_DECLARATOR, monostate(), $1, nullptr); 
@@ -1231,10 +1353,18 @@ function_definition
                 if (param->type == NODE_PARAMETER_DECLARATION) {
                     string varName = param->children[1]->valueToString();
                     
-                    if (currentTable->symbolTable.count(varName)) {
-                        cerr << "Error: Duplicate declaration of variable '" << varName << "'\n";
-                        continue;
+                    bool isDuplicate = false;
+                    for (const auto &entry : currentTable->symbolTable)
+                    {
+                        if (entry.first == varName)
+                        {
+                            cerr << "Error: Duplicate declaration of variable '" << varName << "'\n";
+                            isDuplicate = true;
+                            break;
+                        }
                     }
+                    if (isDuplicate) continue;
+
                     DeclaratorInfo paramInfo = isValidVariableDeclaration(param->children[0]->children, false);
                     if (paramInfo.isValid) {
                         ASTNode* varNode = param->children[1];

@@ -111,6 +111,7 @@ public:
     int pointerLevel = 0;
     vector<int> paramTypes;
     vector<int> dimensions;
+    unordered_map<string, ASTNode*> symbolTable;
 
     ASTNode(NodeType type, NodeValue value = monostate()) : type(type), value(value)
     {
