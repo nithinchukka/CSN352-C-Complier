@@ -10,9 +10,10 @@
     using namespace std;
     void yyerror(const char *s);
     extern int yylex();
+    extern int yylineno;
     extern FILE *yyin;
     extern unordered_set<string> classOrStructOrUnion;
-    map<string, vector<pair<string, ASTNode*>>> alphaSymbolTable;
+    map<string, vector<pair<string, TreeNode*>>> alphaSymbolTable;
 struct DeclaratorInfo {
     int typeCategory = -1; // var = 0, func = 1, struct = 2, enum = 3, class = 4
     int storageClass = -1; // -1: none, 0: extern, 1: static, 2: auto, 3: register
@@ -26,7 +27,54 @@ struct DeclaratorInfo {
     bool isCustomType = false; // true if it's a class, struct, or union
 };
 
-DeclaratorInfo isValidVariableDeclaration(vector<ASTNode*>& nodes, bool isFunction = false) {
+
+bool checkFormatSpecifiers(string formatString, vector<int> argTypeList) {
+    int argIndex = 0;
+    const char* ptr = formatString.c_str();
+    while (*ptr) {
+        if (*ptr == '%') {
+            ptr++;
+            if (*ptr == '\0') break; // Avoid accessing out-of-bounds memory
+
+            if (*ptr == '%') {  // Literal '%%'
+                ptr++;
+                continue;
+            }
+
+            if (argIndex >= argTypeList.size()) {
+                cerr << "Error: Too few arguments\n";
+                return false;
+            }
+
+            int expectedType1 = -1, expectedType2 = -1;
+            switch (*ptr) {
+                case 'd': expectedType1 = 2, expectedType2 = 3; break;  // int or long
+                case 'f': expectedType1 = 5, expectedType2 = 6; break;  // float or double
+                case 's': expectedType1 = 8; break;  // string
+                case 'c': expectedType1 = 0; break;  // char
+                default: 
+                    cerr << "Error: Unknown format specifier '%" << *ptr << "'\n";
+                    return false;
+            }
+
+            if (argTypeList[argIndex] != expectedType1 && argTypeList[argIndex] != expectedType2) {
+                cerr << "Error: Type mismatch for '%" << *ptr << "'\n";
+                return false;
+            }
+            argIndex++;
+        }
+        ptr++;
+    }
+
+    if (argIndex < argTypeList.size()) {
+        cerr << "Error: Too many arguments\n";
+        return false;
+    }
+
+    return true;
+}
+
+DeclaratorInfo isValidVariableDeclaration(vector<TreeNode*>& nodes, bool isFunction = false) {
     DeclaratorInfo declInfo;
     unordered_map<string, int> storageClasses = {
         {"extern", 0}, {"static", 1}, {"auto", 2}, {"register", 3}
@@ -147,7 +195,7 @@ bool isTypeCompatible(int lhstype, int rhstype, string op, bool lhsIsConst = fal
     return false;
 }
 
-bool checkInitializerLevel(ASTNode* initList, int baseType, vector<int>& dimensions, int level) {
+bool checkInitializerLevel(TreeNode* initList, int baseType, vector<int>& dimensions, int level) {
     int vecSize = dimensions.size();
 
     if (baseType != 1 && baseType != 3) {
@@ -183,7 +231,7 @@ bool checkInitializerLevel(ASTNode* initList, int baseType, vector<int>& dimensi
 
     if (level == vecSize - 1) {
         // Innermost level: check scalar types
-        for (ASTNode* child : initList->children) {
+        for (TreeNode* child : initList->children) {
             if (child->type != NODE_UNARY_EXPRESSION) {
                 cerr << "Expected scalar at level " << level << ", got " << child->type << endl;
                 return false;
@@ -197,7 +245,7 @@ bool checkInitializerLevel(ASTNode* initList, int baseType, vector<int>& dimensi
         }
     } else {
         // Recurse for nested lists, check all children
-        for (ASTNode* child : initList->children) {
+        for (TreeNode* child : initList->children) {
             if (child->type != NODE_INITIALIZER_LIST) {
                 cerr << "Expected nested initializer list at level " << level << endl;
                 return false;
@@ -212,12 +260,12 @@ bool checkInitializerLevel(ASTNode* initList, int baseType, vector<int>& dimensi
 }
 
 
-vector<int> findArrayDimensions(ASTNode* arr) {
+vector<int> findArrayDimensions(TreeNode* arr) {
     if (!arr || arr->children.empty()) 
         return {};
 
     vector<int> dimensions;
-    ASTNode* current = arr;
+    TreeNode* current = arr;
 
     while (current) {
         if (current->type == ARRAY) {
@@ -235,7 +283,7 @@ vector<int> findArrayDimensions(ASTNode* arr) {
 }
 
 
-bool checkInvalidReturn(ASTNode* node, int returnType = -1) {
+bool checkInvalidReturn(TreeNode* node, int returnType = -1) {
     if (!node) return false;
     
     if (node->type == NODE_JUMP_STATEMENT) {
@@ -249,7 +297,7 @@ bool checkInvalidReturn(ASTNode* node, int returnType = -1) {
         }
 
         if (returnType != 0 && node->children.size() > 0) {
-            ASTNode* returnExpr = node->children[1];
+            TreeNode* returnExpr = node->children[1];
             if (!isTypeCompatible(returnType, returnExpr->typeSpecifier, "=")) {
                 cout << "Error: Type mismatch in return statement.\n";
                 return true;
@@ -257,14 +305,14 @@ bool checkInvalidReturn(ASTNode* node, int returnType = -1) {
         }
     }
     
-    for (ASTNode* child : node->children) {
+    for (TreeNode* child : node->children) {
         if (checkInvalidReturn(child, returnType)) return true;
     }
     
     return false;
 }
 
-bool structInitializerCheck(ASTNode* identifierNode, ASTNode* initializerList) {
+bool structInitializerCheck(TreeNode* identifierNode, TreeNode* initializerList) {
     // Check if identifierNode has a symbol table for struct members
     if (identifierNode->symbolTable.empty()) {
         cerr << "Error: No struct definition found for type checking" << endl;
@@ -287,8 +335,8 @@ bool structInitializerCheck(ASTNode* identifierNode, ASTNode* initializerList) {
     // Check type compatibility using a for loop
     for (size_t i = 0; i < expectedSize; i++) {
         const auto& memberPair = identifierNode->symbolTable[i];
-        ASTNode* memberNode = memberPair.second;  // ASTNode* from symbol table
-        ASTNode* initNode = initializerList->children[i];
+        TreeNode* memberNode = memberPair.second;  // TreeNode* from symbol table
+        TreeNode* initNode = initializerList->children[i];
 
         int expectedType = memberNode->typeSpecifier;
         int actualType = initNode->typeSpecifier;
@@ -321,11 +369,21 @@ bool structInitializerCheck(ASTNode* identifierNode, ASTNode* initializerList) {
 
     return true;
 }
+
+vector<int> typeExtract(TreeNode* node){
+    vector<int> ans;
+    for(auto child:node->children){
+        ans.push_back(child->typeSpecifier);
+    }
+    return ans;
+}
+
+int inLoop = 0;
 %}
 
 
 %union {
-	ASTNode *node;
+	TreeNode *node;
     char *str;
 }
 
@@ -379,8 +437,6 @@ bool structInitializerCheck(ASTNode* identifierNode, ASTNode* initializerList) {
     TERNARY_OPERATOR DOT_OPERATOR  SCOPE_RESOLUTION_OPERATOR  
     POINTER_TO_MEMBER_DOT_OPERATOR POINTER_TO_MEMBER_ARROW_OPERATOR
 
-%nonassoc LOWER_THAN_ELSE
-%nonassoc KEYWORD_ELSE
 
 %type<node> translation_unit external_declaration function_definition constructor_function destructor_function struct_type_specifier
 
@@ -402,33 +458,109 @@ bool structInitializerCheck(ASTNode* identifierNode, ASTNode* initializerList) {
 
 %type<node> relational_expression equality_expression and_expression exclusive_or_expression inclusive_or_expression scope_resolution_statements
 
-%type<node> logical_and_expression logical_or_expression argument_expression_list assignment_operator try_catch_statement io_statement scope_resolution_statement
+%type<node> logical_and_expression logical_or_expression argument_expression_list assignment_operator io_statement scope_resolution_statement
 
 %start translation_unit
+
+%nonassoc NO_ELSE
+%nonassoc KEYWORD_ELSE
 %%
 
 primary_expression
-	: ID { $$ = $1;$$ = lookupSymbol($$->valueToString());}
+	: ID { $$ = $1; $$ = lookupSymbol($$->valueToString());}
 	| INTEGER { $$ = $1;$$->typeSpecifier=3;}
     | FLOAT { $$ = $1;$$->typeSpecifier=6;}
 	| STRING { $$ = $1; $$->typeSpecifier=8;}
-	| CHAR { $$ = $1;$$->typeSpecifier=1; }
-	| BOOLEAN_LITERAL {$$ = $1;$$->typeSpecifier=3; } 
-    | KEYWORD_NULLPTR {$$ = $1; }
+	| CHAR { $$ = $1;$$->typeSpecifier=0; }
+	| BOOLEAN_LITERAL {$$ = $1;$$->typeSpecifier=5; } 
+    | KEYWORD_NULLPTR {$$ = $1; $$->typeSpecifier=9;}
     | KEYWORD_THIS {$$ = $1; }
 	| LPAREN expression RPAREN { $$ = $2; }
 	;
 
 postfix_expression
 	: primary_expression { $$ = $1; }
-	| postfix_expression LBRACKET expression RBRACKET { $$ = createNode(NODE_POSTFIX_EXPRESSION, monostate(), $1, $3); }
-	| postfix_expression LPAREN RPAREN { $$ = createNode(NODE_POSTFIX_EXPRESSION, monostate(), $1); }
-	| postfix_expression LPAREN argument_expression_list RPAREN { $$ = createNode(NODE_POSTFIX_EXPRESSION, monostate(), $1, $3); }
-	| postfix_expression DOT_OPERATOR ID { $$ = createNode(NODE_POSTFIX_EXPRESSION, $2, $1, $3); }
+	| postfix_expression LBRACKET expression RBRACKET { 
+        $$ = createNode(NODE_POSTFIX_EXPRESSION, monostate(), $1, $3);
+        if($3->typeSpecifier != 3){
+            cerr << "Error: array index must be an integer" << endl;
+        }else if($1->typeCategory == 2){
+            $$->typeSpecifier = $1->typeSpecifier;
+        }else if($1->typeCategory == 1){
+            // TODO
+        }else{
+            cerr << $1->valueToString() << " is not an array" << endl;
+        }
+      }
+	| postfix_expression LPAREN RPAREN {
+        $$ = $1; /*function call with no params */
+        if($$->paramCount > 0){
+            cerr << "Error: function call with no params, expected " << $$->paramCount << endl;
+        }
+      }
+	| postfix_expression LPAREN argument_expression_list RPAREN { /* function call with params */
+        $$ = createNode(NODE_POSTFIX_EXPRESSION, monostate(), $1, $3); 
+        $$->typeSpecifier = $1->typeSpecifier;
+        if($1->typeCategory == 3){
+            if($1->paramCount == $3->children.size()){
+                for(int i = 0; i < $1->paramCount; i++){
+                    if(!isTypeCompatible($1->paramTypes[i], $3->children[i]->typeSpecifier, "=")){
+                        cerr << "Expected: " << $1->paramTypes[i] << ", Got: " << $3->children[i]->typeSpecifier << endl;
+                        break;
+                    }
+                }
+            }
+            else{
+                cerr << "Error: function call with " << $3->children.size() << " params, expected " << $1->paramCount << endl;
+            }
+        } 
+      }
+	| postfix_expression DOT_OPERATOR ID { /* Member Access */
+        $$ = createNode(NODE_POSTFIX_EXPRESSION, $2, $1, $3);
+        if($1->typeSpecifier == 8){
+            TreeNode* member = lookupSymbol($1->valueToString());
+            if(member != nullptr){
+                bool found = false;
+                for(auto entry : member->symbolTable){
+                    if(entry.first == $3->valueToString()){
+                        found = true;
+                        $$->typeSpecifier = entry.second->typeSpecifier;
+                        $$->typeCategory = entry.second->typeCategory;
+                        $$->pointerLevel = entry.second->pointerLevel;
+                        $$->storageClass = entry.second->storageClass;
+                        $$->isConst = entry.second->isConst;
+                        $$->isStatic = entry.second->isStatic;
+                        $$->isVolatile = entry.second->isVolatile;
+                        $$->isUnsigned = entry.second->isUnsigned;
+                        break;
+                    }
+                }
+                if(!found){
+                    cerr << "Error: member " << $3->valueToString() << " not found in object " << $1->valueToString() << endl;
+                }
+            }
+        }else{
+            cerr << "Error: We can use member access only for classes , structs and unions" << endl;
+        }
+      }
 	| postfix_expression POINTER_TO_MEMBER_ARROW_OPERATOR ID { $$ = createNode(NODE_POSTFIX_EXPRESSION, $2, $1, $3); }
     | postfix_expression POINTER_TO_MEMBER_DOT_OPERATOR ID { $$ = createNode(NODE_POSTFIX_EXPRESSION, $2, $1, $3); }
-	| postfix_expression INCREMENT_OPERATOR { $$ = createNode(NODE_POSTFIX_EXPRESSION, $2, $1);}
-	| postfix_expression DECREMENT_OPERATOR { $$ = createNode(NODE_POSTFIX_EXPRESSION, $2, $1); }
+	| postfix_expression INCREMENT_OPERATOR { 
+        $$ = $1;
+        $$->type=NODE_POSTFIX_EXPRESSION;
+        int typeSpec = $1->typeSpecifier;
+        if(typeSpec == 5 || typeSpec > 7){
+            cerr << "Error: invalid type for increment operator" << endl;
+        }
+      }
+	| postfix_expression DECREMENT_OPERATOR { 
+        $$ = $1;
+        $$->type=NODE_POSTFIX_EXPRESSION;
+        int typeSpec = $1->typeSpecifier;
+        if(typeSpec == 5 || typeSpec > 7){
+            cerr << "Error: invalid type for increment operator" << endl;
+        } 
+      }
 	;
 
 argument_expression_list
@@ -437,15 +569,30 @@ argument_expression_list
     }
     | argument_expression_list COMMA assignment_expression { 
         $$ = $1;
+        
         $$->children.push_back($3);
     }
     ;
 
 unary_expression
 	: postfix_expression { $$ = $1; $$->type=NODE_UNARY_EXPRESSION;}
-	| INCREMENT_OPERATOR unary_expression { $$ = createNode(NODE_UNARY_EXPRESSION, $1, $2);}
-	| DECREMENT_OPERATOR unary_expression { $$ = createNode(NODE_UNARY_EXPRESSION, $1, $2); }
-	| unary_operator cast_expression { $$ = createNode(NODE_UNARY_EXPRESSION, monostate(), $1, $2);}
+	| INCREMENT_OPERATOR unary_expression { 
+        $$ = $2;
+        int typeSpec = $2->typeSpecifier;
+        if(typeSpec == 5 || typeSpec > 7){
+            cerr << "Error: invalid type for increment operator" << endl;
+        }
+      }
+	| DECREMENT_OPERATOR unary_expression {
+        $$ = $2;
+        int typeSpec = $2->typeSpecifier;
+        if(typeSpec == 5 || typeSpec > 7){
+            cerr << "Error: invalid type for increment operator" << endl;
+        }
+    }
+	| unary_operator cast_expression { 
+        $$ = createNode(NODE_UNARY_EXPRESSION, monostate(), $1, $2);
+      }
 	| KEYWORD_SIZEOF unary_expression { $$ = createNode(NODE_UNARY_EXPRESSION, monostate(),$1, $2); }
 	| KEYWORD_SIZEOF LPAREN type_name RPAREN { $$ = createNode(NODE_UNARY_EXPRESSION, monostate(), $1, $3);}
 	| KEYWORD_NEW LPAREN type_name RPAREN { $$ = createNode(NODE_UNARY_EXPRESSION, monostate(), $3); }
@@ -466,89 +613,101 @@ unary_operator
 
 cast_expression
 	: unary_expression { $$ = $1; }
-	| LPAREN type_name RPAREN cast_expression { $$ = createNode(NODE_CAST_EXPRESSION, monostate(), $2, $4); }
+	| LPAREN type_name RPAREN cast_expression { $$ = createNode(NODE_CAST_EXPRESSION, monostate(), $2, $4); } // TODO Type casting
 	;
 
 multiplicative_expression
 	: cast_expression { $$ = $1; }
 	| multiplicative_expression MULTIPLY_OPERATOR cast_expression { 
-        $$ = createNode(NODE_MULTIPLICATIVE_EXPRESSION, string($2), $1, $3);
-        bool b=isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "*",$1->isConst);
-        if(b){
-          $$->typeSpecifier = $1->typeSpecifier;  
-        } }
+        $$ = createNode(NODE_MULTIPLICATIVE_EXPRESSION, $2, $1, $3);
+        if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "*")) {
+            $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
+        } else {
+            cerr << "Incompatible Type: " << $1->typeSpecifier << " and " << $3->typeSpecifier << " at line " << yylineno << endl;
+        }
+    }
 	| multiplicative_expression DIVIDE_OPERATOR cast_expression { 
         $$ = createNode(NODE_MULTIPLICATIVE_EXPRESSION, $2, $1, $3);
-        bool b=isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "/",$1->isConst);
-        if(b){
-          $$->typeSpecifier = $1->typeSpecifier;  
+        if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "/")) {
+            $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
+        } else {
+            cerr << "Incompatible Type: " << $1->typeSpecifier << " and " << $3->typeSpecifier << " at line " << yylineno << endl;
         } }
 	| multiplicative_expression MODULO_OPERATOR cast_expression { 
         $$ = createNode(NODE_MULTIPLICATIVE_EXPRESSION, $2, $1, $3);
-        bool b=isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "%",$1->isConst);
-        if(b){
-          $$->typeSpecifier = $1->typeSpecifier;  
-        } }
+        if (($1->typeSpecifier==3 || $1->typeSpecifier==4)&&($3->typeSpecifier==3 || $3->typeSpecifier==4)&&isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "%")) {
+            $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
+        } else {
+            cerr << "Incompatible Type: " << $1->typeSpecifier << " and " << $3->typeSpecifier << " at line " << yylineno << endl;
+        }}
 	;
 
 additive_expression
 	: multiplicative_expression { $$ = $1; }
 	| additive_expression PLUS_OPERATOR multiplicative_expression {
-         $$ = createNode(NODE_ADDITIVE_EXPRESSION, $2, $1, $3);
-         bool b=isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "+",$1->isConst);
-        if(b){
-          $$->typeSpecifier = $1->typeSpecifier;  
+        $$ = createNode(NODE_MULTIPLICATIVE_EXPRESSION, $2, $1, $3);
+        if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "+")) {
+            $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
+        } else {
+            cerr << "Incompatible Type: " << $1->typeSpecifier << " and " << $3->typeSpecifier << " at line " << yylineno << endl;
         } }
 	| additive_expression MINUS_OPERATOR multiplicative_expression { 
-        $$ = createNode(NODE_ADDITIVE_EXPRESSION, $2, $1, $3);
-        bool b=isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "-",$1->isConst);
-        if(b){
-          $$->typeSpecifier = $1->typeSpecifier;  
+        $$ = createNode(NODE_MULTIPLICATIVE_EXPRESSION, $2, $1, $3);
+        if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "-")) {
+            $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
+        } else {
+            cerr << "Incompatible Type: " << $1->typeSpecifier << " and " << $3->typeSpecifier << " at line " << yylineno << endl;
         } }
 	;
 
 shift_expression
 	: additive_expression { $$ = $1; }
 	| shift_expression LEFT_SHIFT_OPERATOR additive_expression { 
-        $$ = createNode(NODE_SHIFT_EXPRESSION, $2, $1, $3); 
-        bool b=isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "<<",$1->isConst);
-        if(b){
-          $$->typeSpecifier = $1->typeSpecifier;  
+        $$ = createNode(NODE_MULTIPLICATIVE_EXPRESSION, $2, $1, $3);
+        if (($1->typeSpecifier==3 || $1->typeSpecifier==4)&&($3->typeSpecifier==3 || $3->typeSpecifier==4)&&isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "<<")) {
+            $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
+        } else {
+            cerr << "Incompatible Type: " << $1->typeSpecifier << " and " << $3->typeSpecifier << " at line " << yylineno << endl;
         }}
 	| shift_expression RIGHT_SHIFT_OPERATOR additive_expression {
-         $$ = createNode(NODE_SHIFT_EXPRESSION, $2, $1, $3);
-         bool b=isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, ">>",$1->isConst);
-        if(b){
-          $$->typeSpecifier = $1->typeSpecifier;  
-        } }
+         $$ = createNode(NODE_MULTIPLICATIVE_EXPRESSION, $2, $1, $3);
+        if (($1->typeSpecifier==3 || $1->typeSpecifier==4)&&($3->typeSpecifier==3 || $3->typeSpecifier==4)&&isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, ">>")) {
+            $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
+        } else {
+            cerr << "Incompatible Type: " << $1->typeSpecifier << " and " << $3->typeSpecifier << " at line " << yylineno << endl;
+        }
+    }
 	;
 
 relational_expression
 	: shift_expression { $$ = $1; }
 	| relational_expression LESS_THAN_OPERATOR shift_expression {
-         $$ = createNode(NODE_RELATIONAL_EXPRESSION, $2, $1, $3);
-         bool b=isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "<",$1->isConst);
-        if(b){
-          $$->typeSpecifier = $1->typeSpecifier;  
+        $$ = createNode(NODE_MULTIPLICATIVE_EXPRESSION, $2, $1, $3);
+        if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "<")) {
+            $$->typeSpecifier = 3;
+        } else {
+            cerr << "Incompatible Type: " << $1->typeSpecifier << " and " << $3->typeSpecifier << " at line " << yylineno << endl;
         } }
 	| relational_expression GREATER_THAN_OPERATOR shift_expression { 
-        $$ = createNode(NODE_RELATIONAL_EXPRESSION, $2, $1, $3);
-        cout << "hello" << endl;
-        bool b=isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, ">",$1->isConst);
-        if(b){
-          $$->typeSpecifier = $1->typeSpecifier;  
+        $$ = createNode(NODE_MULTIPLICATIVE_EXPRESSION, $2, $1, $3);
+        if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, ">")) {
+            $$->typeSpecifier = 3;
+        } else {
+            cerr << "Incompatible Type: " << $1->typeSpecifier << " and " << $3->typeSpecifier << " at line " << yylineno << endl;
         } }
 	| relational_expression LESS_THAN_OR_EQUAL_OPERATOR shift_expression {
-         $$ = createNode(NODE_RELATIONAL_EXPRESSION, $2, $1, $3); 
-         bool b=isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "<+",$1->isConst);
-        if(b){
-          $$->typeSpecifier = $1->typeSpecifier;  
+        $$ = createNode(NODE_MULTIPLICATIVE_EXPRESSION, $2, $1, $3);
+        if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "<=")) {
+            $$->typeSpecifier = 3;
+        } else {
+            cerr << "Incompatible Type: " << $1->typeSpecifier << " and " << $3->typeSpecifier << " at line " << yylineno << endl;
         }}
 	| relational_expression GREATER_THAN_OR_EQUAL_OPERATOR shift_expression { 
-        $$ = createNode(NODE_RELATIONAL_EXPRESSION, $2, $1, $3);
-        bool b=isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, ">=",$1->isConst);
-        if(b){
-          $$->typeSpecifier = $1->typeSpecifier;  
+        $$ = createNode(NODE_MULTIPLICATIVE_EXPRESSION, $2, $1, $3);
+        if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, ">=")) {
+            $$->typeSpecifier = 3;
+        } else {
+            cerr << "Incompatible Type: " << $1->typeSpecifier << " and " << $3->typeSpecifier << " at line " << yylineno << endl;
         } }
 	;
 
@@ -556,25 +715,28 @@ equality_expression
 	: relational_expression { $$ = $1; }
 	| equality_expression EQUALS_COMPARISON_OPERATOR relational_expression { 
         $$ = createNode(NODE_EQUALITY_EXPRESSION, $2, $1, $3);
-        bool b=isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "==",$1->isConst);
-        if(b){
-          $$->typeSpecifier = $1->typeSpecifier;  
+        if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "==")) {
+            $$->typeSpecifier = 3;
+        } else {
+            cerr << "Incompatible Type: " << $1->typeSpecifier << " and " << $3->typeSpecifier << " at line " << yylineno << endl;
         } }
 	| equality_expression NOT_EQUALS_OPERATOR relational_expression { 
         $$ = createNode(NODE_EQUALITY_EXPRESSION, $2, $1, $3);
-        bool b=isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "!=",$1->isConst);
-        if(b){
-          $$->typeSpecifier = $1->typeSpecifier;  
-        } }
+        if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "!=")) {
+            $$->typeSpecifier = 3;
+        } else {
+            cerr << "Incompatible Type: " << $1->typeSpecifier << " and " << $3->typeSpecifier << " at line " << yylineno << endl;
+        }}
 	;
 
 and_expression
 	: equality_expression { $$ = $1; }
 	| and_expression BITWISE_AND_OPERATOR equality_expression { 
         $$ = createNode(NODE_AND_EXPRESSION, $2, $1, $3); 
-        bool b=isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "&",$1->isConst);
-        if(b){
-          $$->typeSpecifier = $1->typeSpecifier;  
+        if (($1->typeSpecifier==3 || $1->typeSpecifier==4)&&($3->typeSpecifier==3 || $3->typeSpecifier==4)&&isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "&")) {
+            $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
+        } else {
+            cerr << "Incompatible Type: " << $1->typeSpecifier << " and " << $3->typeSpecifier << " at line " << yylineno << endl;
         }}
 	;
 
@@ -582,9 +744,10 @@ exclusive_or_expression
 	: and_expression { $$ = $1; }
 	| exclusive_or_expression BITWISE_XOR_OPERATOR and_expression { 
         $$ = createNode(NODE_EXCLUSIVE_OR_EXPRESSION, $2, $1, $3); 
-        bool b=isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "^",$1->isConst);
-        if(b){
-          $$->typeSpecifier = $1->typeSpecifier;  
+        if (($1->typeSpecifier==3 || $1->typeSpecifier==4)&&($3->typeSpecifier==3 || $3->typeSpecifier==4)&&isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "^")) {
+            $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
+        } else {
+            cerr << "Incompatible Type: " << $1->typeSpecifier << " and " << $3->typeSpecifier << " at line " << yylineno << endl;
         }}
 	;
 
@@ -592,19 +755,21 @@ inclusive_or_expression
 	: exclusive_or_expression { $$ = $1; }
 	| inclusive_or_expression BITWISE_OR_OPERATOR exclusive_or_expression {
          $$ = createNode(NODE_INCLUSIVE_OR_EXPRESSION, $2, $1, $3);
-         bool b=isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "|",$1->isConst);
-        if(b){
-          $$->typeSpecifier = $1->typeSpecifier;  
-        } }
+         if (($1->typeSpecifier==3 || $1->typeSpecifier==4)&&($3->typeSpecifier==3 || $3->typeSpecifier==4)&&isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "|")) {
+            $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
+        } else {
+            cerr << "Incompatible Type: " << $1->typeSpecifier << " and " << $3->typeSpecifier << " at line " << yylineno << endl;
+        }}
 	;
 
 logical_and_expression
 	: inclusive_or_expression { $$ = $1; }
 	| logical_and_expression LOGICAL_AND_OPERATOR inclusive_or_expression { 
         $$ = createNode(NODE_LOGICAL_AND_EXPRESSION, $2, $1, $3); 
-        bool b=isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "&&",$1->isConst);
-        if(b){
-          $$->typeSpecifier = $1->typeSpecifier;  
+        if (($1->typeSpecifier==3 || $1->typeSpecifier==4)&&($3->typeSpecifier==3 || $3->typeSpecifier==4)&&isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "&&")) {
+            $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
+        } else {
+            cerr << "Incompatible Type: " << $1->typeSpecifier << " and " << $3->typeSpecifier << " at line " << yylineno << endl;
         }}
 	;
 
@@ -612,26 +777,66 @@ logical_or_expression
 	: logical_and_expression { $$ = $1; }
 	| logical_or_expression LOGICAL_OR_OPERATOR logical_and_expression { 
         $$ = createNode(NODE_LOGICAL_OR_EXPRESSION, $2, $1, $3); 
-        bool b=isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "||",$1->isConst);
-        if(b){
-          $$->typeSpecifier = $1->typeSpecifier;  
+        if (($1->typeSpecifier==3 || $1->typeSpecifier==4)&&($3->typeSpecifier==3 || $3->typeSpecifier==4)&&isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "||")) {
+            $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
+        } else {
+            cerr << "Incompatible Type: " << $1->typeSpecifier << " and " << $3->typeSpecifier << " at line " << yylineno << endl;
         }}
 	;
 
 conditional_expression
-	: logical_or_expression { $$ = $1; }
-	| logical_or_expression TERNARY_OPERATOR expression COLON conditional_expression { $$ = createNode(NODE_CONDITIONAL_EXPRESSION, "?:", $1, $3, $5); }
-	;
+    : logical_or_expression { 
+        $$ = $1; 
+    }
+    | logical_or_expression TERNARY_OPERATOR expression COLON conditional_expression { 
+        $$ = createNode(NODE_CONDITIONAL_EXPRESSION, "?:", $1, $3, $5);
+        if ($1->typeSpecifier < 0 || $1->typeSpecifier > 7) {
+            cerr << "Ternary operator condition must be boolean, got type " << $1->typeSpecifier 
+                 << " at line " << yylineno << endl;
+        }
+        // Check if then ($3) and else ($5) expressions are type compatible
+        if (isTypeCompatible($3->typeSpecifier, $5->typeSpecifier, "?:")) {
+            $$->typeSpecifier = max($3->typeSpecifier, $5->typeSpecifier);
+        } else {
+            cerr << "Incompatible types in ternary operator: " << $3->typeSpecifier 
+                 << " and " << $5->typeSpecifier << " at line " << yylineno << endl;
+        }
+    }
+    ;
 
 assignment_expression
-	: conditional_expression { $$ = $1; }
-	| unary_expression assignment_operator assignment_expression { 
+    : conditional_expression { 
+        $$ = $1; 
+    }
+    | unary_expression assignment_operator assignment_expression { 
         $$ = createNode(NODE_ASSIGNMENT_EXPRESSION, $2->value, $1, $3);
-        bool b=isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, string($2->valueToString()),$1->isConst);
-        if(b){
-          $$->typeSpecifier = $1->typeSpecifier;  
-        } }
-	;
+        if ($1->isConst){
+            cerr << "Left operand of assignment is constant at line " 
+                 << yylineno << endl;
+        }
+        // Type checking based on assignment operator
+        string op = $2->valueToString();
+        if (op == "=") {
+            if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, op)) {
+                $$->typeSpecifier = $1->typeSpecifier;
+            } else {
+                cerr << "Incompatible types in assignment: " << $1->typeSpecifier 
+                     << " and " << $3->typeSpecifier << " at line " << yylineno << endl;
+            }
+        } else { // Compound assignment operators (+=, -=, *=, etc.)
+            if ($1->typeSpecifier < 0 || $1->typeSpecifier > 6) { // Must be numeric type
+                cerr << "Compound assignment requires numeric type, got " 
+                     << $1->typeSpecifier << " at line " << yylineno << endl;
+            }
+            if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, op)) {
+                $$->typeSpecifier = $1->typeSpecifier;
+            } else {
+                cerr << "Incompatible types in compound assignment: " << $1->typeSpecifier 
+                     << " and " << $3->typeSpecifier << " at line " << yylineno << endl;
+            }
+        }
+    }
+    ;
 
 
 assignment_operator
@@ -674,18 +879,18 @@ declaration
                     break;
                 }
             }
-            cout << *helper << endl;
-
+        if(declInfo.typeCategory == 4)
+            helper = lookupSymbol(helper->valueToString());
+        
     for (auto child : $2->children)
     {
         if (child->type != NODE_DECLARATOR) continue;
 
-        ASTNode *firstChild = child->children[0];
+        TreeNode *firstChild = child->children[0];
         string varName;
-        ASTNode *identifierNode = firstChild;
-        cout << *helper << endl;
+        TreeNode *identifierNode = firstChild;
         // Helper function to set common node attributes
-        auto setNodeAttributes = [&](ASTNode *node, int typeCategory, int pointerLevel = 0) {
+        auto setNodeAttributes = [&](TreeNode *node, int typeCategory, int pointerLevel = 0) {
             node->typeCategory = typeCategory;
             node->pointerLevel = pointerLevel;
             node->storageClass = declInfo.storageClass;
@@ -798,10 +1003,7 @@ declaration
                 insertSymbol(varName, identifierNode);
             }
             else if(size == 2 && declInfo.typeSpecifier == 8){
-                //cout << *identifierNode << endl;
-                //cout << identifierNode->symbolTable.size() << endl;
-                auto x = lookupSymbol(helper->valueToString());
-                bool hp = structInitializerCheck(x,child->children[1]);
+                bool hp = structInitializerCheck(helper,child->children[1]);
                 if(hp)insertSymbol(varName,identifierNode);
             }
             else {
@@ -820,8 +1022,6 @@ declaration_specifiers
         for(auto child : $2->children){
             $$->addChild(child);
         }
-        // $2->addChild($1);
-        // $$ = $2; 
     }
 	| type_specifier { $$ = createNode(NODE_DECLARATION_SPECIFIERS, monostate(), $1);$$->storageClass = $1->storageClass;}
 	| type_specifier declaration_specifiers { 
@@ -829,7 +1029,6 @@ declaration_specifiers
         for(auto child : $2->children){
             $$->addChild(child);
         }
-        // $$ = $2; 
     }
 	| type_qualifier { $$ = createNode(NODE_DECLARATION_SPECIFIERS, monostate(), $1); $$->storageClass = $1->storageClass;}
 	| type_qualifier declaration_specifiers { 
@@ -959,7 +1158,6 @@ struct_or_union_specifier
     } LBRACE struct_declaration_list RBRACE {
             $$ = createNode(NODE_STRUCT_OR_UNION_SPECIFIER,monostate(), $1, $2, $5);
             $2->symbolTable = currentTable->symbolTable;
-            cout << *$2 << endl;
             exitScope();
 
     };
@@ -989,12 +1187,12 @@ struct_declaration
     {
         if (child->type != NODE_DECLARATOR) continue;
 
-        ASTNode *firstChild = child->children[0];
+        TreeNode *firstChild = child->children[0];
         string varName;
-        ASTNode *identifierNode = firstChild;
+        TreeNode *identifierNode = firstChild;
 
         // Helper function to set common node attributes
-        auto setNodeAttributes = [&](ASTNode *node, int typeCategory, int pointerLevel = 0) {
+        auto setNodeAttributes = [&](TreeNode *node, int typeCategory, int pointerLevel = 0) {
             node->typeCategory = typeCategory;
             node->pointerLevel = pointerLevel;
             node->storageClass = declInfo.storageClass;
@@ -1124,11 +1322,11 @@ specifier_qualifier_list
 
 struct_declarator_list
     : declarator { 
-        ASTNode* temp = createNode(NODE_DECLARATOR, monostate(), $1);
+        TreeNode* temp = createNode(NODE_DECLARATOR, monostate(), $1);
         $$ = createNode(NODE_STRUCT_DECLARATOR_LIST, monostate(), temp); 
     }
     | struct_declarator_list COMMA declarator { 
-        ASTNode* temp = createNode(NODE_DECLARATOR, monostate(), $3);
+        TreeNode* temp = createNode(NODE_DECLARATOR, monostate(), $3);
         $$->children.push_back(temp);
     }
     ;
@@ -1140,7 +1338,7 @@ type_qualifier
 
 declarator
     : pointer direct_declarator { 
-        ASTNode* lastPointer = $1;
+        TreeNode* lastPointer = $1;
         while (!lastPointer->children.empty() && lastPointer->children[0]->type == NODE_POINTER) {
             lastPointer = lastPointer->children[0];
         }
@@ -1201,7 +1399,7 @@ parameter_type_list
     }
     | parameter_list COMMA ELLIPSIS_OPERATOR { 
         $$ = createNode(NODE_PARAMETER_TYPE_LIST, monostate(), $1);
-        $$->children.push_back($3);
+        $$->children.push_back($3); // var args
     }
     ;
 
@@ -1257,8 +1455,8 @@ direct_abstract_declarator
 
 initializer
 	: assignment_expression { $$ = $1; }
-	| LBRACE initializer_list RBRACE {  $$ = $2;}
-	| LBRACE initializer_list COMMA RBRACE {  $$ = $2; }
+	| LBRACE initializer_list RBRACE { $$ = $2;}
+	| LBRACE initializer_list COMMA RBRACE { $$ = $2; }
 	;
 
 initializer_list
@@ -1268,10 +1466,6 @@ initializer_list
     | initializer_list COMMA initializer { 
         $$ = $1;
         $$->children.push_back($3);
-        // int size = $$->children.size();
-        // for(int i=0;i<size;i++){
-        //     cout << $$->children[i]->valueToString() << " ";
-        // }
     }
     ;
 
@@ -1282,7 +1476,6 @@ statement
 	| selection_statement { $$ = $1; }
 	| iteration_statement { $$ = $1; }
 	| jump_statement { $$ = $1; }
-	| try_catch_statement {$$ = $1; }
     | io_statement{$$ = $1;}
     | scope_resolution_statement { $$ = $1; }
     ;
@@ -1294,35 +1487,39 @@ scope_resolution_statement
 
 io_statement
     : KEYWORD_PRINTF LPAREN STRING RPAREN SEMICOLON 
-        { 
-            $$ = createNode(NODE_IO_STATEMENT, monostate(), $1, $3); 
+        {
+            $$ = createNode(NODE_IO_STATEMENT, monostate(), $1, $3);  
+            if (!checkFormatSpecifiers($3->valueToString(), {})) {
+                yyerror("Format string in printf has specifiers but no arguments provided");
+            }
         }
     | KEYWORD_PRINTF LPAREN STRING COMMA argument_expression_list RPAREN SEMICOLON 
-        {  
-            $$ = createNode(NODE_IO_STATEMENT, monostate(), $1, $3, $5); 
+        {     
+            $$ = createNode(NODE_IO_STATEMENT, monostate(), $1, $3, $5);          
+            vector<int> types = typeExtract($5);
+            /* printf with arguments - check format specifiers against arg list */
+            if (!checkFormatSpecifiers($3->valueToString(), types)) {
+                yyerror("Type mismatch between format specifiers and arguments in printf");
+            }
         }
     | KEYWORD_SCANF LPAREN STRING COMMA argument_expression_list RPAREN SEMICOLON 
-        { 
-            $$ = createNode(NODE_IO_STATEMENT, monostate(), $1, $3, $5);
+        {
+            $$ = createNode(NODE_IO_STATEMENT, monostate(), $1, $3, $5); 
+            // vector<int> types = typeExtract($5);     
+            // /* scanf with arguments - check format specifiers and assignability */
+            // if (!checkFormatSpecifiers($3->valueToString(), types)) {
+            //     yyerror("Type mismatch between format specifiers and arguments in scanf");
+            // }
+            // cout << *$5 << endl;
+            // if (!checkNotConst($5)) {
+            //     yyerror("scanf arguments must not be constants");
+            // }
         }
     ;
-try_catch_statement
-    : KEYWORD_TRY {enterScope();} compound_statement {exitScope();} catch_clauses
-    ;
-
-catch_clauses
-    : catch_clause
-    | catch_clauses catch_clause
-    ;
-
-catch_clause
-    : KEYWORD_CATCH LPAREN parameter_declaration RPAREN {enterScope();} compound_statement {exitScope();}
-    | KEYWORD_CATCH LPAREN ELLIPSIS_OPERATOR RPAREN {enterScope();} compound_statement {exitScope();}
-    ;	
 
 labeled_statement
 	: ID COLON statement { $$ = createNode(NODE_LABELED_STATEMENT, monostate(), $1, $3); }
-	| KEYWORD_CASE constant_expression COLON statement { $$ = createNode(NODE_LABELED_STATEMENT,monostate(), $1, $2, $4); }
+	| KEYWORD_CASE constant_expression COLON statement { $$ = createNode(NODE_LABELED_STATEMENT,monostate(), $1, $2, $4);  }
 	| KEYWORD_DEFAULT COLON statement { $$ = createNode(NODE_LABELED_STATEMENT, monostate(), $1, $3); }
 	;
 
@@ -1346,33 +1543,37 @@ expression_statement
 	| expression SEMICOLON { $$ = $1; }
 	;
 
-selection_statement
-    : KEYWORD_IF LPAREN expression RPAREN statement LOWER_THAN_ELSE 
-        { $$ = createNode(NODE_SELECTION_STATEMENT,monostate(), $1, $3, $5); }
-    | KEYWORD_IF LPAREN expression RPAREN statement KEYWORD_ELSE statement 
-        { $$ = createNode(NODE_SELECTION_STATEMENT,monostate() , $1, $3, $5, $7); }
-    | KEYWORD_SWITCH LPAREN expression RPAREN statement 
-        { $$ = createNode(NODE_SELECTION_STATEMENT, monostate(), $1, $3, $5); }
+selection_statement:
+      KEYWORD_IF LPAREN expression RPAREN statement %prec NO_ELSE
+    | KEYWORD_IF LPAREN expression RPAREN statement KEYWORD_ELSE statement
+    | KEYWORD_SWITCH LPAREN expression RPAREN { inLoop++; } LBRACE statement RBRACE { inLoop--; }
     ;
 
 iteration_statement
-    : KEYWORD_WHILE LPAREN expression RPAREN statement
+    : KEYWORD_WHILE LPAREN expression RPAREN {inLoop++;} statement {inLoop--;}
     | KEYWORD_DO statement KEYWORD_WHILE LPAREN expression RPAREN
-    | KEYWORD_FOR LPAREN expression_statement expression_statement expression RPAREN statement
-    | KEYWORD_FOR LPAREN expression_statement expression_statement expression_statement RPAREN statement
-    | KEYWORD_FOR LPAREN declaration expression_statement expression RPAREN statement
-    | KEYWORD_FOR LPAREN declaration expression_statement expression_statement RPAREN statement
+    | KEYWORD_FOR LPAREN expression_statement expression_statement expression RPAREN {inLoop++;} statement {inLoop--;}
+    | KEYWORD_FOR LPAREN expression_statement expression_statement expression_statement RPAREN {inLoop++;} statement {inLoop--;}
+    | KEYWORD_FOR LPAREN declaration expression_statement expression RPAREN {inLoop++;} statement {inLoop--;}
+    | KEYWORD_FOR LPAREN declaration expression_statement expression_statement RPAREN {inLoop++;} statement {inLoop--;}
     ;
 
 
 jump_statement
 	: KEYWORD_GOTO ID SEMICOLON { $$ = createNode(NODE_JUMP_STATEMENT, monostate(), $1, $2); }
-	| KEYWORD_CONTINUE SEMICOLON { $$ = $1;}
-	| KEYWORD_BREAK SEMICOLON { $$ = $1; }
+	| KEYWORD_CONTINUE SEMICOLON {
+        if(inLoop <= 0){
+            cerr << "Continue should be used inside loops" << endl;
+        }
+        $$ = $1;
+    }
+	| KEYWORD_BREAK SEMICOLON { 
+        if(inLoop <= 0){
+            cerr << "Break should be used inside loops" << endl;
+        }
+     }
 	| KEYWORD_RETURN SEMICOLON { $$ = $1; }
 	| KEYWORD_RETURN expression SEMICOLON { $$ = createNode(NODE_JUMP_STATEMENT, monostate(), $1, $2); }
-	| KEYWORD_THROW STRING SEMICOLON
-    | KEYWORD_THROW SEMICOLON
 	;
 
 translation_unit
@@ -1415,7 +1616,7 @@ function_definition
         if (declInfo.isValid) {
             string funcName = $2->children[0]->valueToString();
             insertSymbol(funcName, $2->children[0]);
-            ASTNode* funcNode = $2->children[0];
+            TreeNode* funcNode = $2->children[0];
             funcNode->storageClass = declInfo.storageClass;
             funcNode->typeSpecifier = declInfo.typeSpecifier;
             funcNode->isConst = declInfo.isConst;
@@ -1424,9 +1625,10 @@ function_definition
             funcNode->isUnsigned = declInfo.isUnsigned;
             funcNode->typeCategory = 3;
             enterScope();
-            if($2->children.size() > 1 && $2->children[1]->type == NODE_PARAMETER_TYPE_LIST) {
+            if($2->children.size() > 1 && $2->children[1]->type == NODE_PARAMETER_LIST) {
             for (auto param : $2->children[1]->children) {
                 if (param->type == NODE_PARAMETER_DECLARATION) {
+
                     string varName = param->children[1]->valueToString();
                     
                     bool isDuplicate = false;
@@ -1443,7 +1645,7 @@ function_definition
 
                     DeclaratorInfo paramInfo = isValidVariableDeclaration(param->children[0]->children, false);
                     if (paramInfo.isValid) {
-                        ASTNode* varNode = param->children[1];
+                        TreeNode* varNode = param->children[1];
                         varNode->typeCategory = 0;
                         varNode->storageClass = paramInfo.storageClass;
                         varNode->typeSpecifier = paramInfo.typeSpecifier;

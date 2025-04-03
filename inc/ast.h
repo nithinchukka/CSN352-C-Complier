@@ -1,5 +1,5 @@
-#ifndef ASTNODE_H
-#define ASTNODE_H
+#ifndef TreeNode_H
+#define TreeNode_H
 
 #include <bits/stdc++.h>
 using namespace std;
@@ -93,31 +93,31 @@ enum NodeType
 
 using NodeValue = variant<monostate, string, int, double, bool, char>;
 
-class ASTNode
+class TreeNode
 {
 public:
     NodeType type;
     NodeValue value;
     int offset = 0;
-    vector<ASTNode *> children;
+    vector<TreeNode *> children;
     int typeCategory = -1; // var = 0, pointer = 1, arr = 2,  func = 3, struct = 4, union = 5, class = 6
     bool isConst = false;
     bool isStatic = false;
     bool isVolatile = false;
     bool isUnsigned = false;
-    int typeSpecifier = -1; //"char", "short", "int", "long", "bool", "float", "double"
+    int typeSpecifier = -1; //"char", "short", "int", "long", "bool", "float", "double", "string", "nullptr"
     int storageClass = -1;  // -1: none, 0: extern, 1: static, 2: auto, 3: register
     int paramCount = 0;
     int pointerLevel = 0;
     vector<int> paramTypes;
     vector<int> dimensions;
-    vector<pair<string, ASTNode*>> symbolTable;
+    vector<pair<string, TreeNode*>> symbolTable;
 
-    ASTNode(NodeType type, NodeValue value = monostate()) : type(type), value(value)
+    TreeNode(NodeType type, NodeValue value = monostate()) : type(type), value(value)
     {
     }
 
-    void addChild(ASTNode *child)
+    void addChild(TreeNode *child)
     {
         if (child)
             children.push_back(child);
@@ -129,7 +129,7 @@ public:
             os << "  ";
         os << "|- " << nodeTypeToString(type) << " " << valueToString() << "\n";
 
-        for (const ASTNode *child : children)
+        for (const TreeNode *child : children)
         {
             if (child == nullptr)
             {
@@ -337,7 +337,7 @@ public:
         return "(unknown)";
     }
 
-    friend ostream &operator<<(ostream &os, const ASTNode &node)
+    friend ostream &operator<<(ostream &os, const TreeNode &node)
     {
         node.printAST(0, os);
         return os;
@@ -345,11 +345,11 @@ public:
 };
 
 template <typename... Args>
-ASTNode *createNode(NodeType type, NodeValue value = monostate(), Args... children)
+TreeNode *createNode(NodeType type, NodeValue value = monostate(), Args... children)
 {
-    ASTNode *node = new ASTNode(type, value);
+    TreeNode *node = new TreeNode(type, value);
     (node->addChild(children), ...);
     return node;
 }
 
-#endif // ASTNODE_H
+#endif // TreeNode_H

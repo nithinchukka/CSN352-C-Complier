@@ -7,7 +7,7 @@ using namespace std;
 
 struct Table
 {
-    vector<pair<string,ASTNode*>> symbolTable;
+    vector<pair<string,TreeNode*>> symbolTable;
     Table *parent;
 };
 
@@ -35,7 +35,7 @@ int getStorageClass(const std::string& type) {
 }
 
 
-ASTNode* lookupSymbol(string symbol)
+TreeNode* lookupSymbol(string symbol)
 {
     Table *temp = currentTable;
     while (temp != nullptr)
@@ -78,7 +78,7 @@ void exitScope()
     // delete temp;
 }
 
-void insertSymbol(string symbol, ASTNode* node)
+void insertSymbol(string symbol, TreeNode* node)
 {
     for (const auto &entry : currentTable->symbolTable)
     {
@@ -93,31 +93,41 @@ void insertSymbol(string symbol, ASTNode* node)
 
 
 void printAllTables() {
-    int tableId = 0;
-    for (auto &table : allTables) {
-        cout << "Table " << tableId++ << " (Scope Level):\n";
-        for (const auto &entry : table->symbolTable) {
-            ASTNode *node = entry.second;
-            cout << "  " << entry.first << " -> TypeCategory: " << node->typeCategory
-                << " " << " , TypeSpecifier: " << node->typeSpecifier 
-                 << ", StorageClass: " << node->storageClass
-                 << ", Params: " << node->paramCount
-                 << ", Const: " << (node->isConst ? "Yes" : "No")
-                 << ", Static: " << (node->isStatic ? "Yes" : "No")
-                 << ", Volatile: " << (node->isVolatile ? "Yes" : "No")
-                 << ", pointerLevel: " << node->pointerLevel 
-                 << endl;
+    int tblId = 0;
+    for (auto &tbl : allTables) {
+        cout << "Tbl " << tblId++ << " (Scope Lvl):\n";
+        cout << "-------------------------------------------------------------------------------------------------------\n";
+        cout << left << setw(12) << "Id" << setw(12) << "TypeCat" << setw(12) << "TypeSpec" 
+             << setw(12) << "StorCls" << setw(8) << "Params" << setw(8) << "Const" << setw(8) << "Static" 
+             << setw(8) << "Volat" << setw(12) << "PtrLvl"  << setw(12) << "SymTabSize" << "\n";
+        cout << "------------------------------------------------------------------------------------------------------\n";
+        
+        for (const auto &entry : tbl->symbolTable) {
+            TreeNode *node = entry.second;
+            cout << left << setw(12) << entry.first
+                 << setw(12) << node->typeCategory
+                 << setw(12) << node->typeSpecifier
+                 << setw(12) << node->storageClass
+                 << setw(8) << node->paramCount
+                 << setw(8) << (node->isConst ? "Y" : "N")
+                 << setw(8) << (node->isStatic ? "Y" : "N")
+                 << setw(8) << (node->isVolatile ? "Y" : "N")
+                 << setw(12) << node->pointerLevel
+                 << setw(12) << node->symbolTable.size()
+                 << "\n";
         }
-        cout << "----------------------\n";
+        
+        cout << "------------------------------------------------------------------------------------\n\n";
     }
 }
 
-// void addDeclaratorsToSymbolTable(ASTNode *a, ASTNode *b)
+
+// void addDeclaratorsToSymbolTable(TreeNode *a, TreeNode *b)
 // {
 //     string typeSpecifiers;
 //     if (a->children[0]->type == NODE_STRUCT_OR_UNION_SPECIFIER || a->children[0]->type == NODE_CLASS_SPECIFIER)
 //     {
-//         ASTNode *specifier = a->children[0];
+//         TreeNode *specifier = a->children[0];
 //         if (specifier->children[1]->type != NODE_IDENTIFIER)
 //             typeSpecifiers = specifier->children[0]->valueToString();
 //         else
@@ -126,7 +136,7 @@ void printAllTables() {
 //     else
 
 //     {
-//         for (ASTNode *specifier : a->children)
+//         for (TreeNode *specifier : a->children)
 //         {
 //             if (specifier)
 //             {
@@ -139,7 +149,7 @@ void printAllTables() {
 //         }
 //     }
 
-//     for (ASTNode *declarator : b->children)
+//     for (TreeNode *declarator : b->children)
 //     {
 //         if (!declarator || declarator->children.empty())
 //             continue;
@@ -149,11 +159,11 @@ void printAllTables() {
 //         int pointerCount = 0;
 //         vector<string> dimensions;
 
-//         ASTNode *current = declarator;
+//         TreeNode *current = declarator;
 
 //         while (current)
 //         {
-//             string nodeType = ASTNode::nodeTypeToString(current->type);
+//             string nodeType = TreeNode::nodeTypeToString(current->type);
 
 //             if (nodeType == "DECLARATOR")
 //             {
@@ -190,22 +200,22 @@ void printAllTables() {
 //     }
 // }
 
-// void addFunctionParameters(ASTNode *parameterList)
+// void addFunctionParameters(TreeNode *parameterList)
 // {
 //     if (parameterList == nullptr)
 //         return;
 
-//     for (ASTNode *paramDecl : parameterList->children)
+//     for (TreeNode *paramDecl : parameterList->children)
 //     {
 //         if (!paramDecl)
 //             continue;
 
 //         string typeSpecifiers;
-//         ASTNode *declSpecs = nullptr;
+//         TreeNode *declSpecs = nullptr;
 
-//         for (ASTNode *child : paramDecl->children)
+//         for (TreeNode *child : paramDecl->children)
 //         {
-//             if (child && ASTNode::nodeTypeToString(child->type) == "DECLARATION_SPECIFIERS")
+//             if (child && TreeNode::nodeTypeToString(child->type) == "DECLARATION_SPECIFIERS")
 //             {
 //                 declSpecs = child;
 //                 break;
@@ -214,7 +224,7 @@ void printAllTables() {
 
 //         if (declSpecs)
 //         {
-//             for (ASTNode *specifier : declSpecs->children)
+//             for (TreeNode *specifier : declSpecs->children)
 //             {
 //                 if (specifier)
 //                 {
@@ -232,9 +242,9 @@ void printAllTables() {
 //         int pointerCount = 0;
 //         vector<string> dimensions;
 
-//         for (ASTNode *child : paramDecl->children)
+//         for (TreeNode *child : paramDecl->children)
 //         {
-//             string nodeType = ASTNode::nodeTypeToString(child->type);
+//             string nodeType = TreeNode::nodeTypeToString(child->type);
 
 //             if (nodeType == "ARRAY")
 //             {
@@ -266,10 +276,10 @@ void printAllTables() {
 //     }
 // }
 
-// void addFunction(ASTNode *funcDeclSpec, ASTNode *declarator)
+// void addFunction(TreeNode *funcDeclSpec, TreeNode *declarator)
 // {
 //     string typeSpecifiers;
-//     for (ASTNode *specifier : funcDeclSpec->children)
+//     for (TreeNode *specifier : funcDeclSpec->children)
 //     {
 //         if (specifier)
 //         {
@@ -285,10 +295,10 @@ void printAllTables() {
 //     string returnType = typeSpecifiers;
 //     int pointerCount = 0;
 
-//     ASTNode *current = declarator;
+//     TreeNode *current = declarator;
 //     while (current)
 //     {
-//         string nodeType = ASTNode::nodeTypeToString(current->type);
+//         string nodeType = TreeNode::nodeTypeToString(current->type);
 
 //         if (nodeType == "IDENTIFIER")
 //         {
@@ -311,18 +321,18 @@ void printAllTables() {
 //     }
 // }
 
-// void addStructMembersToSymbolTable(ASTNode *structDeclList) {
+// void addStructMembersToSymbolTable(TreeNode *structDeclList) {
 //     if (!structDeclList || structDeclList->type != NODE_STRUCT_DECLARATION_LIST) {
 //         return;
 //     }
 
-//     for (ASTNode *structDecl : structDeclList->children) {
-//         ASTNode *typeSpec = structDecl->children[0];
-//         ASTNode *declaratorList = structDecl->children[1];
+//     for (TreeNode *structDecl : structDeclList->children) {
+//         TreeNode *typeSpec = structDecl->children[0];
+//         TreeNode *declaratorList = structDecl->children[1];
 
 //         bool isNestedStruct = false;
 //         if (typeSpec->type == NODE_STRUCT_OR_UNION_SPECIFIER) {
-//             for (ASTNode *child : typeSpec->children) {
+//             for (TreeNode *child : typeSpec->children) {
 //                 if (child->type == NODE_STRUCT_DECLARATION_LIST) {
 //                     std::cout << "Error: Nested struct definition is not allowed." << std::endl;
 //                     isNestedStruct = true;
@@ -342,14 +352,14 @@ void printAllTables() {
 //             typeStr = "struct " + typeSpec->children[1]->valueToString();
 //         }
 
-//         for (ASTNode *declarator : declaratorList->children) {
+//         for (TreeNode *declarator : declaratorList->children) {
 //             std::string memberName;
 //             std::string memberType = typeStr;
 //             int pointerCount = 0;
 
-//             ASTNode *current = declarator;
+//             TreeNode *current = declarator;
 //             while (current) {
-//                 std::string nodeType = ASTNode::nodeTypeToString(current->type);
+//                 std::string nodeType = TreeNode::nodeTypeToString(current->type);
 //                 if (nodeType == "IDENTIFIER") {
 //                     memberName = current->valueToString();
 //                     break;
@@ -374,35 +384,35 @@ void printAllTables() {
 //     symbolTable.emplace_back(token, tokenType, extraInfo);
 // }
 
-// void addConstantsToSymbolTable(ASTNode *a){
-//         addToSymbolTable(a->valueToString(), ASTNode::nodeTypeToString(a->type));
+// void addConstantsToSymbolTable(TreeNode *a){
+//         addToSymbolTable(a->valueToString(), TreeNode::nodeTypeToString(a->type));
 // }
 
-// void addStructMembersToSymbolTable(ASTNode *structOrUnionSpecifier) {
+// void addStructMembersToSymbolTable(TreeNode *structOrUnionSpecifier) {
 // if (!structOrUnionSpecifier) return;
 
 // string structName;
 // vector<pair<string, string>> members;
 
-// for (ASTNode* child : structOrUnionSpecifier->children) {
+// for (TreeNode* child : structOrUnionSpecifier->children) {
 //     if (!child) continue;
 
-//     string nodeType = ASTNode::nodeTypeToString(child->type);
+//     string nodeType = TreeNode::nodeTypeToString(child->type);
 
 //     if (nodeType == "IDENTIFIER") {
 //         structName = child->valueToString();
 //     }
 //     else if (nodeType == "STRUCT_DECLARATION_LIST") {
-//         for (ASTNode* structDecl : child->children) {
+//         for (TreeNode* structDecl : child->children) {
 //             if (!structDecl) continue;
 
 //             string typeSpecifiers;
-//             ASTNode* declaratorList = nullptr;
+//             TreeNode* declaratorList = nullptr;
 
-//             for (ASTNode* declChild : structDecl->children) {
+//             for (TreeNode* declChild : structDecl->children) {
 //                 if (!declChild) continue;
 
-//                 string declType = ASTNode::nodeTypeToString(declChild->type);
+//                 string declType = TreeNode::nodeTypeToString(declChild->type);
 
 //                 if (declType == "KEYWORD" || declType == "IDENTIFIER") {
 //                     if (!typeSpecifiers.empty()) typeSpecifiers += " ";
@@ -414,7 +424,7 @@ void printAllTables() {
 //             }
 
 //             if (!typeSpecifiers.empty() && declaratorList) {
-//                 for (ASTNode* declarator : declaratorList->children) {
+//                 for (TreeNode* declarator : declaratorList->children) {
 //                     if (!declarator || declarator->children.empty()) continue;
 
 //                     string varName;
@@ -422,10 +432,10 @@ void printAllTables() {
 //                     int pointerCount = 0;
 //                     vector<string> dimensions;
 
-//                     ASTNode* current = declarator;
+//                     TreeNode* current = declarator;
 
 //                     while (current) {
-//                         string nodeType = ASTNode::nodeTypeToString(current->type);
+//                         string nodeType = TreeNode::nodeTypeToString(current->type);
 
 //                         if (nodeType == "DECLARATOR") {
 //                             if (!current->children.empty()) {
@@ -468,15 +478,15 @@ void printAllTables() {
 // }
 // }
 
-vector<string> extractInitDeclarators(ASTNode *initDeclaratorList)
+vector<string> extractInitDeclarators(TreeNode *initDeclaratorList)
 {
     vector<string> identifiers;
     if (!initDeclaratorList)
         return identifiers;
 
-    for (ASTNode *initDeclarator : initDeclaratorList->children)
+    for (TreeNode *initDeclarator : initDeclaratorList->children)
     {
-        ASTNode *declarator = initDeclarator->children[0];
+        TreeNode *declarator = initDeclarator->children[0];
         while (!declarator->children.empty())
             declarator = declarator->children[0];
 
@@ -485,10 +495,10 @@ vector<string> extractInitDeclarators(ASTNode *initDeclaratorList)
     return identifiers;
 }
 
-// void addFunctionToSymbolTable(ASTNode* declarationSpecifiersNode, ASTNode* declaratorNode) {
+// void addFunctionToSymbolTable(TreeNode* declarationSpecifiersNode, TreeNode* declaratorNode) {
 // if (!declarationSpecifiersNode || !declaratorNode) return;
 
-// ASTNode* current = declaratorNode;
+// TreeNode* current = declaratorNode;
 // while (current && !current->children.empty()) {
 //     current = current->children[0];
 //     if (current->type == NODE_IDENTIFIER) {
@@ -500,9 +510,9 @@ vector<string> extractInitDeclarators(ASTNode *initDeclaratorList)
 // cerr << "Error: Function name not found in declarator!" << endl;
 // }
 
-// void addStructVariablesToSymbolTable(ASTNode* structSpecifierNode, ASTNode* initDeclaratorList) {
+// void addStructVariablesToSymbolTable(TreeNode* structSpecifierNode, TreeNode* initDeclaratorList) {
 //     if (!structSpecifierNode || !initDeclaratorList) return;
-//     ASTNode* structNameNode = structSpecifierNode->children[1];
+//     TreeNode* structNameNode = structSpecifierNode->children[1];
 //     string structName = "struct " + structNameNode->valueToString();
 
 //     vector<string> identifiers = extractInitDeclarators(initDeclaratorList);
@@ -521,23 +531,23 @@ vector<string> extractInitDeclarators(ASTNode *initDeclaratorList)
 //     }
 // }
 
-// void addClassMembersToSymbolTable(ASTNode* classSpecifierNode) {
+// void addClassMembersToSymbolTable(TreeNode* classSpecifierNode) {
 //     string className = classSpecifierNode->children[0]->valueToString();
 //     addToSymbolTable(className, "class");
 //     // if (classSpecifierNode->children.size() <= 2 || classSpecifierNode->children[2] == nullptr) {
 //     //     return;  // No members
 //     // }
-//     // ASTNode* memberDeclarationListNode = classSpecifierNode->children[2];
+//     // TreeNode* memberDeclarationListNode = classSpecifierNode->children[2];
 //     // string currentAccess = "private";  // Default access for class
-//     // for (ASTNode* memberNode : memberDeclarationListNode->children) {
+//     // for (TreeNode* memberNode : memberDeclarationListNode->children) {
 //     //     if (memberNode == nullptr || memberNode->type != NODE_DECLARATION) continue;  // Skip non-declarations
 //     //     if (memberNode->children.size() < 2 || memberNode->children[0] == nullptr || memberNode->children[1] == nullptr) continue;  // Must have type and declarators
-//     //     ASTNode* typeNode = memberNode->children[0];
+//     //     TreeNode* typeNode = memberNode->children[0];
 //     //     string memberType = typeNode->valueToString();
-//     //     ASTNode* initDeclaratorList = memberNode->children[1];
-//     //     for (ASTNode* declaratorNode : initDeclaratorList->children) {
+//     //     TreeNode* initDeclaratorList = memberNode->children[1];
+//     //     for (TreeNode* declaratorNode : initDeclaratorList->children) {
 //     //         if (declaratorNode == nullptr || declaratorNode->children.empty()) continue;
-//     //         ASTNode* current = declaratorNode->children[0];  // First child is NODE_DECLARATOR
+//     //         TreeNode* current = declaratorNode->children[0];  // First child is NODE_DECLARATOR
 //     //         while (current && current->type == NODE_DECLARATOR && !current->children.empty()) {
 //     //             current = current->children[0];
 //     //         }
@@ -548,9 +558,9 @@ vector<string> extractInitDeclarators(ASTNode *initDeclaratorList)
 //     // }
 // }
 
-// void addClassVariablesToSymbolTable(ASTNode* classSpecifierNode, ASTNode* initDeclaratorList) {
+// void addClassVariablesToSymbolTable(TreeNode* classSpecifierNode, TreeNode* initDeclaratorList) {
 
-//     ASTNode* classNameNode = classSpecifierNode->children[0];
+//     TreeNode* classNameNode = classSpecifierNode->children[0];
 //     string className = "class " + classNameNode->valueToString();
 
 //     vector<string> identifiers = extractInitDeclarators(initDeclaratorList);
