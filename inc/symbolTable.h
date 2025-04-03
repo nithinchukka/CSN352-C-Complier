@@ -35,7 +35,7 @@ int getStorageClass(const std::string& type) {
 }
 
 
-int lookupSymbol(string symbol)
+ASTNode* lookupSymbol(string symbol)
 {
     Table *temp = currentTable;
     while (temp != nullptr)
@@ -44,13 +44,13 @@ int lookupSymbol(string symbol)
         {
             if (entry.first == symbol)
             {
-                return entry.second->typeSpecifier;
+                return entry.second;
             }
         }
         temp = temp->parent;
     }
     cout << "Symbol " << symbol << " not found in table" << endl;
-    return -1;
+    return nullptr;
 }
 
 

@@ -1,6 +1,9 @@
 struct Point{
     int b;
-    int *c;
+    float c;
 };
 
-int x, y;
+
+int main(){
+    Point P = {2};
+}

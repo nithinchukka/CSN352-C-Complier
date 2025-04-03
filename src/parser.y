@@ -263,6 +263,64 @@ bool checkInvalidReturn(ASTNode* node, int returnType = -1) {
     
     return false;
 }
+
+bool structInitializerCheck(ASTNode* identifierNode, ASTNode* initializerList) {
+    // Check if identifierNode has a symbol table for struct members
+    if (identifierNode->symbolTable.empty()) {
+        cerr << "Error: No struct definition found for type checking" << endl;
+        return false;
+    }
+
+    // Get the number of members in the struct definition
+    size_t expectedSize = identifierNode->symbolTable.size();
+    
+    // Count actual initializers provided
+    size_t actualSize = initializerList->children.size();
+
+    // Check if number of initializers matches struct members
+    if (expectedSize != actualSize) {
+        cerr << "Error: Struct initialization mismatch - expected " 
+             << expectedSize << " values, got " << actualSize << endl;
+        return false;
+    }
+
+    // Check type compatibility using a for loop
+    for (size_t i = 0; i < expectedSize; i++) {
+        const auto& memberPair = identifierNode->symbolTable[i];
+        ASTNode* memberNode = memberPair.second;  // ASTNode* from symbol table
+        ASTNode* initNode = initializerList->children[i];
+
+        int expectedType = memberNode->typeSpecifier;
+        int actualType = initNode->typeSpecifier;
+
+        // General type compatibility check
+
+        bool typesCompatible = isTypeCompatible(expectedType, actualType, "=");
+        
+        if (!typesCompatible) {
+            cerr << "Error: Type mismatch at position " << i + 1 
+                 << " (member '" << memberPair.first << "'): expected " 
+                 << expectedType
+                 << ", got " << actualType << endl;
+            return false;
+        }
+
+        // Additional checks from symbol table
+        if (memberNode->isConst) {
+            cerr << "Error: Cannot initialize const member '" 
+                 << memberPair.first << "' in struct" << endl;
+            return false;
+        }
+
+        if (memberNode->pointerLevel > 0) {
+            cerr << "Error: Pointer initialization not supported in struct initializer for '" 
+                 << memberPair.first << "'" << endl;
+            return false;
+        }
+    }
+
+    return true;
+}
 %}
 
 
@@ -350,7 +408,7 @@ bool checkInvalidReturn(ASTNode* node, int returnType = -1) {
 %%
 
 primary_expression
-	: ID { $$ = $1;$$->storageClass = lookupSymbol($$->valueToString());}
+	: ID { $$ = $1;$$ = lookupSymbol($$->valueToString());}
 	| INTEGER { $$ = $1;$$->typeSpecifier=3;}
     | FLOAT { $$ = $1;$$->typeSpecifier=6;}
 	| STRING { $$ = $1; $$->typeSpecifier=8;}
@@ -606,10 +664,18 @@ declaration
     | declaration_specifiers init_declarator_list SEMICOLON 
     {
         $$ = createNode(NODE_DECLARATION, monostate(), $1, $2);
-        cout << *$$ << endl;
         DeclaratorInfo declInfo = isValidVariableDeclaration($1->children, false);
         if (declInfo.isValid)
         {
+            auto helper = $1;
+            for(auto child : $1->children){
+                if(child->type == NODE_TYPE_SPECIFIER){
+                    helper = child;
+                    break;
+                }
+            }
+            cout << *helper << endl;
+
     for (auto child : $2->children)
     {
         if (child->type != NODE_DECLARATOR) continue;
@@ -617,7 +683,7 @@ declaration
         ASTNode *firstChild = child->children[0];
         string varName;
         ASTNode *identifierNode = firstChild;
-
+        cout << *helper << endl;
         // Helper function to set common node attributes
         auto setNodeAttributes = [&](ASTNode *node, int typeCategory, int pointerLevel = 0) {
             node->typeCategory = typeCategory;
@@ -628,8 +694,8 @@ declaration
             node->isStatic = declInfo.isStatic;
             node->isVolatile = declInfo.isVolatile;
             node->isUnsigned = declInfo.isUnsigned;
+            node->symbolTable = helper->symbolTable;
         };
-
         // Check for duplicate declaration
         auto checkDuplicate = [&](const string &name) {
             for (const auto &entry : currentTable->symbolTable)
@@ -718,7 +784,6 @@ declaration
         {
             varName = firstChild->valueToString();
             if (checkDuplicate(varName)) continue;
-
             int size = child->children.size();
             if (size == 1) {
                 if (declInfo.isConst) {
@@ -732,10 +797,18 @@ declaration
                 setNodeAttributes(identifierNode, 0);
                 insertSymbol(varName, identifierNode);
             }
+            else if(size == 2 && declInfo.typeSpecifier == 8){
+                //cout << *identifierNode << endl;
+                //cout << identifierNode->symbolTable.size() << endl;
+                auto x = lookupSymbol(helper->valueToString());
+                bool hp = structInitializerCheck(x,child->children[1]);
+                if(hp)insertSymbol(varName,identifierNode);
+            }
             else {
                 cerr << "Error: " << (size == 2 ? "Type mismatch in initialization" : "Invalid declarator syntax") << " for '" << varName << "'\n";
             }
         }
+        
 }        }
     };
 
@@ -814,7 +887,7 @@ struct_type_specifier
     | KEYWORD_DOUBLE { $$ = $1; $$->type = NODE_TYPE_SPECIFIER; $$->storageClass = 13;}
     | KEYWORD_SIGNED { $$ = $1; $$->type = NODE_TYPE_SPECIFIER; }
     | KEYWORD_UNSIGNED { $$ = $1; $$->type = NODE_TYPE_SPECIFIER; }
-    | TYPE_NAME {$$ = $1; $$->type = NODE_TYPE_SPECIFIER;}
+    | TYPE_NAME {$$ = $1; $$->type = NODE_TYPE_SPECIFIER; }
 	;
 
 class_specifier
@@ -885,7 +958,10 @@ struct_or_union_specifier
             alphaSymbolTable[varName] = currentTable->symbolTable;
     } LBRACE struct_declaration_list RBRACE {
             $$ = createNode(NODE_STRUCT_OR_UNION_SPECIFIER,monostate(), $1, $2, $5);
+            $2->symbolTable = currentTable->symbolTable;
+            cout << *$2 << endl;
             exitScope();
+
     };
 
 struct_or_union
