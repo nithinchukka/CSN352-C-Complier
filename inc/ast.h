@@ -105,10 +105,11 @@ public:
     bool isStatic = false;
     bool isVolatile = false;
     bool isUnsigned = false;
-    int typeSpecifier = -1; //"char", "short", "int", "long", "bool", "float", "double", "string", "nullptr"
+    int typeSpecifier = -1; //"char", "short", "int", "long", "float", "double", "string", "nullptr", object
     int storageClass = -1;  // -1: none, 0: extern, 1: static, 2: auto, 3: register
     int paramCount = 0;
     int pointerLevel = 0;
+    bool isLValue = false; // true if the node is an lvalue
     vector<int> paramTypes;
     vector<int> dimensions;
     vector<pair<string, TreeNode*>> symbolTable;

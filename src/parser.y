@@ -101,7 +101,7 @@ DeclaratorInfo isValidVariableDeclaration(vector<TreeNode*>& nodes, bool isFunct
             if (classOrStructOrUnion.count(val)) {
                 if (declInfo.typeSpecifier != -1) return {};
                 declInfo.typeCategory = 4;
-                declInfo.typeSpecifier = 8;
+                declInfo.typeSpecifier = 20;
                 declInfo.isCustomType = true;
                 typeSpecifierCount++;
             }
@@ -467,62 +467,99 @@ int inLoop = 0;
 %%
 
 primary_expression
-	: ID { $$ = $1; $$ = lookupSymbol($$->valueToString());}
-	| INTEGER { $$ = $1;$$->typeSpecifier=3;}
-    | FLOAT { $$ = $1;$$->typeSpecifier=6;}
-	| STRING { $$ = $1; $$->typeSpecifier=8;}
-	| CHAR { $$ = $1;$$->typeSpecifier=0; }
-	| BOOLEAN_LITERAL {$$ = $1;$$->typeSpecifier=5; } 
-    | KEYWORD_NULLPTR {$$ = $1; $$->typeSpecifier=9;}
-    | KEYWORD_THIS {$$ = $1; }
-	| LPAREN expression RPAREN { $$ = $2; }
+	: ID { 
+        $$ = $1; 
+        $$ = lookupSymbol($$->valueToString()); 
+        $$->isLValue = true;
+    }
+	| INTEGER { 
+        $$ = $1; 
+        $$->typeSpecifier = 3; 
+        $$->isLValue = false;
+    }
+    | FLOAT { 
+        $$ = $1; 
+        $$->typeSpecifier = 6; 
+        $$->isLValue = false; 
+    }
+	| STRING { 
+        $$ = $1; 
+        $$->typeSpecifier = 8; 
+        $$->isLValue = false; 
+    }
+	| CHAR { 
+        $$ = $1; 
+        $$->typeSpecifier = 0; 
+        $$->isLValue = false; 
+    }
+	| BOOLEAN_LITERAL { 
+        $$ = $1; 
+        $$->typeSpecifier = 5; 
+        $$->isLValue = false; 
+    } 
+    | KEYWORD_NULLPTR { 
+        $$ = $1; 
+        $$->typeSpecifier = 9; 
+        $$->isLValue = false; 
+    }
+    | KEYWORD_THIS { 
+        $$ = $1; 
+        $$->isLValue = false;
+    }
+	| LPAREN expression RPAREN { 
+        $$ = $2; 
+    }
 	;
 
 postfix_expression
-	: primary_expression { $$ = $1; }
+	: primary_expression { 
+        $$ = $1; 
+    }
 	| postfix_expression LBRACKET expression RBRACKET { 
         $$ = createNode(NODE_POSTFIX_EXPRESSION, monostate(), $1, $3);
-        if($3->typeSpecifier != 3){
+        if ($3->typeSpecifier != 3) {
             cerr << "Error: array index must be an integer" << endl;
-        }else if($1->typeCategory == 2){
+        } else if ($1->typeCategory == 2) {
             $$->typeSpecifier = $1->typeSpecifier;
-        }else if($1->typeCategory == 1){
+            $$->isLValue = true; 
+        } else if ($1->typeCategory == 1) {
             // TODO
-        }else{
+        } else {
             cerr << $1->valueToString() << " is not an array" << endl;
         }
-      }
-	| postfix_expression LPAREN RPAREN {
-        $$ = $1; /*function call with no params */
-        if($$->paramCount > 0){
+    }
+	| postfix_expression LPAREN RPAREN { 
+        $$ = $1; /* function call with no params */
+        if ($$->paramCount > 0) {
             cerr << "Error: function call with no params, expected " << $$->paramCount << endl;
         }
-      }
+        $$->isLValue = false; 
+    }
 	| postfix_expression LPAREN argument_expression_list RPAREN { /* function call with params */
         $$ = createNode(NODE_POSTFIX_EXPRESSION, monostate(), $1, $3); 
         $$->typeSpecifier = $1->typeSpecifier;
-        if($1->typeCategory == 3){
-            if($1->paramCount == $3->children.size()){
-                for(int i = 0; i < $1->paramCount; i++){
-                    if(!isTypeCompatible($1->paramTypes[i], $3->children[i]->typeSpecifier, "=")){
+        $$->isLValue = false; 
+        if ($1->typeCategory == 3) {
+            if ($1->paramCount == $3->children.size()) {
+                for (int i = 0; i < $1->paramCount; i++) {
+                    if (!isTypeCompatible($1->paramTypes[i], $3->children[i]->typeSpecifier, "=")) {
                         cerr << "Expected: " << $1->paramTypes[i] << ", Got: " << $3->children[i]->typeSpecifier << endl;
                         break;
                     }
                 }
-            }
-            else{
+            } else {
                 cerr << "Error: function call with " << $3->children.size() << " params, expected " << $1->paramCount << endl;
             }
         } 
-      }
+    }
 	| postfix_expression DOT_OPERATOR ID { /* Member Access */
         $$ = createNode(NODE_POSTFIX_EXPRESSION, $2, $1, $3);
-        if($1->typeSpecifier == 8){
+        if ($1->typeSpecifier == 20) {
             TreeNode* member = lookupSymbol($1->valueToString());
-            if(member != nullptr){
+            if (member != nullptr) {
                 bool found = false;
-                for(auto entry : member->symbolTable){
-                    if(entry.first == $3->valueToString()){
+                for (auto entry : member->symbolTable) {
+                    if (entry.first == $3->valueToString()) {
                         found = true;
                         $$->typeSpecifier = entry.second->typeSpecifier;
                         $$->typeCategory = entry.second->typeCategory;
@@ -532,35 +569,50 @@ postfix_expression
                         $$->isStatic = entry.second->isStatic;
                         $$->isVolatile = entry.second->isVolatile;
                         $$->isUnsigned = entry.second->isUnsigned;
+                        $$->isLValue = true;
                         break;
                     }
                 }
-                if(!found){
+                if (!found) {
                     cerr << "Error: member " << $3->valueToString() << " not found in object " << $1->valueToString() << endl;
                 }
             }
-        }else{
-            cerr << "Error: We can use member access only for classes , structs and unions" << endl;
+        } else {
+            cerr << "Error: We can use member access only for classes, structs, and unions" << endl;
         }
-      }
-	| postfix_expression POINTER_TO_MEMBER_ARROW_OPERATOR ID { $$ = createNode(NODE_POSTFIX_EXPRESSION, $2, $1, $3); }
-    | postfix_expression POINTER_TO_MEMBER_DOT_OPERATOR ID { $$ = createNode(NODE_POSTFIX_EXPRESSION, $2, $1, $3); }
+    }
+	| postfix_expression POINTER_TO_MEMBER_ARROW_OPERATOR ID { 
+        $$ = createNode(NODE_POSTFIX_EXPRESSION, $2, $1, $3);
+        $$->isLValue = true; 
+    }
+    | postfix_expression POINTER_TO_MEMBER_DOT_OPERATOR ID { 
+        $$ = createNode(NODE_POSTFIX_EXPRESSION, $2, $1, $3);
+        $$->isLValue = true; 
+    }
 	| postfix_expression INCREMENT_OPERATOR { 
+        if (!$1->isLValue) {  
+            cerr << "Error: Cannot post-increment an R-value at line " << yylineno << endl;
+        }
         $$ = $1;
-        $$->type=NODE_POSTFIX_EXPRESSION;
+        $$->type = NODE_POSTFIX_EXPRESSION;
         int typeSpec = $1->typeSpecifier;
-        if(typeSpec == 5 || typeSpec > 7){
+        if (typeSpec == 5 || typeSpec > 7) {
             cerr << "Error: invalid type for increment operator" << endl;
         }
-      }
-	| postfix_expression DECREMENT_OPERATOR { 
-        $$ = $1;
-        $$->type=NODE_POSTFIX_EXPRESSION;
-        int typeSpec = $1->typeSpecifier;
-        if(typeSpec == 5 || typeSpec > 7){
-            cerr << "Error: invalid type for increment operator" << endl;
+        $$->isLValue = false; 
+    }
+	| postfix_expression DECREMENT_OPERATOR {
+        if (!$1->isLValue) {
+            cerr << "Error: Cannot post-decrement an R-value at line " << yylineno << endl;
         } 
-      }
+        $$ = $1;
+        $$->type = NODE_POSTFIX_EXPRESSION;
+        int typeSpec = $1->typeSpecifier;
+        if (typeSpec == 5 || typeSpec > 7) {
+            cerr << "Error: invalid type for decrement operator" << endl;
+        }
+        $$->isLValue = false;
+    }
 	;
 
 argument_expression_list
@@ -575,31 +627,63 @@ argument_expression_list
     ;
 
 unary_expression
-	: postfix_expression { $$ = $1; $$->type=NODE_UNARY_EXPRESSION;}
-	| INCREMENT_OPERATOR unary_expression { 
+	: postfix_expression { 
+        $$ = $1; 
+        $$->type = NODE_UNARY_EXPRESSION;
+        $$->isLValue = $1->isLValue; 
+    }
+	| INCREMENT_OPERATOR unary_expression {
+        if (!$2->isLValue) {  
+            cerr << "Error: Cannot pre-increment an R-value at line " << yylineno << endl;
+        } 
         $$ = $2;
         int typeSpec = $2->typeSpecifier;
-        if(typeSpec == 5 || typeSpec > 7){
+        if (typeSpec == 5 || typeSpec > 7) {
             cerr << "Error: invalid type for increment operator" << endl;
         }
-      }
+        $$->isLValue = true; 
+    }
 	| DECREMENT_OPERATOR unary_expression {
+        if (!$2->isLValue) {
+            cerr << "Error: Cannot pre-decrement an R-value at line " << yylineno << endl;
+        }
         $$ = $2;
         int typeSpec = $2->typeSpecifier;
-        if(typeSpec == 5 || typeSpec > 7){
-            cerr << "Error: invalid type for increment operator" << endl;
+        if (typeSpec == 5 || typeSpec > 7) {
+            cerr << "Error: invalid type for decrement operator" << endl;
         }
+        $$->isLValue = true; 
     }
 	| unary_operator cast_expression { 
         $$ = createNode(NODE_UNARY_EXPRESSION, monostate(), $1, $2);
-      }
-	| KEYWORD_SIZEOF unary_expression { $$ = createNode(NODE_UNARY_EXPRESSION, monostate(),$1, $2); }
-	| KEYWORD_SIZEOF LPAREN type_name RPAREN { $$ = createNode(NODE_UNARY_EXPRESSION, monostate(), $1, $3);}
-	| KEYWORD_NEW LPAREN type_name RPAREN { $$ = createNode(NODE_UNARY_EXPRESSION, monostate(), $3); }
-	| KEYWORD_NEW LPAREN type_name RPAREN LBRACKET expression RBRACKET { $$ = createNode(NODE_UNARY_EXPRESSION, monostate(), $3, $6); }
-	| KEYWORD_DELETE cast_expression
-	| KEYWORD_DELETE LBRACKET RBRACKET cast_expression 
+        $$->isLValue = false;
+    }
+	| KEYWORD_SIZEOF unary_expression { 
+        $$ = createNode(NODE_UNARY_EXPRESSION, monostate(), $1, $2);
+        $$->isLValue = false; 
+    }
+	| KEYWORD_SIZEOF LPAREN type_name RPAREN { 
+        $$ = createNode(NODE_UNARY_EXPRESSION, monostate(), $1, $3);
+        $$->isLValue = false;
+    }
+	| KEYWORD_NEW LPAREN type_name RPAREN { 
+        $$ = createNode(NODE_UNARY_EXPRESSION, monostate(), $3);
+        $$->isLValue = false;
+    }
+	| KEYWORD_NEW LPAREN type_name RPAREN LBRACKET expression RBRACKET { 
+        $$ = createNode(NODE_UNARY_EXPRESSION, monostate(), $3, $6);
+        $$->isLValue = false;
+    }
+	| KEYWORD_DELETE cast_expression { 
+        $$ = createNode(NODE_UNARY_EXPRESSION, monostate(), $1, $2);
+        $$->isLValue = false;
+    }
+	| KEYWORD_DELETE LBRACKET RBRACKET cast_expression { 
+        $$ = createNode(NODE_UNARY_EXPRESSION, monostate(), $1, $4);
+        $$->isLValue = false;
+    }
 	;
+
 
 
 unary_operator
@@ -617,172 +701,245 @@ cast_expression
 	;
 
 multiplicative_expression
-	: cast_expression { $$ = $1; }
+	: cast_expression { 
+        $$ = $1; 
+        $$->isLValue = false;
+    }
 	| multiplicative_expression MULTIPLY_OPERATOR cast_expression { 
         $$ = createNode(NODE_MULTIPLICATIVE_EXPRESSION, $2, $1, $3);
+        $$->isLValue = false; 
         if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "*")) {
             $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
         } else {
-            cerr << "Incompatible Type: " << $1->typeSpecifier << " and " << $3->typeSpecifier << " at line " << yylineno << endl;
+            cerr << "Incompatible Type: " << $1->typeSpecifier << " and " << $3->typeSpecifier 
+                 << " at line " << yylineno << endl;
         }
     }
 	| multiplicative_expression DIVIDE_OPERATOR cast_expression { 
         $$ = createNode(NODE_MULTIPLICATIVE_EXPRESSION, $2, $1, $3);
+        $$->isLValue = false; 
         if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "/")) {
             $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
         } else {
-            cerr << "Incompatible Type: " << $1->typeSpecifier << " and " << $3->typeSpecifier << " at line " << yylineno << endl;
-        } }
+            cerr << "Incompatible Type: " << $1->typeSpecifier << " and " << $3->typeSpecifier 
+                 << " at line " << yylineno << endl;
+        }
+    }
 	| multiplicative_expression MODULO_OPERATOR cast_expression { 
         $$ = createNode(NODE_MULTIPLICATIVE_EXPRESSION, $2, $1, $3);
-        if (($1->typeSpecifier==3 || $1->typeSpecifier==4)&&($3->typeSpecifier==3 || $3->typeSpecifier==4)&&isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "%")) {
+        $$->isLValue = false; 
+        if (($1->typeSpecifier == 3 || $1->typeSpecifier == 4) && 
+            ($3->typeSpecifier == 3 || $3->typeSpecifier == 4) && 
+            isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "%")) {
             $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
         } else {
-            cerr << "Incompatible Type: " << $1->typeSpecifier << " and " << $3->typeSpecifier << " at line " << yylineno << endl;
-        }}
-	;
-
-additive_expression
-	: multiplicative_expression { $$ = $1; }
-	| additive_expression PLUS_OPERATOR multiplicative_expression {
-        $$ = createNode(NODE_MULTIPLICATIVE_EXPRESSION, $2, $1, $3);
-        if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "+")) {
-            $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
-        } else {
-            cerr << "Incompatible Type: " << $1->typeSpecifier << " and " << $3->typeSpecifier << " at line " << yylineno << endl;
-        } }
-	| additive_expression MINUS_OPERATOR multiplicative_expression { 
-        $$ = createNode(NODE_MULTIPLICATIVE_EXPRESSION, $2, $1, $3);
-        if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "-")) {
-            $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
-        } else {
-            cerr << "Incompatible Type: " << $1->typeSpecifier << " and " << $3->typeSpecifier << " at line " << yylineno << endl;
-        } }
-	;
-
-shift_expression
-	: additive_expression { $$ = $1; }
-	| shift_expression LEFT_SHIFT_OPERATOR additive_expression { 
-        $$ = createNode(NODE_MULTIPLICATIVE_EXPRESSION, $2, $1, $3);
-        if (($1->typeSpecifier==3 || $1->typeSpecifier==4)&&($3->typeSpecifier==3 || $3->typeSpecifier==4)&&isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "<<")) {
-            $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
-        } else {
-            cerr << "Incompatible Type: " << $1->typeSpecifier << " and " << $3->typeSpecifier << " at line " << yylineno << endl;
-        }}
-	| shift_expression RIGHT_SHIFT_OPERATOR additive_expression {
-         $$ = createNode(NODE_MULTIPLICATIVE_EXPRESSION, $2, $1, $3);
-        if (($1->typeSpecifier==3 || $1->typeSpecifier==4)&&($3->typeSpecifier==3 || $3->typeSpecifier==4)&&isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, ">>")) {
-            $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
-        } else {
-            cerr << "Incompatible Type: " << $1->typeSpecifier << " and " << $3->typeSpecifier << " at line " << yylineno << endl;
+            cerr << "Incompatible Type: " << $1->typeSpecifier << " and " << $3->typeSpecifier 
+                 << " at line " << yylineno << endl;
         }
     }
 	;
 
+additive_expression
+	: multiplicative_expression { 
+        $$ = $1; 
+    }
+	| additive_expression PLUS_OPERATOR multiplicative_expression {
+        $$ = createNode(NODE_MULTIPLICATIVE_EXPRESSION, $2, $1, $3);
+        $$->isLValue = false; 
+        if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "+")) {
+            $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
+        } else {
+            cerr << "Incompatible Type: " << $1->typeSpecifier << " and " 
+                 << $3->typeSpecifier << " at line " << yylineno << endl;
+        } 
+    }
+	| additive_expression MINUS_OPERATOR multiplicative_expression { 
+        $$ = createNode(NODE_MULTIPLICATIVE_EXPRESSION, $2, $1, $3);
+        $$->isLValue = false;
+        if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "-")) {
+            $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
+        } else {
+            cerr << "Incompatible Type: " << $1->typeSpecifier << " and " 
+                 << $3->typeSpecifier << " at line " << yylineno << endl;
+        } 
+    }
+	;
+
+shift_expression
+	: additive_expression { 
+        $$ = $1; 
+    }
+	| shift_expression LEFT_SHIFT_OPERATOR additive_expression { 
+        $$ = createNode(NODE_MULTIPLICATIVE_EXPRESSION, $2, $1, $3);
+        $$->isLValue = false; 
+        if (($1->typeSpecifier == 3 || $1->typeSpecifier == 4) && 
+            ($3->typeSpecifier == 3 || $3->typeSpecifier == 4) && 
+            isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "<<")) {
+            $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
+        } else {
+            cerr << "Incompatible Type: " << $1->typeSpecifier << " and " 
+                 << $3->typeSpecifier << " at line " << yylineno << endl;
+        }
+    }
+	| shift_expression RIGHT_SHIFT_OPERATOR additive_expression {
+        $$ = createNode(NODE_MULTIPLICATIVE_EXPRESSION, $2, $1, $3);
+        $$->isLValue = false;
+        if (($1->typeSpecifier == 3 || $1->typeSpecifier == 4) && 
+            ($3->typeSpecifier == 3 || $3->typeSpecifier == 4) && 
+            isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, ">>")) {
+            $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
+        } else {
+            cerr << "Incompatible Type: " << $1->typeSpecifier << " and " 
+                 << $3->typeSpecifier << " at line " << yylineno << endl;
+        }
+    }
+	;
+    
 relational_expression
 	: shift_expression { $$ = $1; }
 	| relational_expression LESS_THAN_OPERATOR shift_expression {
-        $$ = createNode(NODE_MULTIPLICATIVE_EXPRESSION, $2, $1, $3);
+        $$ = createNode(NODE_RELATIONAL_EXPRESSION, $2, $1, $3);
+        $$->isLValue = false; 
         if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "<")) {
-            $$->typeSpecifier = 3;
+            $$->typeSpecifier = 3; 
         } else {
-            cerr << "Incompatible Type: " << $1->typeSpecifier << " and " << $3->typeSpecifier << " at line " << yylineno << endl;
-        } }
+            cerr << "Incompatible Type: " << $1->typeSpecifier << " and " 
+                 << $3->typeSpecifier << " at line " << yylineno << endl;
+        } 
+    }
 	| relational_expression GREATER_THAN_OPERATOR shift_expression { 
-        $$ = createNode(NODE_MULTIPLICATIVE_EXPRESSION, $2, $1, $3);
+        $$ = createNode(NODE_RELATIONAL_EXPRESSION, $2, $1, $3);
+        $$->isLValue = false;
         if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, ">")) {
             $$->typeSpecifier = 3;
         } else {
-            cerr << "Incompatible Type: " << $1->typeSpecifier << " and " << $3->typeSpecifier << " at line " << yylineno << endl;
-        } }
+            cerr << "Incompatible Type: " << $1->typeSpecifier << " and " 
+                 << $3->typeSpecifier << " at line " << yylineno << endl;
+        } 
+    }
 	| relational_expression LESS_THAN_OR_EQUAL_OPERATOR shift_expression {
-        $$ = createNode(NODE_MULTIPLICATIVE_EXPRESSION, $2, $1, $3);
+        $$ = createNode(NODE_RELATIONAL_EXPRESSION, $2, $1, $3);
+        $$->isLValue = false;
         if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "<=")) {
             $$->typeSpecifier = 3;
         } else {
-            cerr << "Incompatible Type: " << $1->typeSpecifier << " and " << $3->typeSpecifier << " at line " << yylineno << endl;
-        }}
+            cerr << "Incompatible Type: " << $1->typeSpecifier << " and " 
+                 << $3->typeSpecifier << " at line " << yylineno << endl;
+        }
+    }
 	| relational_expression GREATER_THAN_OR_EQUAL_OPERATOR shift_expression { 
-        $$ = createNode(NODE_MULTIPLICATIVE_EXPRESSION, $2, $1, $3);
+        $$ = createNode(NODE_RELATIONAL_EXPRESSION, $2, $1, $3);
+        $$->isLValue = false;
         if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, ">=")) {
             $$->typeSpecifier = 3;
         } else {
-            cerr << "Incompatible Type: " << $1->typeSpecifier << " and " << $3->typeSpecifier << " at line " << yylineno << endl;
-        } }
+            cerr << "Incompatible Type: " << $1->typeSpecifier << " and " 
+                 << $3->typeSpecifier << " at line " << yylineno << endl;
+        } 
+    }
 	;
 
 equality_expression
 	: relational_expression { $$ = $1; }
 	| equality_expression EQUALS_COMPARISON_OPERATOR relational_expression { 
         $$ = createNode(NODE_EQUALITY_EXPRESSION, $2, $1, $3);
+        $$->isLValue = false;
         if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "==")) {
             $$->typeSpecifier = 3;
         } else {
-            cerr << "Incompatible Type: " << $1->typeSpecifier << " and " << $3->typeSpecifier << " at line " << yylineno << endl;
-        } }
+            cerr << "Incompatible Type: " << $1->typeSpecifier << " and " 
+                 << $3->typeSpecifier << " at line " << yylineno << endl;
+        } 
+    }
 	| equality_expression NOT_EQUALS_OPERATOR relational_expression { 
         $$ = createNode(NODE_EQUALITY_EXPRESSION, $2, $1, $3);
+        $$->isLValue = false;
         if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "!=")) {
             $$->typeSpecifier = 3;
         } else {
-            cerr << "Incompatible Type: " << $1->typeSpecifier << " and " << $3->typeSpecifier << " at line " << yylineno << endl;
-        }}
+            cerr << "Incompatible Type: " << $1->typeSpecifier << " and " 
+                 << $3->typeSpecifier << " at line " << yylineno << endl;
+        }
+    }
 	;
+
 
 and_expression
 	: equality_expression { $$ = $1; }
 	| and_expression BITWISE_AND_OPERATOR equality_expression { 
         $$ = createNode(NODE_AND_EXPRESSION, $2, $1, $3); 
-        if (($1->typeSpecifier==3 || $1->typeSpecifier==4)&&($3->typeSpecifier==3 || $3->typeSpecifier==4)&&isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "&")) {
+        $$->isLValue = false;
+        if (($1->typeSpecifier == 3 || $1->typeSpecifier == 4) &&
+            ($3->typeSpecifier == 3 || $3->typeSpecifier == 4) &&
+            isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "&")) {
             $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
         } else {
-            cerr << "Incompatible Type: " << $1->typeSpecifier << " and " << $3->typeSpecifier << " at line " << yylineno << endl;
-        }}
+            cerr << "Incompatible Type: " << $1->typeSpecifier << " and " 
+                 << $3->typeSpecifier << " at line " << yylineno << endl;
+        }
+    }
 	;
 
 exclusive_or_expression
 	: and_expression { $$ = $1; }
 	| exclusive_or_expression BITWISE_XOR_OPERATOR and_expression { 
-        $$ = createNode(NODE_EXCLUSIVE_OR_EXPRESSION, $2, $1, $3); 
-        if (($1->typeSpecifier==3 || $1->typeSpecifier==4)&&($3->typeSpecifier==3 || $3->typeSpecifier==4)&&isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "^")) {
+        $$ = createNode(NODE_EXCLUSIVE_OR_EXPRESSION, $2, $1, $3);
+        $$->isLValue = false;
+        if (($1->typeSpecifier == 3 || $1->typeSpecifier == 4) &&
+            ($3->typeSpecifier == 3 || $3->typeSpecifier == 4) &&
+            isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "^")) {
             $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
         } else {
-            cerr << "Incompatible Type: " << $1->typeSpecifier << " and " << $3->typeSpecifier << " at line " << yylineno << endl;
-        }}
+            cerr << "Incompatible Type: " << $1->typeSpecifier << " and " 
+                 << $3->typeSpecifier << " at line " << yylineno << endl;
+        }
+    }
 	;
 
 inclusive_or_expression
 	: exclusive_or_expression { $$ = $1; }
 	| inclusive_or_expression BITWISE_OR_OPERATOR exclusive_or_expression {
-         $$ = createNode(NODE_INCLUSIVE_OR_EXPRESSION, $2, $1, $3);
-         if (($1->typeSpecifier==3 || $1->typeSpecifier==4)&&($3->typeSpecifier==3 || $3->typeSpecifier==4)&&isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "|")) {
+        $$ = createNode(NODE_INCLUSIVE_OR_EXPRESSION, $2, $1, $3);
+        $$->isLValue = false;
+        if (($1->typeSpecifier == 3 || $1->typeSpecifier == 4) &&
+            ($3->typeSpecifier == 3 || $3->typeSpecifier == 4) &&
+            isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "|")) {
             $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
         } else {
-            cerr << "Incompatible Type: " << $1->typeSpecifier << " and " << $3->typeSpecifier << " at line " << yylineno << endl;
-        }}
+            cerr << "Incompatible Type: " << $1->typeSpecifier << " and " 
+                 << $3->typeSpecifier << " at line " << yylineno << endl;
+        }
+    }
 	;
 
 logical_and_expression
 	: inclusive_or_expression { $$ = $1; }
 	| logical_and_expression LOGICAL_AND_OPERATOR inclusive_or_expression { 
         $$ = createNode(NODE_LOGICAL_AND_EXPRESSION, $2, $1, $3); 
-        if (($1->typeSpecifier==3 || $1->typeSpecifier==4)&&($3->typeSpecifier==3 || $3->typeSpecifier==4)&&isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "&&")) {
-            $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
+        $$->isLValue = false;
+        if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "&&")) {
+            $$->typeSpecifier = 3; 
         } else {
-            cerr << "Incompatible Type: " << $1->typeSpecifier << " and " << $3->typeSpecifier << " at line " << yylineno << endl;
-        }}
+            cerr << "Incompatible Type: " << $1->typeSpecifier << " and " 
+                 << $3->typeSpecifier << " at line " << yylineno << endl;
+        }
+    }
 	;
 
 logical_or_expression
 	: logical_and_expression { $$ = $1; }
 	| logical_or_expression LOGICAL_OR_OPERATOR logical_and_expression { 
         $$ = createNode(NODE_LOGICAL_OR_EXPRESSION, $2, $1, $3); 
-        if (($1->typeSpecifier==3 || $1->typeSpecifier==4)&&($3->typeSpecifier==3 || $3->typeSpecifier==4)&&isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "||")) {
-            $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
+        $$->isLValue = false;
+        if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "||")) {
+            $$->typeSpecifier = 3;
         } else {
-            cerr << "Incompatible Type: " << $1->typeSpecifier << " and " << $3->typeSpecifier << " at line " << yylineno << endl;
-        }}
+            cerr << "Incompatible Type: " << $1->typeSpecifier << " and " 
+                 << $3->typeSpecifier << " at line " << yylineno << endl;
+        }
+    }
 	;
+
 
 conditional_expression
     : logical_or_expression { 
@@ -790,16 +947,20 @@ conditional_expression
     }
     | logical_or_expression TERNARY_OPERATOR expression COLON conditional_expression { 
         $$ = createNode(NODE_CONDITIONAL_EXPRESSION, "?:", $1, $3, $5);
+        $$->isLValue = false;
+        
         if ($1->typeSpecifier < 0 || $1->typeSpecifier > 7) {
-            cerr << "Ternary operator condition must be boolean, got type " << $1->typeSpecifier 
-                 << " at line " << yylineno << endl;
+            cerr << "Ternary operator condition must be boolean, got type " 
+                 << $1->typeSpecifier << " at line " << yylineno << endl;
         }
-        // Check if then ($3) and else ($5) expressions are type compatible
+        
+        // Ensure then ($3) and else ($5) expressions are type-compatible
         if (isTypeCompatible($3->typeSpecifier, $5->typeSpecifier, "?:")) {
             $$->typeSpecifier = max($3->typeSpecifier, $5->typeSpecifier);
         } else {
-            cerr << "Incompatible types in ternary operator: " << $3->typeSpecifier 
-                 << " and " << $5->typeSpecifier << " at line " << yylineno << endl;
+            cerr << "Incompatible types in ternary operator: " 
+                 << $3->typeSpecifier << " and " << $5->typeSpecifier 
+                 << " at line " << yylineno << endl;
         }
     }
     ;
@@ -810,29 +971,37 @@ assignment_expression
     }
     | unary_expression assignment_operator assignment_expression { 
         $$ = createNode(NODE_ASSIGNMENT_EXPRESSION, $2->value, $1, $3);
-        if ($1->isConst){
+
+        if (!$1->isLValue) {
+            cerr << "Left operand of assignment must be an L-value at line " 
+                 << yylineno << endl;
+        }
+        
+        if ($1->isConst) {
             cerr << "Left operand of assignment is constant at line " 
                  << yylineno << endl;
         }
-        // Type checking based on assignment operator
+
         string op = $2->valueToString();
         if (op == "=") {
             if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, op)) {
                 $$->typeSpecifier = $1->typeSpecifier;
             } else {
-                cerr << "Incompatible types in assignment: " << $1->typeSpecifier 
-                     << " and " << $3->typeSpecifier << " at line " << yylineno << endl;
+                cerr << "Incompatible types in assignment: " 
+                     << $1->typeSpecifier << " and " << $3->typeSpecifier 
+                     << " at line " << yylineno << endl;
             }
         } else { // Compound assignment operators (+=, -=, *=, etc.)
-            if ($1->typeSpecifier < 0 || $1->typeSpecifier > 6) { // Must be numeric type
+            if ($1->typeSpecifier < 0 || $1->typeSpecifier > 6) { // Must be numeric
                 cerr << "Compound assignment requires numeric type, got " 
                      << $1->typeSpecifier << " at line " << yylineno << endl;
             }
             if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, op)) {
                 $$->typeSpecifier = $1->typeSpecifier;
             } else {
-                cerr << "Incompatible types in compound assignment: " << $1->typeSpecifier 
-                     << " and " << $3->typeSpecifier << " at line " << yylineno << endl;
+                cerr << "Incompatible types in compound assignment: " 
+                     << $1->typeSpecifier << " and " << $3->typeSpecifier 
+                     << " at line " << yylineno << endl;
             }
         }
     }
@@ -881,7 +1050,6 @@ declaration
             }
         if(declInfo.typeCategory == 4)
             helper = lookupSymbol(helper->valueToString());
-        
     for (auto child : $2->children)
     {
         if (child->type != NODE_DECLARATOR) continue;
@@ -998,13 +1166,15 @@ declaration
                 setNodeAttributes(identifierNode, 0);
                 insertSymbol(varName, identifierNode);
             }
+            else if(size == 2 && declInfo.typeSpecifier == 20){
+                if(structInitializerCheck(helper,child->children[1])){
+                    insertSymbol(varName,identifierNode);
+                    setNodeAttributes(identifierNode, 0);
+                }
+            }
             else if (size == 2 && isTypeCompatible(declInfo.typeSpecifier, child->children[1]->typeSpecifier, "=")) {
                 setNodeAttributes(identifierNode, 0);
                 insertSymbol(varName, identifierNode);
-            }
-            else if(size == 2 && declInfo.typeSpecifier == 8){
-                bool hp = structInitializerCheck(helper,child->children[1]);
-                if(hp)insertSymbol(varName,identifierNode);
             }
             else {
                 cerr << "Error: " << (size == 2 ? "Type mismatch in initialization" : "Invalid declarator syntax") << " for '" << varName << "'\n";
@@ -1151,10 +1321,10 @@ struct_or_union_specifier
             };
             if(!checkDuplicate(varName)){
                 insertSymbol(varName, $2);
+                $2->typeCategory = 4;
+                $2->typeSpecifier = 20;
             }
-            $2->typeCategory = 4;
             enterScope();
-            alphaSymbolTable[varName] = currentTable->symbolTable;
     } LBRACE struct_declaration_list RBRACE {
             $$ = createNode(NODE_STRUCT_OR_UNION_SPECIFIER,monostate(), $1, $2, $5);
             $2->symbolTable = currentTable->symbolTable;
