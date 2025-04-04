@@ -17,7 +17,7 @@
 struct DeclaratorInfo {
     int typeCategory = -1; // var = 0, func = 1, struct = 2, enum = 3, class = 4
     int storageClass = -1; // -1: none, 0: extern, 1: static, 2: auto, 3: register
-    int typeSpecifier = -1; // -1: none, 0: void, 1: char, 2: short, 3: int, 4: bool, 5: long, 6: float, 7: double
+    int typeSpecifier = -1; // -1: none, void : -1: char : 1, short : 2, 3: int, 4: bool, 5: long, 6: float, 7: double
     bool isConst = false;
     bool isStatic = false;
     bool isVolatile = false;
@@ -26,6 +26,13 @@ struct DeclaratorInfo {
     bool isValid = false;
     bool isCustomType = false; // true if it's a class, struct, or union
 };
+
+bool isValidCast(int toType, int fromType) {
+    if (toType >= 1 && toType <= 6 && fromType >= 1 && fromType <= 6)
+        return true;
+    return false;
+}
+
 
 
 bool checkFormatSpecifiers(string formatString, vector<int> argTypeList) {
@@ -51,7 +58,7 @@ bool checkFormatSpecifiers(string formatString, vector<int> argTypeList) {
                 case 'd': expectedType1 = 2, expectedType2 = 3; break;  // int or long
                 case 'f': expectedType1 = 5, expectedType2 = 6; break;  // float or double
                 case 's': expectedType1 = 8; break;  // string
-                case 'c': expectedType1 = 0; break;  // char
+                case 'c': expectedType1 = 1; break;  // char
                 default: 
                     cerr << "Error: Unknown format specifier '%" << *ptr << "'\n";
                     return false;
@@ -80,7 +87,7 @@ DeclaratorInfo isValidVariableDeclaration(vector<TreeNode*>& nodes, bool isFunct
         {"extern", 0}, {"static", 1}, {"auto", 2}, {"register", 3}
     };
     unordered_map<string, int> baseTypes = {
-        {"void", 0}, {"char", 1}, {"short", 2}, {"int", 3}, {"bool", 4}, {"long", 5}, {"float", 6}, {"double", 7}
+        {"void", 0}, {"char", 1}, {"short", 2}, {"int", 3}, {"long", 5}, {"float", 6}, {"double", 7}
     };
     unordered_set<string> typeModifiers = {"signed", "unsigned"};
     unordered_set<string> qualifiers = {"const", "volatile"};
@@ -148,7 +155,7 @@ bool isTypeCompatible(int lhstype, int rhstype, string op, bool lhsIsConst = fal
     bool lhsIsInteger = integerTypes.count(lhstype);
     bool rhsIsInteger = integerTypes.count(rhstype);
     // Validate type numbers (1-14 are valid)
-    if (lhstype < 1 || lhstype > 14 || rhstype < 1 || rhstype > 14) {
+    if (lhstype < 1 || rhstype < 1) {
         return false; // Invalid storage class
     }
     // Arithmetic operators
@@ -285,63 +292,64 @@ vector<int> findArrayDimensions(TreeNode* arr) {
 
 bool checkInvalidReturn(TreeNode* node, int returnType = -1) {
     if (!node) return false;
-    
+
     if (node->type == NODE_JUMP_STATEMENT) {
-        if (returnType == 0 && node->children.size() == 1 && node->children[0]->type == NODE_KEYWORD && node->children[0]->valueToString() == "return") {
-            return false;
-        }
+        if (node->children.size() >= 1 && node->children[0]->type == NODE_KEYWORD &&
+            node->children[0]->valueToString() == "return") {
+            
+            if (returnType == 0) {
+                if (node->children.size() > 1) {
+                    cout << "Error: Return statement with a value in a void function.\n";
+                    return true;
+                }
+                return false;
+            }
 
-        if (returnType != 0 && node->children.size() == 1 && node->children[0]->type == NODE_KEYWORD && node->children[0]->valueToString() == "return") {
-            cout << "Error: Return statement without an expression.\n";
-            return true;
-        }
+            if (returnType != 0) {
+                if (node->children.size() == 1) {
+                    cout << "Error: Return statement without an expression.\n";
+                    return true;
+                }
 
-        if (returnType != 0 && node->children.size() > 0) {
-            TreeNode* returnExpr = node->children[1];
-            if (!isTypeCompatible(returnType, returnExpr->typeSpecifier, "=")) {
-                cout << "Error: Type mismatch in return statement.\n";
-                return true;
+                TreeNode* returnExpr = node->children[1];
+                if (!isTypeCompatible(returnType, returnExpr->typeSpecifier, "=")) {
+                    cout << "Error: Type mismatch in return statement.\n";
+                    return true;
+                }
             }
         }
     }
-    
+
     for (TreeNode* child : node->children) {
         if (checkInvalidReturn(child, returnType)) return true;
     }
-    
+
     return false;
 }
 
+
 bool structInitializerCheck(TreeNode* identifierNode, TreeNode* initializerList) {
-    // Check if identifierNode has a symbol table for struct members
     if (identifierNode->symbolTable.empty()) {
         cerr << "Error: No struct definition found for type checking" << endl;
         return false;
     }
 
-    // Get the number of members in the struct definition
     size_t expectedSize = identifierNode->symbolTable.size();
-    
-    // Count actual initializers provided
     size_t actualSize = initializerList->children.size();
 
-    // Check if number of initializers matches struct members
     if (expectedSize != actualSize) {
         cerr << "Error: Struct initialization mismatch - expected " 
              << expectedSize << " values, got " << actualSize << endl;
         return false;
     }
 
-    // Check type compatibility using a for loop
     for (size_t i = 0; i < expectedSize; i++) {
         const auto& memberPair = identifierNode->symbolTable[i];
-        TreeNode* memberNode = memberPair.second;  // TreeNode* from symbol table
+        TreeNode* memberNode = memberPair.second;
         TreeNode* initNode = initializerList->children[i];
 
         int expectedType = memberNode->typeSpecifier;
         int actualType = initNode->typeSpecifier;
-
-        // General type compatibility check
 
         bool typesCompatible = isTypeCompatible(expectedType, actualType, "=");
         
@@ -353,7 +361,6 @@ bool structInitializerCheck(TreeNode* identifierNode, TreeNode* initializerList)
             return false;
         }
 
-        // Additional checks from symbol table
         if (memberNode->isConst) {
             cerr << "Error: Cannot initialize const member '" 
                  << memberPair.first << "' in struct" << endl;
@@ -379,6 +386,203 @@ vector<int> typeExtract(TreeNode* node){
 }
 
 int inLoop = 0;
+bool inFunc = false;
+
+
+void addDeclarators(TreeNode* specifier, TreeNode* list)
+{
+    DeclaratorInfo declInfo = isValidVariableDeclaration(specifier->children, false);
+    if (declInfo.isValid)
+    {
+        auto helper = specifier;
+        for (auto child : specifier->children)
+        {
+            if (child->type == NODE_TYPE_SPECIFIER)
+            {
+                helper = child;
+                break;
+            }
+        }
+        if (declInfo.typeCategory == 4)
+            helper = lookupSymbol(helper->valueToString());
+        for (auto child : list->children)
+        {
+            if (child->type != NODE_DECLARATOR)
+                continue;
+
+            TreeNode *firstChild = child->children[0];
+            string varName;
+            TreeNode *identifierNode = firstChild;
+            // Helper function to set common node attributes
+            auto setNodeAttributes = [&](TreeNode *node, int typeCategory, int pointerLevel = 0)
+            {
+                node->typeCategory = typeCategory;
+                node->pointerLevel = pointerLevel;
+                node->storageClass = declInfo.storageClass;
+                node->typeSpecifier = declInfo.typeSpecifier;
+                node->isConst = declInfo.isConst;
+                node->isStatic = declInfo.isStatic;
+                node->isVolatile = declInfo.isVolatile;
+                node->isUnsigned = declInfo.isUnsigned;
+                node->symbolTable = helper->symbolTable;
+            };
+            // Check for duplicate declaration
+            auto checkDuplicate = [&](const string &name)
+            {
+                for (const auto &entry : currentTable->symbolTable)
+                {
+                    if (entry.first == name)
+                    {
+                        cerr << "Error: Duplicate declaration of '" << name << "'\n";
+                        return true;
+                    }
+                }
+                return false;
+            };
+
+            if (firstChild->type == ARRAY) // Pointer-to-array (e.g., int (*arr)[3])
+            {
+                vector<int> dimensions = findArrayDimensions(firstChild);
+                while (identifierNode && identifierNode->type == ARRAY)
+                {
+                    if (identifierNode->children.empty())
+                        break;
+                    identifierNode = identifierNode->children[0];
+                }
+                varName = identifierNode->valueToString();
+                if (checkDuplicate(varName))
+                    continue;
+
+                int size = child->children.size();
+                if (size == 1 || size == 2)
+                {
+                    bool validDims = all_of(dimensions.begin(), dimensions.end(), [](int d)
+                                            { return d != -1; });
+                    if (!validDims)
+                    {
+                        cerr << "Invalid declaration dimension cannot be empty\n";
+                        continue;
+                    }
+                    if (size == 2 && !checkInitializerLevel(child->children[1], declInfo.typeSpecifier, dimensions, 0))
+                    {
+                        cout << "Error\n";
+                        continue;
+                    }
+                    setNodeAttributes(identifierNode, 2); // Array
+                    identifierNode->dimensions = dimensions;
+                    insertSymbol(varName, identifierNode);
+                }
+            }
+            else if (firstChild->type == NODE_POINTER) // Pointers, including array of pointers
+            {
+                int pointerDepth = 0;
+                while (identifierNode && identifierNode->type == NODE_POINTER)
+                {
+                    pointerDepth++;
+                    if (identifierNode->children.empty())
+                        break;
+                    identifierNode = identifierNode->children[0];
+                }
+                for (int i = 0; i < pointerDepth; i++)
+                {
+                    declInfo.typeSpecifier *= 10;
+                }
+                varName = identifierNode->valueToString();
+
+                if (identifierNode->type == ARRAY) // Array of pointers (e.g., int *arr[3])
+                {
+                    vector<int> dimensions = findArrayDimensions(identifierNode);
+                    varName = identifierNode->children[0]->valueToString();
+                    if (checkDuplicate(varName))
+                        continue;
+
+                    int size = child->children.size();
+                    if (size == 1 || size == 2)
+                    {
+                        bool validDims = all_of(dimensions.begin(), dimensions.end(), [](int d)
+                                                { return d != -1; });
+                        if (!validDims)
+                        {
+                            cerr << "Invalid declaration dimension cannot be empty\n";
+                            continue;
+                        }
+                        if (size == 2 && !checkInitializerLevel(child->children[1], declInfo.typeSpecifier, dimensions, pointerDepth))
+                        {
+                            cerr << "Error: Invalid initializer for array of pointers '" << varName << "'\n";
+                            continue;
+                        }
+                        setNodeAttributes(identifierNode, 2, pointerDepth);
+                        identifierNode->dimensions = dimensions;
+                        insertSymbol(varName, identifierNode);
+                    }
+                }
+                else // Regular pointer (e.g., int *p)
+                {
+                    if (checkDuplicate(varName))
+                        continue;
+                    int size = child->children.size();
+    
+                    cout << declInfo.typeSpecifier<< endl;
+                    cout << *child->children[1] << endl;
+                    cout << child->children[1]->typeSpecifier << endl;
+                    if(size == 1){
+                        setNodeAttributes(identifierNode, 1, pointerDepth);
+                        insertSymbol(varName, identifierNode);
+                    }
+                    else if(declInfo.typeSpecifier==30 && child->children[1]->typeCategory==2){
+                        setNodeAttributes(identifierNode, 1, pointerDepth);
+                        insertSymbol(varName, identifierNode);
+                    }
+                    else if (isTypeCompatible(declInfo.typeSpecifier, child->children[1]->typeSpecifier, "="))
+                    {
+                        setNodeAttributes(identifierNode, 1, pointerDepth);
+                        insertSymbol(varName, identifierNode);
+                    }
+                    else
+                    {
+                        cerr << "Error: Invalid pointer " << (size == 2 ? "initialization" : "declarator syntax") << " for '" << varName << "'\n";
+                    }
+                }
+            }
+            else // Regular variable (e.g., int x)
+            {
+                varName = firstChild->valueToString();
+                if (checkDuplicate(varName))
+                    continue;
+                int size = child->children.size();
+                if (size == 1)
+                {
+                    if (declInfo.isConst)
+                    {
+                        cerr << "Error: Const variable '" << varName << "' must be initialized\n";
+                        continue;
+                    }
+                    setNodeAttributes(identifierNode, 0);
+                    insertSymbol(varName, identifierNode);
+                }
+                else if (size == 2 && declInfo.typeSpecifier == 20)
+                {
+                    if (structInitializerCheck(helper, child->children[1]))
+                    {
+                        insertSymbol(varName, identifierNode);
+                        setNodeAttributes(identifierNode, 0);
+                    }
+                }
+                else if (size == 2 && isTypeCompatible(declInfo.typeSpecifier, child->children[1]->typeSpecifier, "="))
+                {
+                    setNodeAttributes(identifierNode, 0);
+                    insertSymbol(varName, identifierNode);
+                }
+                else
+                {
+                    cerr << "Error: " << (size == 2 ? "Type mismatch in initialization" : "Invalid declarator syntax") << " for '" << varName << "'\n";
+                }
+            }
+        }
+    }
+}
+stack<bool> inSwitch;
+
 %}
 
 
@@ -390,18 +594,18 @@ int inLoop = 0;
 
 /* Keywords */
 %token <node>
-    KEYWORD_AUTO KEYWORD_BOOL KEYWORD_BREAK KEYWORD_CASE KEYWORD_CATCH KEYWORD_CHAR 
+    KEYWORD_AUTO KEYWORD_BREAK KEYWORD_CASE KEYWORD_CHAR 
     KEYWORD_CLASS KEYWORD_CONST KEYWORD_CONTINUE KEYWORD_DEFAULT KEYWORD_DELETE KEYWORD_DO 
     KEYWORD_DOUBLE KEYWORD_ELSE KEYWORD_EXTERN KEYWORD_FLOAT 
     KEYWORD_FOR KEYWORD_GOTO KEYWORD_IF KEYWORD_INT 
     KEYWORD_LONG KEYWORD_NEW KEYWORD_NULLPTR KEYWORD_PRIVATE KEYWORD_PROTECTED 
     KEYWORD_PUBLIC KEYWORD_REGISTER KEYWORD_RETURN KEYWORD_SHORT KEYWORD_SIGNED KEYWORD_SIZEOF 
-    KEYWORD_STATIC KEYWORD_STRUCT KEYWORD_SWITCH KEYWORD_THIS KEYWORD_THROW KEYWORD_UNION
-    KEYWORD_TRY KEYWORD_TYPEDEF KEYWORD_UNSIGNED 
+    KEYWORD_STATIC KEYWORD_STRUCT KEYWORD_SWITCH KEYWORD_THIS KEYWORD_UNION
+    KEYWORD_TYPEDEF KEYWORD_UNSIGNED 
     KEYWORD_VOID KEYWORD_VOLATILE KEYWORD_WHILE KEYWORD_PRINTF KEYWORD_SCANF TYPE_NAME
 
 /* Identifiers and Literals */
-%token <node> INTEGER FLOAT CHAR STRING ID ELLIPSIS_OPERATOR BOOLEAN_LITERAL
+%token <node> INTEGER FLOAT CHAR STRING ID ELLIPSIS_OPERATOR
 
 /* Delimiters and Separators */
 %token <str>
@@ -448,7 +652,7 @@ int inLoop = 0;
 
 %type<node> type_qualifier_list parameter_type_list parameter_list parameter_declaration identifier_list type_name abstract_declarator
 
-%type<node> initializer initializer_list direct_declarator pointer direct_abstract_declarator assignment_expression
+%type<node> initializer initializer_list direct_declarator pointer direct_abstract_declarator assignment_expression switch_case_list switch_case_statements
 
 %type<node> statement labeled_statement expression_statement selection_statement iteration_statement jump_statement block_item block_item_list
 
@@ -489,14 +693,9 @@ primary_expression
     }
 	| CHAR { 
         $$ = $1; 
-        $$->typeSpecifier = 0; 
+        $$->typeSpecifier = 1; 
         $$->isLValue = false; 
     }
-	| BOOLEAN_LITERAL { 
-        $$ = $1; 
-        $$->typeSpecifier = 5; 
-        $$->isLValue = false; 
-    } 
     | KEYWORD_NULLPTR { 
         $$ = $1; 
         $$->typeSpecifier = 9; 
@@ -523,7 +722,13 @@ postfix_expression
             $$->typeSpecifier = $1->typeSpecifier;
             $$->isLValue = true; 
         } else if ($1->typeCategory == 1) {
-            // TODO
+            if ($1->typeSpecifier != 1 && $1->typeSpecifier != 3) {
+                cerr << "Error: can only index a char or int pointer" << endl;
+            } else {
+                $$->typeSpecifier = $1->typeSpecifier;
+                $$->isLValue = true;
+                $$->typeCategory = 0;
+            }   
         } else {
             cerr << $1->valueToString() << " is not an array" << endl;
         }
@@ -654,10 +859,20 @@ unary_expression
         }
         $$->isLValue = true; 
     }
-	| unary_operator cast_expression { 
+    | unary_operator cast_expression { 
         $$ = createNode(NODE_UNARY_EXPRESSION, monostate(), $1, $2);
+        string op = $1->valueToString();
+        if (op == "&" && !$2->isLValue) {
+            cerr << "Error: Cannot apply '&' to an R-value at line " << yylineno << endl;
+        }else if(op == "*" && $2->typeCategory != 1){
+            cerr << "Error: Cannot dereference a non-pointer type at line " << yylineno << endl;
+        }
+        if(op=="&"){
+            $$->typeSpecifier = $2->typeSpecifier*10;
+        }
         $$->isLValue = false;
     }
+
 	| KEYWORD_SIZEOF unary_expression { 
         $$ = createNode(NODE_UNARY_EXPRESSION, monostate(), $1, $2);
         $$->isLValue = false; 
@@ -697,7 +912,18 @@ unary_operator
 
 cast_expression
 	: unary_expression { $$ = $1; }
-	| LPAREN type_name RPAREN cast_expression { $$ = createNode(NODE_CAST_EXPRESSION, monostate(), $2, $4); } // TODO Type casting
+	| LPAREN type_name RPAREN cast_expression
+        {
+            int toType = $2->typeSpecifier;
+            int fromType = $4->typeSpecifier;
+
+            if (!isValidCast(toType, fromType)) {
+               cerr <<  "Invalid type cast" << endl;
+            }
+            $$ = createNode(NODE_CAST_EXPRESSION, monostate(), $2, $4);
+            $$->typeSpecifier = toType;
+            $$->isLValue = false;
+        }
 	;
 
 multiplicative_expression
@@ -748,6 +974,9 @@ additive_expression
         $$->isLValue = false; 
         if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "+")) {
             $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
+            if($1->typeCategory==2 || $3->typeCategory==2){
+                $$->typeCategory = 2;
+            }
         } else {
             cerr << "Incompatible Type: " << $1->typeSpecifier << " and " 
                  << $3->typeSpecifier << " at line " << yylineno << endl;
@@ -758,6 +987,9 @@ additive_expression
         $$->isLValue = false;
         if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "-")) {
             $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
+            if($1->typeCategory==2 || $3->typeCategory==2){
+                $$->typeCategory = 2;
+            }
         } else {
             cerr << "Incompatible Type: " << $1->typeSpecifier << " and " 
                  << $3->typeSpecifier << " at line " << yylineno << endl;
@@ -1028,7 +1260,7 @@ expression
 	;
 
 constant_expression
-	: conditional_expression { $$ = $1; }
+	: conditional_expression { $$ = $1;$$->type = NODE_CONSTANT_EXPRESSION; }
 	;
 
 declaration
@@ -1038,150 +1270,26 @@ declaration
     | declaration_specifiers init_declarator_list SEMICOLON 
     {
         $$ = createNode(NODE_DECLARATION, monostate(), $1, $2);
-        DeclaratorInfo declInfo = isValidVariableDeclaration($1->children, false);
-        if (declInfo.isValid)
-        {
-            auto helper = $1;
-            for(auto child : $1->children){
-                if(child->type == NODE_TYPE_SPECIFIER){
-                    helper = child;
-                    break;
-                }
-            }
-        if(declInfo.typeCategory == 4)
-            helper = lookupSymbol(helper->valueToString());
-    for (auto child : $2->children)
-    {
-        if (child->type != NODE_DECLARATOR) continue;
-
-        TreeNode *firstChild = child->children[0];
-        string varName;
-        TreeNode *identifierNode = firstChild;
-        // Helper function to set common node attributes
-        auto setNodeAttributes = [&](TreeNode *node, int typeCategory, int pointerLevel = 0) {
-            node->typeCategory = typeCategory;
-            node->pointerLevel = pointerLevel;
-            node->storageClass = declInfo.storageClass;
-            node->typeSpecifier = declInfo.typeSpecifier;
-            node->isConst = declInfo.isConst;
-            node->isStatic = declInfo.isStatic;
-            node->isVolatile = declInfo.isVolatile;
-            node->isUnsigned = declInfo.isUnsigned;
-            node->symbolTable = helper->symbolTable;
-        };
-        // Check for duplicate declaration
-        auto checkDuplicate = [&](const string &name) {
-            for (const auto &entry : currentTable->symbolTable)
-            {
-                if (entry.first == name)
-                {
-                    cerr << "Error: Duplicate declaration of '" << name << "'\n";
-                    return true;
-                }
-            }
-            return false;
-        };
-
-        if (firstChild->type == ARRAY) // Pointer-to-array (e.g., int (*arr)[3])
-        {
-            vector<int> dimensions = findArrayDimensions(firstChild);
-            while (identifierNode && identifierNode->type == ARRAY) {
-                if (identifierNode->children.empty()) break;
-                identifierNode = identifierNode->children[0];
-            }
-            varName = identifierNode->valueToString();
-            if (checkDuplicate(varName)) continue;
-
-            int size = child->children.size();
-            if (size == 1 || size == 2) {
-                bool validDims = all_of(dimensions.begin(), dimensions.end(), [](int d) { return d != -1; });
-                if (!validDims) {
-                    cerr << "Invalid declaration dimension cannot be empty\n";
-                    continue;
-                }
-                if (size == 2 && !checkInitializerLevel(child->children[1], declInfo.typeSpecifier, dimensions, 0)) {
-                    cout << "Error\n";
-                    continue;
-                }
-                setNodeAttributes(identifierNode, 2); // Array
-                identifierNode->dimensions = dimensions;
-                insertSymbol(varName, identifierNode);
+        bool isCustom = false;
+        for(auto child: $1->children){
+            if(child->type == NODE_STRUCT_OR_UNION_SPECIFIER){
+                isCustom = true;
+                break;
             }
         }
-        else if (firstChild->type == NODE_POINTER) // Pointers, including array of pointers
-        {
-            int pointerDepth = 0;
-            while (identifierNode && identifierNode->type == NODE_POINTER) {
-                pointerDepth++;
-                if (identifierNode->children.empty()) break;
-                identifierNode = identifierNode->children[0];
+        if(isCustom){
+            if($1->children.size() > 1){
+                cerr << "Error: Type Qualifier or Storage Class Specifier is not allowed to be used with struct or union" << endl;
+                break;
             }
-            varName = identifierNode->valueToString();
-
-            if (identifierNode->type == ARRAY) // Array of pointers (e.g., int *arr[3])
-            {
-                vector<int> dimensions = findArrayDimensions(identifierNode);
-                varName = identifierNode->children[0]->valueToString();
-                if (checkDuplicate(varName)) continue;
-
-                int size = child->children.size();
-                if (size == 1 || size == 2) {
-                    bool validDims = all_of(dimensions.begin(), dimensions.end(), [](int d) { return d != -1; });
-                    if (!validDims) {
-                        cerr << "Invalid declaration dimension cannot be empty\n";
-                        continue;
-                    }
-                    if (size == 2 && !checkInitializerLevel(child->children[1], declInfo.typeSpecifier, dimensions, pointerDepth)) {
-                        cerr << "Error: Invalid initializer for array of pointers '" << varName << "'\n";
-                        continue;
-                    }
-                    setNodeAttributes(identifierNode, 2, pointerDepth);
-                    identifierNode->dimensions = dimensions;
-                    insertSymbol(varName, identifierNode);
-                }
-            }
-            else // Regular pointer (e.g., int *p)
-            {
-                if (checkDuplicate(varName)) continue;
-                int size = child->children.size();
-                if (size == 1 || (size == 2 && true /* Replace with isPointerCompatible */)) {
-                    setNodeAttributes(identifierNode, 1, pointerDepth);
-                    insertSymbol(varName, identifierNode);
-                }
-                else {
-                    cerr << "Error: Invalid pointer " << (size == 2 ? "initialization" : "declarator syntax") << " for '" << varName << "'\n";
-                }
-            }
+            TreeNode* newDeclSpec = createNode(NODE_DECLARATION_SPECIFIERS, monostate(), $1->children[0]->children[1]);
+            $1->children[0]->children[1]->type = NODE_TYPE_SPECIFIER;
+            addDeclarators(newDeclSpec, $2);
+            $1->children[0]->children[1]->type = NODE_IDENTIFIER;
+            delete newDeclSpec;
+        }else{
+            addDeclarators($1, $2);
         }
-        else // Regular variable (e.g., int x)
-        {
-            varName = firstChild->valueToString();
-            if (checkDuplicate(varName)) continue;
-            int size = child->children.size();
-            if (size == 1) {
-                if (declInfo.isConst) {
-                    cerr << "Error: Const variable '" << varName << "' must be initialized\n";
-                    continue;
-                }
-                setNodeAttributes(identifierNode, 0);
-                insertSymbol(varName, identifierNode);
-            }
-            else if(size == 2 && declInfo.typeSpecifier == 20){
-                if(structInitializerCheck(helper,child->children[1])){
-                    insertSymbol(varName,identifierNode);
-                    setNodeAttributes(identifierNode, 0);
-                }
-            }
-            else if (size == 2 && isTypeCompatible(declInfo.typeSpecifier, child->children[1]->typeSpecifier, "=")) {
-                setNodeAttributes(identifierNode, 0);
-                insertSymbol(varName, identifierNode);
-            }
-            else {
-                cerr << "Error: " << (size == 2 ? "Type mismatch in initialization" : "Invalid declarator syntax") << " for '" << varName << "'\n";
-            }
-        }
-        
-}        }
     };
 
 
@@ -1250,7 +1358,6 @@ struct_type_specifier
 	| KEYWORD_CHAR { $$ = $1; $$->type = NODE_TYPE_SPECIFIER; $$->storageClass = 1;}
     | KEYWORD_SHORT { $$ = $1; $$->type = NODE_TYPE_SPECIFIER; $$->storageClass = 2;}
     | KEYWORD_INT { $$ = $1; $$->type = NODE_TYPE_SPECIFIER; $$->storageClass = 3;}
-    | KEYWORD_BOOL { $$ = $1; $$->type = NODE_TYPE_SPECIFIER; $$->storageClass = 9;}
     | KEYWORD_LONG { $$ = $1; $$->type = NODE_TYPE_SPECIFIER; $$->storageClass = 4;}
     | KEYWORD_FLOAT { $$ = $1; $$->type = NODE_TYPE_SPECIFIER; $$->storageClass = 12;}
     | KEYWORD_DOUBLE { $$ = $1; $$->type = NODE_TYPE_SPECIFIER; $$->storageClass = 13;}
@@ -1367,6 +1474,7 @@ struct_declaration
             node->pointerLevel = pointerLevel;
             node->storageClass = declInfo.storageClass;
             node->typeSpecifier = declInfo.typeSpecifier;
+            if(pointerLevel == 1){node->typeSpecifier *= 10;}
             node->isConst = declInfo.isConst;
             node->isStatic = declInfo.isStatic;
             node->isVolatile = declInfo.isVolatile;
@@ -1549,8 +1657,8 @@ direct_declarator
 pointer
 	: MULTIPLY_OPERATOR { $$ = createNode(NODE_POINTER, $1); }
 	| MULTIPLY_OPERATOR type_qualifier_list { $$ = createNode(NODE_POINTER, $1, $2); }
-	| MULTIPLY_OPERATOR pointer { $$ = createNode(NODE_POINTER, $1, $2); }
-	| MULTIPLY_OPERATOR type_qualifier_list pointer { $$ = createNode(NODE_POINTER, $1, $2, $3); }
+	/* | MULTIPLY_OPERATOR pointer { $$ = createNode(NODE_POINTER, $1, $2); }
+	| MULTIPLY_OPERATOR type_qualifier_list pointer { $$ = createNode(NODE_POINTER, $1, $2, $3); } */
 	;
 
 type_qualifier_list
@@ -1688,10 +1796,34 @@ io_statement
     ;
 
 labeled_statement
-	: ID COLON statement { $$ = createNode(NODE_LABELED_STATEMENT, monostate(), $1, $3); }
-	| KEYWORD_CASE constant_expression COLON statement { $$ = createNode(NODE_LABELED_STATEMENT,monostate(), $1, $2, $4);  }
-	| KEYWORD_DEFAULT COLON statement { $$ = createNode(NODE_LABELED_STATEMENT, monostate(), $1, $3); }
+	: ID COLON statement { 
+        $$ = createNode(NODE_LABELED_STATEMENT, monostate(), $1, $3); 
+        $1->typeCategory = 7;
+        $1->typeSpecifier = 9;
+        insertSymbol($1->valueToString(), $1);
+        }
 	;
+
+switch_case_statements
+    : KEYWORD_CASE constant_expression COLON statement
+    | KEYWORD_DEFAULT COLON{
+        if(inSwitch.size()==0){
+            cerr << "Default case should be used inside switch statement" << endl;
+        }
+        else if(inSwitch.top()){
+            cerr << "Multiple defaults in switch statement" << endl;
+        }
+        else{
+            inSwitch.pop();
+            inSwitch.push(true);
+        }
+    } statement
+    ;
+
+switch_case_list
+    : switch_case_statements { $$ = createNode(NODE_SWITCH_CASE_LIST, monostate(), $1); }
+    | switch_case_list switch_case_statements { $$ = createNode(NODE_SWITCH_CASE_LIST, monostate(), $1, $2); }
+    ;
 
 compound_statement
     : LBRACE RBRACE { $$ = createNode(NODE_COMPOUND_STATEMENT, monostate()); }
@@ -1713,12 +1845,16 @@ expression_statement
 	| expression SEMICOLON { $$ = $1; }
 	;
 
-selection_statement:
-      KEYWORD_IF LPAREN expression RPAREN statement %prec NO_ELSE
-    | KEYWORD_IF LPAREN expression RPAREN statement KEYWORD_ELSE statement
-    | KEYWORD_SWITCH LPAREN expression RPAREN { inLoop++; } LBRACE statement RBRACE { inLoop--; }
+selection_statement
+    : KEYWORD_IF LPAREN expression RPAREN statement %prec NO_ELSE
+    | KEYWORD_IF LPAREN expression RPAREN statement KEYWORD_ELSE statement 
+    | KEYWORD_SWITCH LPAREN expression {
+        if(($3->typeSpecifier != 3 && $3->typeSpecifier != 1)){
+            cerr << "Switch expression must be of type int or char" << endl;
+        }
+    } RPAREN { inLoop++;inSwitch.push(false); } LBRACE switch_case_list RBRACE { inLoop--;inSwitch.pop();}
     ;
-
+    
 iteration_statement
     : KEYWORD_WHILE LPAREN expression RPAREN {inLoop++;} statement {inLoop--;}
     | KEYWORD_DO statement KEYWORD_WHILE LPAREN expression RPAREN
@@ -1742,8 +1878,9 @@ jump_statement
             cerr << "Break should be used inside loops" << endl;
         }
      }
-	| KEYWORD_RETURN SEMICOLON { $$ = $1; }
-	| KEYWORD_RETURN expression SEMICOLON { $$ = createNode(NODE_JUMP_STATEMENT, monostate(), $1, $2); }
+	| KEYWORD_RETURN SEMICOLON { if(!inFunc) cerr << "Return statement should be used inside functions" << endl; $$ = $1; }
+	| KEYWORD_RETURN expression SEMICOLON { if(!inFunc) cerr << "Return statement should be used inside functions" << endl;
+     $$ = createNode(NODE_JUMP_STATEMENT, monostate(), $1, $2); }
 	;
 
 translation_unit
@@ -1832,12 +1969,14 @@ function_definition
         }else {
             cerr << "Error: Invalid function declaration for '" << $2->children[0]->valueToString() << "'\n";
         }
+        inFunc = true;
     } compound_statement {
         $$ = createNode(NODE_FUNCTION_DEFINITION, monostate(), $1, $2, $4);
         if(checkInvalidReturn($4, $2->children[0]->typeSpecifier)){
             cout << "Error: Invalid return type for function '" << $2->children[0]->valueToString() << "'\n";
         }
         exitScope();
+        inFunc = false;
     }
 
 
