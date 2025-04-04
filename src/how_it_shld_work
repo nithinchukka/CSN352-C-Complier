@@ -1,0 +1,1447 @@
+%{
+
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdbool.h>
+#include "Utils/typecheck.h"
+#define MAX_ENTRIES 100
+extern int yylex();
+extern int yyparse();
+extern FILE *yyin;
+extern int yylineno;
+
+void yyerror(const char *s);
+
+
+typedef struct {
+    char* result;  // Result variable (e.g., t1)
+    char* op;      // Operator (e.g., +, -, =)
+    char* arg1;    // First operand
+    char* arg2;    // Second operand (NULL if not applicable)
+    bool isgoto;
+} TAC;
+TAC tacTable[1000];  // Array to store TAC instructions
+int tacCount = 0;    // Number of TAC instructions
+int tempCount = 0; 
+
+char* newTemp() {
+    char* temp = malloc(10);
+    snprintf(temp, 10, "t%d", tempCount++);
+    return temp;
+}
+
+void emitTAC(char* result, char* op, char* arg1, char* arg2, bool isgoto) {
+    tacTable[tacCount].result = result ? strdup(result) : NULL;
+    tacTable[tacCount].op = op ? strdup(op) : NULL;
+    tacTable[tacCount].arg1 = arg1 ? strdup(arg1) : NULL;
+    tacTable[tacCount].arg2 = arg2 ? strdup(arg2) : NULL;
+    tacTable[tacCount].isgoto = isgoto;
+    tacCount++;
+}
+
+#include <stdio.h>
+
+void printTAC() {
+    FILE *file = fopen("tac.txt", "w");  // Open file for writing
+    if (file == NULL) {
+        perror("Error opening file");
+        return;
+    }
+
+    
+    for (int i = 0; i < tacCount; i++) {
+
+        if(tacTable[i].isgoto) {
+            if(tacTable[i].op){
+                fprintf(file, "GOTO %s IF %s %s %s\n",
+                tacTable[i].result ? tacTable[i].result : "",
+                tacTable[i].arg1 ? tacTable[i].arg1 : "",
+                tacTable[i].op ? tacTable[i].op : "",
+                tacTable[i].arg2 ? tacTable[i].arg2 : ""
+                );
+            }else{
+                fprintf(file, "GOTO %s %s %s %s\n",
+                tacTable[i].result ? tacTable[i].result : "",
+                tacTable[i].arg1 ? tacTable[i].arg1 : "",
+                tacTable[i].op ? tacTable[i].op : "",
+                tacTable[i].arg2 ? tacTable[i].arg2 : ""
+                );
+            }
+            
+            continue;
+        }
+        if(tacTable[i].result) {
+            fprintf(file, "%s = %s %s %s\n",
+            tacTable[i].result ? tacTable[i].result : "",
+            tacTable[i].arg1 ? tacTable[i].arg1 : "",
+            tacTable[i].op ? tacTable[i].op : "",
+            tacTable[i].arg2 ? tacTable[i].arg2 : ""
+            );
+        }else{
+            fprintf(file, "%s%s %s %s\n",
+            tacTable[i].result ? tacTable[i].result : "",
+            tacTable[i].arg1 ? tacTable[i].arg1 : "",
+            tacTable[i].op ? tacTable[i].op : "",
+            tacTable[i].arg2 ? tacTable[i].arg2 : ""
+            );
+        }
+        
+    }
+
+    fclose(file);  // Close the file
+    printf("Three-Address Code has been saved to tac.txt\n");
+}
+
+typedef struct BackpatchNode {
+    int index;              // TAC instruction index to patch
+    struct BackpatchNode* next;  // Pointer to next node
+} BackpatchNode;
+
+BackpatchNode* addToBackpatchList(BackpatchNode* list, int index) {
+    BackpatchNode* newNode = malloc(sizeof(BackpatchNode));
+    newNode->index = index;
+    newNode->next = list;  // Insert at head
+    return newNode;        // New head of the list
+}
+
+void freeBackpatchList(BackpatchNode* list) {
+    while (list != NULL) {
+        BackpatchNode* temp = list;
+        list = list->next;
+        free(temp);
+    }
+}
+
+void backpatch(BackpatchNode* list, char* label) {
+    BackpatchNode* current = list;
+    while (current != NULL) {
+        int tacIndex = current->index;
+        if (tacTable[tacIndex].result) free(tacTable[tacIndex].result);  // Free old placeholder
+        tacTable[tacIndex].result = strdup(label);  // Patch with the label
+        current = current->next;
+    }
+}
+
+BackpatchNode* mergeBackpatchLists(BackpatchNode* list1, BackpatchNode* list2) {
+    // If list1 is empty, return list2
+    if (list1 == NULL) {
+        return list2;
+    }
+    // If list2 is empty, return list1
+    if (list2 == NULL) {
+        return list1;
+    }
+
+    // Find the last node of list1
+    BackpatchNode* current = list1;
+    while (current->next != NULL) {
+        current = current->next;
+    }
+
+    // Append list2 to the end of list1
+    current->next = list2;
+
+    // Return the head of the merged list (list1)
+    return list1;
+}
+
+typedef struct {
+    char identifier[100];
+    char type[100];
+    int width;
+    int offset;
+    char other[100];
+    char kind[100];
+    char pointer[100];
+    char array[100];
+    char args[100];
+} Entry;
+Entry symbolTable[MAX_ENTRIES];
+int symbolCount = 0;
+bool errorFound=false;
+
+typedef struct SymbolTable {
+    Entry entries[MAX_ENTRIES];
+    int count;
+    struct SymbolTable* parent;
+} SymbolTable;
+
+SymbolTable* currentScope = NULL;
+
+void enterScope() {
+    SymbolTable* newScope = malloc(sizeof(SymbolTable));
+    newScope->count = 0;
+    newScope->parent = currentScope;
+    currentScope = newScope;
+}
+
+void exitScope() {
+    SymbolTable* temp = currentScope;
+    currentScope = currentScope->parent;
+    free(temp);  // Free the scope (optional, depending on needs)
+}
+
+void insertSymbol(const char* identifier, const char* type,const char* kind,const char* other, const char* pointer, const char* array,const char* args) {
+    // Check for redefinition in the current scope
+    for (int i = 0; i < currentScope->count; i++) {
+        if (strcmp(currentScope->entries[i].identifier, identifier) == 0) {
+            char errorMsg[256];
+            snprintf(errorMsg, sizeof(errorMsg), "Redefinition of '%s' in the same scope", identifier);
+            yyerror(errorMsg);
+            return;
+        }
+    }
+    if (currentScope->count < MAX_ENTRIES) {
+        strcpy(currentScope->entries[currentScope->count].identifier, identifier);
+        strcpy(currentScope->entries[currentScope->count].type, type);
+        strcpy(currentScope->entries[currentScope->count].kind, kind ? kind : "");  // Optional kind
+        strcpy(currentScope->entries[currentScope->count].other, other ? other : "");  //
+        strcpy(currentScope->entries[currentScope->count].pointer, pointer ? pointer : "");  //
+        strcpy(currentScope->entries[currentScope->count].array, array ? array : "");  //
+        strcpy(currentScope->entries[currentScope->count].args, args ? args : "");  //
+        currentScope->count++;
+    } else {
+        yyerror("Symbol table is full");
+    }
+}
+
+char* lookupType(const char* identifier) {
+    SymbolTable* scope = currentScope;
+    while (scope != NULL) {
+        for (int i = 0; i < scope->count; i++) {
+            if (strcmp(scope->entries[i].identifier, identifier) == 0) {
+                return scope->entries[i].type;
+            }
+        }
+        scope = scope->parent;
+    }
+    return NULL;  // Identifier not found
+}
+char* lookupReturnType(const char* identifier) {
+    SymbolTable* scope = currentScope;
+    while (scope != NULL) {
+        for (int i = 0; i < scope->count; i++) {
+            if (strcmp(scope->entries[i].identifier, identifier) == 0) {
+                return scope->entries[i].kind;
+            }
+        }
+        scope = scope->parent;
+    }
+    return NULL;  // Identifier not found
+}
+bool existsInCurrentScope(const char* identifier) {
+    if (currentScope == NULL) return false;
+    for (int i = 0; i < currentScope->count; i++) {
+        if (strcmp(currentScope->entries[i].identifier, identifier) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+// Update printSymbolTable to show only the global scope (for simplicity)
+void printSymbolTable() {
+    printf("\nGlobal Symbol Table:\n");
+    printf("-----------------------------\n");
+    printf("| %-10s | %-10s |%-10s |%-10s |%-10s |%-10s |%-10s |\n", "Identifier", "Type","Other","pointer","array","args","kind");
+    printf("-----------------------------\n");
+    SymbolTable* scope = currentScope;
+    while (scope && scope->parent) scope = scope->parent;  // Go to global scope
+    if (scope) {
+        for (int i = 0; i < scope->count; i++) {
+            printf("| %-10s | %-10s |%-10s |%-10s |%-10s |%-10s |%-10s |\n", scope->entries[i].identifier, scope->entries[i].type,scope->entries[i].other,scope->entries[i].pointer,scope->entries[i].array,scope->entries[i].args,scope->entries[i].kind);
+        }
+    }
+    printf("-----------------------------\n");
+}
+int check_types(char *type1, char *type2) {
+    if (type1 == NULL || type2 == NULL) return 0;
+    if (strcmp(type1, type2) == 0) return 1;
+    printf("Type mismatch: %s vs %s\n", type1, type2);
+    return 0;
+}
+
+char current_type[100]; 
+%}
+%error-verbose
+%union {
+    char cval;
+    float fval;
+    char *sval;
+    int ival;
+    struct {
+        char *identifier;
+        char *type;
+        char *kind;
+        char *other;
+        char *pointer;
+        char *array;
+        char *args;
+        int val;
+        char *tac; 
+        char* original;
+        int arg_cnt;
+        struct BackpatchNode* after_list;
+        struct BackpatchNode* else_list;
+        struct BackpatchNode* true_list;
+        struct BackpatchNode* false_list;
+    } decl;
+}
+%token KEYWORD_GOTO KEYWORD_CONTINUE KEYWORD_BREAK
+%token KEYWORD_PRINTF KEYWORD_SCANF
+%token SQUOTE
+%token KEYWORD_CALLOC KEYWORD_REALLOC KEYWORD_FREE
+%token KEYWORD_MALLOC
+%token KEYWORD_ALIGNAS KEYWORD_ALIGNOF KEYWORD_AND KEYWORD_AND_EQ KEYWORD_ASM
+%token KEYWORD_AUTO KEYWORD_BITAND KEYWORD_BITOR  
+%token KEYWORD_CASE KEYWORD_CATCH KEYWORD_CHAR8_T KEYWORD_CHAR16_T
+%token KEYWORD_CHAR32_T KEYWORD_CLASS KEYWORD_COMPL KEYWORD_CONCEPT KEYWORD_CONST
+%token KEYWORD_CONSTEVAL KEYWORD_CONSTEXPR KEYWORD_CONSTINIT KEYWORD_CONST_CAST
+%token KEYWORD_CO_AWAIT KEYWORD_CO_RETURN KEYWORD_CO_YIELD
+%token KEYWORD_DECLTYPE KEYWORD_DEFAULT KEYWORD_DELETE KEYWORD_DO 
+%token KEYWORD_DYNAMIC_CAST KEYWORD_ELSE KEYWORD_ENUM KEYWORD_EXPLICIT KEYWORD_EXPORT
+%token KEYWORD_EXTERN KEYWORD_FALSE KEYWORD_FINAL KEYWORD_FOR
+%token KEYWORD_FRIEND KEYWORD_IF KEYWORD_INLINE 
+%token KEYWORD_LONG KEYWORD_MUTABLE KEYWORD_NAMESPACE KEYWORD_NEW KEYWORD_NOEXCEPT
+%token KEYWORD_NOT KEYWORD_NOT_EQ KEYWORD_NULLPTR KEYWORD_OPERATOR KEYWORD_OR
+%token KEYWORD_OR_EQ KEYWORD_PRIVATE KEYWORD_PROTECTED KEYWORD_PUBLIC KEYWORD_REGISTER
+%token KEYWORD_REINTERPRET_CAST KEYWORD_REQUIRES KEYWORD_RETURN KEYWORD_SHORT
+%token KEYWORD_SIGNED KEYWORD_SIZEOF KEYWORD_STATIC KEYWORD_STATIC_ASSERT
+%token KEYWORD_STATIC_CAST KEYWORD_STRUCT KEYWORD_SWITCH KEYWORD_TEMPLATE
+%token KEYWORD_THIS KEYWORD_THREAD_LOCAL KEYWORD_THROW KEYWORD_TRUE KEYWORD_TRY
+%token KEYWORD_TYPEDEF KEYWORD_TYPEID KEYWORD_TYPENAME KEYWORD_UNION KEYWORD_UNSIGNED
+%token KEYWORD_USING KEYWORD_VIRTUAL KEYWORD_VOID KEYWORD_VOLATILE KEYWORD_WCHAR_T
+%token KEYWORD_WHILE KEYWORD_XOR KEYWORD_XOR_EQ
+%token OP_ADD OP_SUB OP_MUL OP_DIV OP_MOD OP_INR OP_DCR OP_EQ OP_NEQ
+%token OP_LT OP_GT OP_LTE OP_GTE OP_AND OP_OR OP_NOT OP_BIT_AND OP_BIT_OR OP_BIT_XOR
+%token OP_BIT_NOT OP_LSHIFT OP_RSHIFT ASSIGN_EQ ASSIGN_ADD ASSIGN_SUB ASSIGN_MUL
+%token ASSIGN_DIV ASSIGN_MOD OP_TERNARY LEFT_PAREN RIGHT_PAREN LEFT_PAREN_CURL
+%token ASSIGN_LSHIFT ASSIGN_RSHIFT ASSIGN_AND ASSIGN_XOR ASSIGN_OR
+%token RIGHT_PAREN_CURL LEFT_PAREN_SQ RIGHT_PAREN_SQ SC COMM DOT ARR D_SC
+%token HEXADECIMAL OCTAL BINARY
+%token COLON KEYWORD_OP_CAST 
+%token  KEYWORD_INT KEYWORD_FLOAT KEYWORD_CHAR KEYWORD_DOUBLE KEYWORD_BOOL
+%token  KEYWORD_ATOMIC KEYWORD_RESTRICT KEYWORD_NORETURN KEYWORD_ELLIPSIS KEYWORD_GENERIC
+%right ASSIGN_EQ ASSIGN_ADD ASSIGN_SUB ASSIGN_MUL ASSIGN_DIV ASSIGN_MOD
+%left OP_TERNARY
+%left OP_OR
+%left OP_AND
+%left OP_BIT_OR
+%left OP_BIT_XOR
+%left OP_BIT_AND
+%left OP_EQ OP_NEQ
+%left OP_LT OP_GT OP_LTE OP_GTE
+%left OP_ADD OP_SUB
+%left OP_MUL OP_DIV OP_MOD
+%token <sval> IDENTIFIER STRING
+%token <ival>  INTEGER_HEXADECIMAL INTEGER_BINARY INTEGER_OCTAL INTEGER
+%token <fval> FLOAT 
+%token <cval> CHARACTER
+%type <decl> declarator direct_declarator init_declarator init_declarator_list constant string primary_expression initializer_list initializer
+%type <decl> assignment_expression expression expression_statement constant_expression logical_or_expression logical_and_expression inclusive_or_expression exclusive_or_expression conditional_expression
+%type <decl> and_expression equality_expression relational_expression shift_expression additive_expression multiplicative_expression cast_expression unary_expression postfix_expression
+
+%type <decl> storage_class_specifier declaration_specifiers type_specifier type_qualifier function_specifier alignment_specifier generic_selection parameter_type_list parameter_list parameter_declaration assignment_operator argument_expression_list unary_operator M
+%type <sval> pointer
+
+%right OP_NOT OP_BIT_NOT OP_INR OP_DCR
+%nonassoc LOWER_THAN_ELSE
+%nonassoc KEYWORD_ELSE
+%start translation_unit
+%%
+
+primary_expression
+    : IDENTIFIER{
+        char* type = lookupType($1);
+        if (type == NULL) {
+            char errorMsg[256];
+            snprintf(errorMsg, sizeof(errorMsg), "Undeclared variable '%s'", $1);
+            yyerror(errorMsg);
+        }
+        $$.identifier = $1;
+        $$.type = type;
+        $$.tac = $1;
+    }
+    | constant{
+        $$ = $1;
+    }
+    | string {
+        $$ = $1;
+    }
+    | LEFT_PAREN expression RIGHT_PAREN{
+        $$ = $2;
+    }
+    | generic_selection{
+        
+    }
+    |KEYWORD_TRUE {
+        $$.type = "bool";
+        char* temp = newTemp();
+        // emitTAC(temp, NULL , "1", NULL,0);
+        $$.tac = temp;
+        emitTAC(NULL, NULL , NULL, NULL,1);
+        BackpatchNode* cur = $$.true_list;
+        BackpatchNode* next = addToBackpatchList(cur, tacCount);
+        $$.true_list = next;
+        
+    }
+    |KEYWORD_FALSE{
+        $$.type = "bool";
+        char* temp = newTemp();
+        // emitTAC(temp, NULL , "1", NULL,0);
+        $$.tac = temp;
+        emitTAC(NULL, NULL , NULL, NULL,1);
+        BackpatchNode* cur = $$.false_list;
+        BackpatchNode* next = addToBackpatchList(cur, tacCount);
+        $$.false_list = next;
+    }
+    ;
+
+constant
+    : INTEGER_HEXADECIMAL {
+        // $$.identifier = $1;
+        char temp[100];
+        sprintf(temp, "%d", $1);
+        $$.tac = temp;
+        $$.type = "int";
+    }
+    | FLOAT {
+        // $$.identifier = $1;
+        char temp[100];
+        sprintf(temp, "%f", $1);
+        $$.tac = temp;
+        $$.type = "float";
+    }
+    | INTEGER {
+        // $$.identifier = $1;
+        $$.val = $1;
+        char temp[100];
+        sprintf(temp, "%d", $1);
+        $$.tac = temp;
+        $$.type = "int";
+    }
+    | INTEGER_OCTAL {
+        // $$.identifier = $1;
+        char temp[100];
+        sprintf(temp, "%d", $1);
+        $$.tac = temp;
+        $$.type = "int";
+    }
+    | INTEGER_BINARY {
+        // $$.identifier = $1;
+        char temp[100];
+        sprintf(temp, "%d", $1);
+        $$.tac = temp;
+        $$.type = "int";
+    }
+    ;
+
+string
+    : STRING {
+        $$.identifier = strdup($1);
+        $$.tac = strdup($1);
+        $$.type = strdup("string");
+    }
+    | CHARACTER {
+        
+        char temp[2];    
+        temp[0] = $1;     
+        temp[1] = '\0';   
+
+        $$.tac = strdup(temp);
+        $$.type = strdup("char");
+    }
+    ;
+
+generic_selection
+    : KEYWORD_GENERIC LEFT_PAREN assignment_expression COMM generic_assoc_list RIGHT_PAREN
+    ;
+
+generic_assoc_list
+    : generic_association
+    | generic_assoc_list COMM generic_association
+    ;
+
+generic_association
+    : type_name COLON assignment_expression
+    | KEYWORD_DEFAULT COLON assignment_expression
+    ;
+
+postfix_expression
+    : primary_expression{
+        $$ = $1;    
+    }
+    | postfix_expression LEFT_PAREN_SQ expression RIGHT_PAREN_SQ {
+        // char* temp = newTemp();
+        // emitTAC(temp, "[]", $1.tac, $3.tac);
+        
+    }
+    | postfix_expression LEFT_PAREN RIGHT_PAREN {
+        char temp[100];
+        sprintf(temp, "0");
+        // emitTAC(NULL, "call", $1.tac, strdup(temp));
+        char* returnType = lookupReturnType($1.tac);
+        if (strcmp(returnType, "void") != 0) {
+            char* temp1 = newTemp();
+            emitTAC(temp1, "call", $1.tac, NULL,0);
+            $$.tac = temp1;
+        }else{
+            emitTAC(NULL, "call", $1.tac, strdup(temp),0);
+        }
+
+    }
+    | postfix_expression LEFT_PAREN argument_expression_list RIGHT_PAREN{
+        char temp[100];
+        sprintf(temp, "%d", $3.arg_cnt);
+        // emitTAC(NULL, "call", $1.tac, strdup(temp));
+        char* returnType = lookupReturnType($1.tac);
+        if (strcmp(returnType, "void") != 0) {
+            char* temp1 = newTemp();
+            emitTAC(temp1, "call", $1.tac, strdup(temp),0);
+            $$.tac = temp1;
+        }else{
+            emitTAC(NULL, "call", $1.tac, strdup(temp),0);
+        }
+
+    }
+    | postfix_expression DOT IDENTIFIER
+    | postfix_expression ARR IDENTIFIER
+    | postfix_expression OP_INR
+    | postfix_expression OP_DCR
+    | LEFT_PAREN type_name RIGHT_PAREN_CURL initializer_list RIGHT_PAREN_CURL 
+    | LEFT_PAREN type_name RIGHT_PAREN_CURL initializer_list COMM RIGHT_PAREN_CURL
+    | KEYWORD_MALLOC LEFT_PAREN assignment_expression RIGHT_PAREN { printf("Dynamic memory allocation: malloc\n"); }
+    | KEYWORD_CALLOC LEFT_PAREN assignment_expression COMM assignment_expression RIGHT_PAREN { printf("Dynamic memory allocation: calloc\n"); }
+    | KEYWORD_REALLOC LEFT_PAREN assignment_expression COMM assignment_expression RIGHT_PAREN { printf("Dynamic memory allocation: realloc\n"); }
+    | KEYWORD_FREE LEFT_PAREN assignment_expression RIGHT_PAREN { printf("Memory deallocation: free\n"); }
+    | KEYWORD_MALLOC error { yyerror("Invalid malloc syntax - expected '(' size ')'"); YYERROR;}
+    | KEYWORD_FREE error { yyerror("Invalid free syntax - expected '(' pointer ')'"); YYERROR;}
+    ;
+
+
+argument_expression_list
+    : assignment_expression {
+        $$.arg_cnt = 1;
+        emitTAC(NULL, "param",NULL, $1.tac,0);
+    }
+    | argument_expression_list COMM assignment_expression{
+        $$.arg_cnt = $1.arg_cnt + 1;
+        emitTAC(NULL, "param",NULL, $3.tac,0);
+    }
+    ;
+
+unary_expression
+    : postfix_expression{
+        $$ = $1;    
+    }
+    | OP_INR unary_expression{
+        char* temp = newTemp();
+        emitTAC(temp, "++", $2.tac, NULL,0);
+        $$.tac = temp;
+    }
+    | OP_DCR unary_expression{
+        char* temp = newTemp();
+        emitTAC(temp, "--", $2.tac, NULL,0);
+        $$.tac = temp;
+    }
+    | unary_operator cast_expression{
+        char* temp = newTemp();
+        emitTAC(temp, $1.tac, NULL, $2.tac,0);
+        $$.tac = temp;
+
+    }
+    | KEYWORD_SIZEOF unary_expression{
+        char* temp = newTemp();
+        emitTAC(temp, "sizeof", $2.tac, NULL,0);
+        $$.tac = temp;
+    }
+    | KEYWORD_SIZEOF LEFT_PAREN type_name RIGHT_PAREN{
+        // char* temp = newTemp();
+        // emitTAC(temp, "sizeof", NULL, NULL);
+        // $$.tac = temp;
+    }
+    | KEYWORD_ALIGNOF LEFT_PAREN type_name RIGHT_PAREN
+    ;
+
+unary_operator
+    : OP_AND {$$.tac = "&"; }
+    | OP_MUL {$$.tac = "*"; }
+    | OP_ADD {$$.tac = "+"; }
+    | OP_SUB  {$$.tac = "-"; }
+    | OP_BIT_NOT {$$.tac = "~"; }
+    | OP_NOT {$$.tac = "!"; }
+    | OP_BIT_AND{$$.tac = "&"; }
+    ;
+
+cast_expression
+    : unary_expression{
+        $$ = $1;
+    }
+    | LEFT_PAREN type_name RIGHT_PAREN cast_expression
+    ;
+
+multiplicative_expression
+    : cast_expression{
+        $$ = $1;
+    }
+    | multiplicative_expression OP_MUL cast_expression {
+        char* temp = newTemp();
+        emitTAC(temp, "*", $1.tac, $3.tac,0);
+        $$.tac = temp;
+    }
+    | multiplicative_expression OP_DIV cast_expression{
+        char* temp = newTemp();
+        emitTAC(temp, "/", $1.tac, $3.tac,0);
+        $$.tac = temp;
+    }
+    | multiplicative_expression OP_MOD cast_expression{
+        char* temp = newTemp();
+        emitTAC(temp, "%", $1.tac, $3.tac,0);
+        $$.tac = temp;
+    }
+    ;
+
+additive_expression
+    : multiplicative_expression{
+        $$ = $1;
+    }
+    | additive_expression OP_ADD multiplicative_expression{
+        // if (check_types($1.type, $3.type) != 1) {
+        //     printf( "Type mismatch in commaddd expression '%s' and '%s'", $1.type, $3.type);
+        //     $$.type = $1.type;
+        // }
+        char* temp = newTemp();
+        emitTAC(temp, "+", $1.tac, $3.tac,0);
+        $$.tac = temp;
+    }
+    | additive_expression OP_SUB multiplicative_expression{
+
+        char* temp = newTemp();
+        emitTAC(temp, "-", $1.tac, $3.tac,0);
+        $$.tac = temp;
+    }
+    ;
+
+shift_expression
+    : additive_expression{
+        $$ = $1;
+    }
+    | shift_expression OP_LSHIFT additive_expression{
+        char* temp = newTemp();
+        emitTAC(temp, "<<", $1.tac, $3.tac,0);
+        $$.tac = temp;
+    }
+    | shift_expression OP_RSHIFT additive_expression{
+        char* temp = newTemp();
+        emitTAC(temp, ">>", $1.tac, $3.tac,0);
+        $$.tac = temp;
+    }
+    ;
+
+relational_expression
+    : shift_expression{
+        $$ = $1;
+    }
+    | relational_expression OP_LT shift_expression{
+        char* temp = newTemp();
+        // char t2[100];
+        // sprintf(t2, "%d", tacCount+4);
+        
+        // emitTAC(temp, NULL, "0", NULL,0);
+        // sprintf(t2, "%d", tacCount+3);
+        // emitTAC(strdup(t2), NULL , NULL, NULL,1);
+        // emitTAC(temp, NULL, "1", NULL,0);
+        BackpatchNode* cur = $$.true_list;
+        BackpatchNode* next = addToBackpatchList(cur, tacCount);
+        $$.true_list = next;
+        cur = $$.false_list;
+        next = addToBackpatchList(cur, tacCount+1);
+        $$.false_list = next;
+        emitTAC(NULL, "<", $1.tac, $3.tac,1);
+        emitTAC(NULL,NULL, NULL, NULL,1);
+        $$.tac = temp;
+    }
+    | relational_expression OP_GT shift_expression{
+        char* temp = newTemp();
+        // char t2[100];
+        // sprintf(t2, "%d", tacCount+4);
+        // emitTAC(strdup(t2), ">", $1.tac, $3.tac,1);
+        // emitTAC(temp, NULL, "0", NULL,0);
+        // sprintf(t2, "%d", tacCount+3);
+        // emitTAC(strdup(t2), NULL , NULL, NULL,1);
+        // emitTAC(temp, NULL, "1", NULL,0);
+        BackpatchNode* cur = $$.true_list;
+        BackpatchNode* next = addToBackpatchList(cur, tacCount);
+        $$.true_list = next;
+        cur = $$.false_list;
+        next = addToBackpatchList(cur, tacCount+1);
+        $$.false_list = next;
+        emitTAC(NULL, ">", $1.tac, $3.tac,1);
+        emitTAC(NULL,NULL, NULL, NULL,1);
+        $$.tac = temp;
+    }
+    | relational_expression OP_LTE shift_expression{
+        char* temp = newTemp();
+        // char t2[100];
+        // sprintf(t2, "%d", tacCount+4);
+        // emitTAC(strdup(t2), "<=", $1.tac, $3.tac,1);
+        // emitTAC(temp, NULL, "0", NULL,0);
+        // sprintf(t2, "%d", tacCount+3);
+        // emitTAC(strdup(t2), NULL , NULL, NULL,1);
+        // emitTAC(temp, NULL, "1", NULL,0);
+        BackpatchNode* cur = $$.true_list;
+        BackpatchNode* next = addToBackpatchList(cur, tacCount);
+        $$.true_list = next;
+        cur = $$.false_list;
+        next = addToBackpatchList(cur, tacCount+1);
+        $$.false_list = next;
+        emitTAC(NULL, "<=", $1.tac, $3.tac,1);
+        emitTAC(NULL,NULL, NULL, NULL,1);
+        $$.tac = temp;
+    }
+    | relational_expression OP_GTE shift_expression{
+        char* temp = newTemp();
+        // char t2[100];
+        // sprintf(t2, "%d", tacCount+4);
+        // emitTAC(strdup(t2), ">=", $1.tac, $3.tac,1);
+        // emitTAC(temp, NULL, "0", NULL,0);
+        // sprintf(t2, "%d", tacCount+3);
+        // emitTAC(strdup(t2), NULL , NULL, NULL,1);
+        // emitTAC(temp, NULL, "1", NULL,0);
+        BackpatchNode* cur = $$.true_list;
+        BackpatchNode* next = addToBackpatchList(cur, tacCount);
+        $$.true_list = next;
+        cur = $$.false_list;
+        next = addToBackpatchList(cur, tacCount+1);
+        $$.false_list = next;
+        emitTAC(NULL, ">=", $1.tac, $3.tac,1);
+        emitTAC(NULL,NULL, NULL, NULL,1);
+        $$.tac = temp;
+    }
+    ;
+
+equality_expression
+    : relational_expression{
+        $$ = $1;
+    }
+    | equality_expression OP_EQ relational_expression{
+        char* temp = newTemp();
+        // char t2[100];
+        // sprintf(t2, "%d", tacCount+4);
+        // emitTAC(strdup(t2), "==", $1.tac, $3.tac,1);
+        // emitTAC(temp, NULL, "0", NULL,0);
+        // sprintf(t2, "%d", tacCount+3);
+        // emitTAC(strdup(t2), NULL , NULL, NULL,1);
+        // emitTAC(temp, NULL, "1", NULL,0);
+        BackpatchNode* cur = $$.true_list;
+        BackpatchNode* next = addToBackpatchList(cur, tacCount);
+        $$.true_list = next;
+        cur = $$.false_list;
+        next = addToBackpatchList(cur, tacCount+1);
+        $$.false_list = next;
+        emitTAC(NULL, "==", $1.tac, $3.tac,1);
+        emitTAC(NULL,NULL, NULL, NULL,1);
+        $$.tac = temp;
+    }
+    | equality_expression OP_NEQ relational_expression{
+        char* temp = newTemp();
+        // char t2[100];
+        // sprintf(t2, "%d", tacCount+4);
+        // emitTAC(strdup(t2), "!<", $1.tac, $3.tac,1);
+        // emitTAC(temp, NULL, "0", NULL,0);
+        // sprintf(t2, "%d", tacCount+3);
+        // emitTAC(strdup(t2), NULL , NULL, NULL,1);
+        // emitTAC(temp, NULL, "1", NULL,0);
+        BackpatchNode* cur = $$.true_list;
+        BackpatchNode* next = addToBackpatchList(cur, tacCount);
+        $$.true_list = next;
+        cur = $$.false_list;
+        next = addToBackpatchList(cur, tacCount+1);
+        $$.false_list = next;
+        emitTAC(NULL, "!=", $1.tac, $3.tac,1);
+        emitTAC(NULL,NULL, NULL, NULL,1);
+        $$.tac = temp;
+    }
+    ;
+
+and_expression
+    : equality_expression{
+        $$ = $1;
+    }
+    | and_expression OP_BIT_AND equality_expression{
+        char* temp = newTemp();
+        emitTAC(temp, "&", $1.tac, $3.tac,0);
+        $$.tac = temp;
+    }
+    ;
+
+exclusive_or_expression
+    : and_expression{
+        $$ = $1;
+    }
+    | exclusive_or_expression OP_BIT_XOR and_expression{
+        char* temp = newTemp();
+        emitTAC(temp, "^", $1.tac, $3.tac,0);
+        $$.tac = temp;
+    }
+    ;
+
+inclusive_or_expression
+    : exclusive_or_expression{
+        $$ = $1;
+    }
+    | inclusive_or_expression OP_BIT_OR M exclusive_or_expression{
+        char* temp = newTemp();
+        // emitTAC(temp, "|", $1.tac, $3.tac,0);
+        $$.tac = temp;
+        backpatch($1.false_list, $3.tac);
+        $$.false_list = $4.false_list;
+        $$.true_list = mergeBackpatchLists($1.true_list, $4.true_list);
+    }
+    ;
+
+logical_and_expression
+    : inclusive_or_expression{
+        $$ = $1;
+    }
+    | logical_and_expression OP_AND M inclusive_or_expression{
+        char* temp = newTemp();
+        // emitTAC(temp, "&&", $1.tac, $3.tac,0);
+        $$.tac = temp;
+        backpatch($1.true_list, $3.tac);
+        $$.true_list = $4.true_list;
+        $$.false_list = mergeBackpatchLists($1.false_list, $4.false_list);
+    }
+    ;
+
+logical_or_expression
+    : logical_and_expression{
+        $$ = $1;
+    }
+    | logical_or_expression OP_OR M logical_and_expression{
+        char* temp = newTemp();
+        emitTAC(temp, "||", $1.tac, $3.tac,0);
+        $$.tac = temp;
+    }
+    ;
+
+M  
+    : {
+        char temp[100];
+        sprintf(temp, "%d", tacCount);
+        $$.tac = strdup(temp);
+    }
+    ;
+conditional_expression
+    : logical_or_expression{
+        $$ = $1;
+    }
+    | logical_or_expression OP_TERNARY expression COLON conditional_expression{
+        // implement ternary operator
+    }
+    ;
+
+assignment_expression
+    : conditional_expression{
+        $$ = $1;
+    }
+    | unary_expression assignment_operator assignment_expression {
+        // Check if the assignment is valid
+        // if ( strcmp($2,"=")==0){
+        //     printf("\n%s, %s\n" , $1.type,$3.type);
+        //     if( check_types($1.type, $3.type) != 1) {
+        //         printf( "Type mismatch in assignment '%s' and '%s'", $1.type, $3.type);
+        //     }else{
+        //         $$.type = $1.type;
+        //     }
+        // }else{
+        //     if( check_types_withoperator($1.type, $3.type,$2) ){
+        //         $$.type = $1.type;
+        //     }else{
+        //         printf( "Type mismatch in assignment '%s' and '%s'", $1.type, $3.type);
+        //     }
+        // }
+
+        if($2.tac){
+            emitTAC($1.tac, $2.tac, $1.tac, $3.tac,0);
+        }else{
+            emitTAC($1.tac, NULL, $3.tac, NULL,0);
+        }
+        
+    
+        
+    }
+    ;
+
+assignment_operator
+    : ASSIGN_EQ { $$.original = "="; }
+    | ASSIGN_ADD { $$.original = "+=";$$.tac="+" }
+    | ASSIGN_SUB { $$.original = "-=";$$.tac="-" }
+    | ASSIGN_MUL { $$.original = "=";$$.tac="" }
+    | ASSIGN_DIV { $$.original = "/=";$$.tac="/" }
+    | ASSIGN_MOD { $$.original = "%=";$$.tac="%" }
+    | ASSIGN_LSHIFT { $$.original = "<<=";$$.tac="<<" }
+    | ASSIGN_RSHIFT { $$.original = ">>=";$$.tac=">>" }
+    | ASSIGN_AND { $$.original = "&=";$$.tac="&" }
+    | ASSIGN_XOR { $$.original = "^=";$$.tac="^" }
+    | ASSIGN_OR { $$.original = "|=";$$. tac="|" }
+    ;
+
+expression
+    : assignment_expression{
+        $$ = $1;
+    }
+    | expression COMM assignment_expression{
+        // Check if the comma is valid
+        if (check_types($1.type, $3.type) != 1) {
+            printf( "Type mismatch in commaddd expression '%s' and '%s'", $1.type, $3.type);
+            $$.type = $1.type;
+        }
+        // char temp[100];
+        // sprintf(temp, "%s,%s", $1.tac, $3.tac);
+        // $$.tac = strdup(temp);
+    }
+    ;
+
+constant_expression
+    : conditional_expression{
+        $$ = $1;
+    }	/* with constraints */
+    ;
+
+declaration
+    : declaration_specifiers SC
+    | declaration_specifiers init_declarator_list SC
+    | static_assert_declaration
+    ;
+
+declaration_specifiers
+    : storage_class_specifier declaration_specifiers {
+        $$.type = $2.type;
+        char temp[100];
+        snprintf(temp, sizeof(temp), "%s %s", $1.other ? $1.other : "", $2.other ? $2.other : "");
+        $$.other = strdup(temp);  // Return concatenated type
+        // $$ = strdup(temp);  // Return concatenated type
+    }
+    | storage_class_specifier {
+        $$.other = strdup($1.other);  
+        
+    }
+    | type_specifier declaration_specifiers {
+        $$.other = $2.other;
+        char temp[100];
+        snprintf(temp, sizeof(temp), "%s %s", $1.type , $2.type);
+        $$.type = strdup(temp);
+        // $$ = strdup(temp);
+        
+    }
+    | type_specifier {
+        $$.type = strdup($1.type);
+        
+    }
+    | type_qualifier declaration_specifiers {
+        $$.type = $2.type;
+        char temp[100];
+        snprintf(temp, sizeof(temp), "%s %s", $1.other ? $1.other:"" , $2.other ? $2.other:"");
+        $$.other = strdup(temp);
+    }
+    | type_qualifier {
+        $$.other = strdup($1.other);
+    }
+    | function_specifier declaration_specifiers {
+        $$.type = $2.type;
+        char temp[100];
+        snprintf(temp, sizeof(temp), "%s %s", $1.other ? $1.other : "", $2.other ? $2.other : "");
+        $$.other = strdup(temp);
+    }
+    | function_specifier {
+        $$.other = strdup($1.other);
+    }
+    | alignment_specifier declaration_specifiers {
+        $$.type = $2.type;
+        char temp[100];
+        snprintf(temp, sizeof(temp), "%s %s", $1.other ? $1.other : "", $2.other ? $2.other : "");
+        $$.other = strdup(temp);
+    }
+    | alignment_specifier {
+        $$.other = strdup($1.other);
+    }
+;
+
+
+init_declarator_list
+    : init_declarator {
+        $$.type = $<decl>0.type;
+        $$.other = $<decl>0.other;
+        insertSymbol($1.identifier, $$.type, $1.kind,$$.other,$1.pointer,$1.array,NULL);
+    }
+    | init_declarator_list COMM init_declarator {
+        $$.type = $1.type;
+        $$.other = $1.other;
+        insertSymbol($3.identifier, $$.type, $3.kind,$$.other,$3.pointer,$3.array,NULL);
+    }
+    | init_declarator_list COMM error COMM
+    ;
+
+init_declarator
+    : declarator ASSIGN_EQ initializer { 
+        printf("%d",check_types($1.type,$3.type));
+        // if (check_types($1.type, $3.type) != 1) {
+        //     printf( "Type mismatch in commarrr expression '%s' and '%s'", $1.type, $3.type);
+        //     $$.type = $1.type;
+        // }
+        emitTAC($1.identifier, NULL, $3.tac, NULL,0);
+    }
+    | declarator { $$ = $1; }
+    ;
+
+storage_class_specifier
+    : KEYWORD_TYPEDEF  {$$.other = "typedef";}
+    | KEYWORD_EXTERN {$$.other = "extern";}
+    | KEYWORD_STATIC   {$$.other = "static";}
+    | KEYWORD_THREAD_LOCAL {$$.other = "thread_local";}
+    | KEYWORD_AUTO {$$.other = "auto";}
+    | KEYWORD_REGISTER {$$.other = "register";}
+    ;
+
+type_specifier
+    : KEYWORD_VOID {  $$.type = "void" ;}
+    | KEYWORD_CHAR  {$$.type = "char" ; }
+    | KEYWORD_SHORT {$$.type = "short"  ;}
+    | KEYWORD_INT {$$.type = "int" ; }
+    | KEYWORD_LONG  {$$.type = "long";  }
+    | KEYWORD_FLOAT {$$.type = "float";  }
+    | KEYWORD_DOUBLE {$$.type = "double"; }
+    | KEYWORD_SIGNED {$$.type = "signed";  }
+    | KEYWORD_UNSIGNED {$$.type = "unsigned";  }
+    | KEYWORD_BOOL 	{$$.type = "bool";  }
+    | atomic_type_specifier {$$.type = "atomic";}
+    | struct_or_union_specifier {$$.type = "struct";}
+    | enum_specifier    {$$.type = "enum";}
+    /* | TYPEDEF_NAME		after it has been defined as such  */
+    ;
+
+struct_or_union_specifier
+	: struct_or_union IDENTIFIER LEFT_PAREN_CURL struct_declaration_list RIGHT_PAREN_CURL {
+        insertSymbol($2,"struct",NULL,NULL,NULL,NULL,NULL);
+    }
+	| struct_or_union LEFT_PAREN_CURL struct_declaration_list RIGHT_PAREN_CURL
+	| struct_or_union IDENTIFIER{
+        
+        insertSymbol($2,"struct",NULL,NULL,NULL,NULL,NULL); // Forward declaration of struct
+    }
+	;
+
+struct_or_union
+	: KEYWORD_STRUCT
+	| KEYWORD_UNION
+	;
+
+struct_declaration_list
+	: struct_declaration
+	| struct_declaration_list struct_declaration
+	;
+
+struct_declaration
+	: specifier_qualifier_list struct_declarator_list SC
+	;
+
+specifier_qualifier_list
+	: type_specifier specifier_qualifier_list
+	| type_specifier
+	| type_qualifier specifier_qualifier_list
+	| type_qualifier
+	;
+
+struct_declarator_list
+	: struct_declarator
+	| struct_declarator_list COMM struct_declarator
+	;
+
+
+struct_declarator
+    : declarator {
+        // Insert the struct member into the symbol table
+        insertSymbol($1.identifier, $1.type,NULL,NULL,NULL,NULL,NULL);
+    }
+    | COLON constant_expression {
+        // Handle bit-field without identifier (no action needed here)
+    }
+    | declarator COLON constant_expression {
+        // Handle bit-field with identifier
+        insertSymbol($1.identifier, $1.type,NULL,NULL,NULL,NULL,NULL);
+    }
+    ;
+enum_specifier
+    : KEYWORD_ENUM LEFT_PAREN_CURL enumerator_list RIGHT_PAREN_CURL
+    | KEYWORD_ENUM LEFT_PAREN_CURL enumerator_list COMM RIGHT_PAREN_CURL
+    | KEYWORD_ENUM IDENTIFIER LEFT_PAREN_CURL enumerator_list RIGHT_PAREN_CURL{
+        insertSymbol($2, "enum",NULL,NULL,NULL,NULL,NULL);
+    }
+    | KEYWORD_ENUM IDENTIFIER LEFT_PAREN_CURL enumerator_list COMM RIGHT_PAREN_CURL{
+        insertSymbol($2, "enum",NULL,NULL,NULL,NULL,NULL);
+    }
+    | KEYWORD_ENUM IDENTIFIER{
+        insertSymbol($2, "enum",NULL,NULL,NULL,NULL,NULL); // Forward declaration of enum
+    }
+    ;
+
+enumerator_list
+    : enumerator
+    | enumerator ASSIGN_EQ constant
+    | enumerator_list COMM enumerator
+    ;
+
+enumerator	
+    :IDENTIFIER
+    ;
+
+atomic_type_specifier
+    : KEYWORD_ATOMIC LEFT_PAREN type_name RIGHT_PAREN
+    ;
+
+type_qualifier
+    : KEYWORD_CONST { $$.other = "const" ;}
+    | KEYWORD_RESTRICT {  $$.other = "restrict" ;}
+    | KEYWORD_VOLATILE { $$.other = "volatile" ;}
+    ;
+
+function_specifier
+    : KEYWORD_INLINE { $$.other = "inline" ;}
+    | KEYWORD_NORETURN { $$.other = "noreturn" ;}
+    ;
+
+alignment_specifier
+    : KEYWORD_ALIGNAS LEFT_PAREN type_name RIGHT_PAREN {  $$.other = "alignas" ;}
+    | KEYWORD_ALIGNAS LEFT_PAREN constant_expression RIGHT_PAREN {  $$.other = "alignas" ;}
+    ;
+
+declarator
+    : pointer direct_declarator {
+        $$.identifier = $2.identifier;
+        char temp[100];
+        sprintf(temp, "%s%s", $2.kind ? $2.kind: "" , $1);
+        $$.kind = strdup(temp);
+        $$.pointer = $1;
+        $$.array = $2.array;
+        $$.args = $2.args;
+    }
+    | direct_declarator {
+        $$.identifier = $1.identifier;
+        $$.kind = $1.kind;
+        $$.array = $1.array;
+        $$.args = $1.args;
+    }
+    ;
+
+direct_declarator
+    : IDENTIFIER {
+        $$.identifier = $1;
+        
+    }
+    | LEFT_PAREN declarator RIGHT_PAREN {
+        $$.identifier = $2.identifier;
+        
+    }
+    | direct_declarator LEFT_PAREN_SQ RIGHT_PAREN_SQ {
+        $$.identifier = $1.identifier;
+        char temp[100];
+        sprintf(temp, "%s[]", $1.array ? $1.array : "");
+        $$.kind = strdup(temp);
+        $$.array = strdup(temp);
+    }
+    | direct_declarator LEFT_PAREN_SQ constant_expression RIGHT_PAREN_SQ {
+        $$.identifier = $1.identifier;
+        char temp[100];
+        sprintf(temp, "%s[%d]", $1.array ? $1.array : "",$3.val?$3.val:0);
+        $$.array = strdup(temp);
+        $$.kind = strdup(temp);
+    }
+    | direct_declarator LEFT_PAREN parameter_type_list RIGHT_PAREN {
+        $$.identifier = $1.identifier;
+        $$.args = $3.args;
+        
+
+        // $$.type = "FUNCTION";
+    }
+    | direct_declarator LEFT_PAREN RIGHT_PAREN {
+        $$.identifier = $1.identifier;
+        // $$.type = "FUNCTION";
+    }
+    | direct_declarator LEFT_PAREN identifier_list RIGHT_PAREN
+    ;
+
+pointer
+    : OP_MUL {
+        $$ = "*";
+    }
+    | OP_MUL pointer {
+        char temp[100];
+        sprintf(temp, "*%s", $2);
+        $$ = strdup(temp);
+    }
+    /* Add other pointer rules if needed */
+    ;
+
+type_qualifier_list
+    : type_qualifier
+    | type_qualifier_list type_qualifier
+    | KEYWORD_ATOMIC
+    | type_qualifier_list KEYWORD_ATOMIC
+    ;
+
+
+parameter_type_list
+    : parameter_list COMM KEYWORD_ELLIPSIS {char temp[100];
+        sprintf(temp, "%s, ...", $1.args);
+        $$.args = strdup(temp);
+    }
+    | parameter_list {$$ = $1;}
+    ;
+
+parameter_list
+    : parameter_declaration {$$ = $1; $$.arg_cnt = 1;}
+    | parameter_list COMM parameter_declaration {
+        char temp[100];
+        sprintf(temp, "%s, %s", $1.args ? $1.args : "", $3.args ? $3.args : "");
+        $$.args = strdup(temp);
+        $$.arg_cnt+=1;
+    }
+    ;
+
+parameter_declaration
+    : declaration_specifiers declarator {
+        $$.args = $1.type;
+        // $$.arg_cnt = 1;
+        char temp[100];
+        sprintf(temp, "%s%s%s",$2.pointer ? $2.pointer: "" , $2.identifier,$2.array?$2.array:"");
+        // emitTAC(NULL,NULL, "param", strdup(temp));
+
+        }
+    | declaration_specifiers abstract_declarator{$$.args = $1.type;}
+    | declaration_specifiers{$$.args = $1.type;}
+    ;
+
+identifier_list
+    : IDENTIFIER
+    | identifier_list COMM IDENTIFIER
+    ;
+
+type_name
+    : specifier_qualifier_list abstract_declarator
+    | specifier_qualifier_list
+    ;
+
+abstract_declarator
+    : pointer direct_abstract_declarator
+    | pointer
+    | direct_abstract_declarator
+    ;
+
+direct_abstract_declarator
+    : LEFT_PAREN abstract_declarator RIGHT_PAREN
+    | LEFT_PAREN_SQ RIGHT_PAREN_SQ
+    | LEFT_PAREN_SQ OP_MUL RIGHT_PAREN_SQ
+    | LEFT_PAREN_SQ KEYWORD_STATIC type_qualifier_list assignment_expression RIGHT_PAREN_SQ
+    | LEFT_PAREN_SQ KEYWORD_STATIC assignment_expression RIGHT_PAREN_SQ
+    | LEFT_PAREN_SQ type_qualifier_list KEYWORD_STATIC assignment_expression RIGHT_PAREN_SQ
+    | LEFT_PAREN_SQ type_qualifier_list assignment_expression RIGHT_PAREN_SQ
+    | LEFT_PAREN_SQ type_qualifier_list RIGHT_PAREN_SQ
+    | LEFT_PAREN_SQ assignment_expression RIGHT_PAREN_SQ
+    | direct_abstract_declarator LEFT_PAREN_SQ RIGHT_PAREN_SQ
+    | direct_abstract_declarator LEFT_PAREN_SQ OP_MUL RIGHT_PAREN_SQ
+    | direct_abstract_declarator LEFT_PAREN_SQ KEYWORD_STATIC type_qualifier_list assignment_expression RIGHT_PAREN_SQ
+    | direct_abstract_declarator LEFT_PAREN_SQ KEYWORD_STATIC assignment_expression RIGHT_PAREN_SQ
+    | direct_abstract_declarator LEFT_PAREN_SQ type_qualifier_list assignment_expression RIGHT_PAREN_SQ
+    | direct_abstract_declarator LEFT_PAREN_SQ type_qualifier_list KEYWORD_STATIC assignment_expression RIGHT_PAREN_SQ
+    | direct_abstract_declarator LEFT_PAREN_SQ type_qualifier_list RIGHT_PAREN_SQ
+    | direct_abstract_declarator LEFT_PAREN_SQ assignment_expression RIGHT_PAREN_SQ
+    | LEFT_PAREN RIGHT_PAREN
+    | LEFT_PAREN parameter_type_list RIGHT_PAREN
+    | direct_abstract_declarator LEFT_PAREN RIGHT_PAREN
+    | direct_abstract_declarator LEFT_PAREN parameter_type_list RIGHT_PAREN
+    ;
+
+initializer
+    : LEFT_PAREN_CURL initializer_list RIGHT_PAREN_CURL
+    | LEFT_PAREN_CURL initializer_list COMM RIGHT_PAREN_CURL
+    | assignment_expression{
+        $$ = $1;
+    }
+    ;
+
+initializer_list
+    : designation initializer
+    | initializer{
+        $$ = $1;
+    }
+    | initializer_list COMM designation initializer
+    | initializer_list COMM initializer
+    ;
+
+designation
+    : designator_list ASSIGN_EQ
+    ;
+
+designator_list
+    : designator
+    | designator_list designator
+    ;
+
+designator
+    : LEFT_PAREN_SQ constant_expression RIGHT_PAREN_SQ
+    | DOT IDENTIFIER
+    ;
+
+static_assert_declaration
+    : KEYWORD_STATIC_ASSERT LEFT_PAREN constant_expression COMM STRING RIGHT_PAREN SC
+    ;
+
+statement
+    : labeled_statement
+    | compound_statement
+    | expression_statement
+    | selection_statement
+    | iteration_statement
+    | jump_statement
+    | printf_scanf_statement
+    ;
+printf_scanf_statement
+    : KEYWORD_PRINTF LEFT_PAREN STRING COMM expression_list RIGHT_PAREN SC
+    | KEYWORD_SCANF LEFT_PAREN STRING COMM expression_list RIGHT_PAREN SC
+    | KEYWORD_PRINTF LEFT_PAREN STRING RIGHT_PAREN SC
+    ;
+expression_list
+    : assignment_expression
+    | expression_list COMM assignment_expression
+    ;
+
+labeled_statement
+    : IDENTIFIER COLON statement
+    | KEYWORD_CASE constant_expression COLON statement
+    | KEYWORD_DEFAULT COLON statement
+    ;
+
+compound_statement
+    : LEFT_PAREN_CURL {enterScope();} RIGHT_PAREN_CURL {exitScope();}
+    | LEFT_PAREN_CURL {enterScope();} block_item_list RIGHT_PAREN_CURL {exitScope();}
+    ; 
+
+block_item_list
+    : block_item
+    | block_item_list block_item
+    ;
+
+block_item
+    : declaration
+    | statement
+    /* | error {yyclearin; yyerrok;} */
+    ;
+
+expression_statement
+    : SC
+    | expression SC
+    | expression error
+    ;
+
+selection_statement
+    : KEYWORD_IF LEFT_PAREN expression RIGHT_PAREN statement %prec LOWER_THAN_ELSE
+    | KEYWORD_IF LEFT_PAREN expression RIGHT_PAREN statement KEYWORD_ELSE statement
+    | KEYWORD_SWITCH LEFT_PAREN expression RIGHT_PAREN {enterScope();} statement {exitScope();}
+    ;
+
+iteration_statement
+    : KEYWORD_WHILE LEFT_PAREN expression RIGHT_PAREN{enterScope();}statement{exitScope();}
+    | KEYWORD_DO {enterScope();}statement {exitScope();}KEYWORD_WHILE LEFT_PAREN expression RIGHT_PAREN SC
+    | KEYWORD_FOR LEFT_PAREN {enterScope();} for_init expression_opt SC expression_opt RIGHT_PAREN statement {exitScope();}
+    ;
+for_init
+    : expression_statement
+    | declaration
+    ;
+
+expression_opt
+    : /* empty */
+    | expression
+    ;
+
+jump_statement
+    : KEYWORD_GOTO IDENTIFIER SC
+    | KEYWORD_CONTINUE SC
+    | KEYWORD_BREAK SC
+    | KEYWORD_RETURN SC {
+        emitTAC(NULL, "return", NULL, NULL,0);
+    }
+    | KEYWORD_RETURN expression SC {
+        emitTAC(NULL, "return",NULL, $2.tac,0);
+        printf("return %s\n", $2.tac);
+    }
+    ;
+
+
+translation_unit
+    : external_declaration
+    | translation_unit external_declaration
+    | error external_declaration
+    | translation_unit error external_declaration
+    ;
+
+external_declaration
+    : function_definition
+    | declaration
+    /* | error {yyclearin; yyerrok;} */
+    ;
+
+function_definition
+    : declaration_specifiers declarator declaration_list compound_statement {
+        insertSymbol($2.identifier, "FUNCTION",$1.type,$1.other,NULL,NULL,$2.args);
+    }
+    | declaration_specifiers declarator  {insertSymbol($2.identifier, "FUNCTION",$1.type,$1.other,NULL,NULL,$2.args); emitTAC(NULL , ":", $2.identifier, NULL,0); enterScope();}compound_statement {
+        
+        exitScope();
+    }
+    ;
+
+declaration_list
+    : declaration
+    | declaration_list declaration
+    ;
+
+%%
+#include <stdio.h>
+void yyerror(const char *s){
+    errorFound=true;
+    extern char *yytext;
+    extern int yylineno;
+    fprintf(stderr, "Error: %s at '%s' on line %d\n", s, yytext, yylineno);
+    yyclearin;
+}
+int main(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Usage: %s <filename>\n", argv[0]);
+        return 1;
+    }
+
+    yyin = fopen(argv[1], "r");  // Open the input file
+    if (!yyin) {
+        perror("Error opening filen\n");
+        return 1;
+    }
+    currentScope = malloc(sizeof(SymbolTable));  // Initialize global scope
+    currentScope->count = 0;
+    currentScope->parent = NULL;
+
+    yyparse();  // Call the parser
+    // Print the symbol table after parsing
+    fclose(yyin);  // Close the input file
+    if(errorFound){
+        printf("Parsing completed and has errors.\n");
+        return 1;
+    }else{
+        printf("Parsing completed successfully!!!\n");
+    }
+    printSymbolTable();
+    printTAC();
+    return 0;
+}

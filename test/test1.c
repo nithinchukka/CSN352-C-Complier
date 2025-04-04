@@ -1,3 +1,3 @@
-void func(){
-    return 1;
+void func(int a, int b){
+    return;
 }

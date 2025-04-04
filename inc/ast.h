@@ -116,7 +116,7 @@ public:
     vector<int> paramTypes;
     vector<int> dimensions;
     vector<pair<string, TreeNode*>> symbolTable;
-
+    string tacResult;
     TreeNode(NodeType type, NodeValue value = monostate()) : type(type), value(value)
     {
     }
