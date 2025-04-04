@@ -1593,6 +1593,7 @@ constructor_function
 function_definition
     : declaration_specifiers declarator {
         DeclaratorInfo declInfo = isValidVariableDeclaration($1->children, true);
+        enterScope();
         if (declInfo.isValid) {
             string funcName = $2->children[0]->valueToString();
             codeGen.emit(TACOp::LABEL, funcName);
