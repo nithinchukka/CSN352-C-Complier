@@ -17,576 +17,6 @@
     extern int yylineno;
     extern FILE *yyin;
     extern unordered_set<string> classOrStructOrUnion;
-    map<string, vector<pair<string, TreeNode*>>> alphaSymbolTable;
-struct DeclaratorInfo {
-    int typeCategory = -1; // var = 0, func = 1, struct = 2, enum = 3, class = 4
-    int storageClass = -1; // -1: none, 0: extern, 1: static, 2: auto, 3: register
-    int typeSpecifier = -1; // -1: none, void : -1: char : 1, short : 2, 3: int, 4: bool, 5: long, 6: float, 7: double
-    bool isConst = false;
-    bool isStatic = false;
-    bool isVolatile = false;
-    bool isUnsigned = false;
-    bool hasLong = false;
-    bool isValid = false;
-    bool isCustomType = false; // true if it's a class, struct, or union
-};
-
-bool isValidCast(int toType, int fromType) {
-    if (toType >= 1 && toType <= 6 && fromType >= 1 && fromType <= 6)
-        return true;
-    return false;
-}
-
-
-
-bool checkFormatSpecifiers(string formatString, vector<int> argTypeList) {
-    int argIndex = 0;
-    const char* ptr = formatString.c_str();
-    while (*ptr) {
-        if (*ptr == '%') {
-            ptr++;
-            if (*ptr == '\0') break; // Avoid accessing out-of-bounds memory
-
-            if (*ptr == '%') {  // Literal '%%'
-                ptr++;
-                continue;
-            }
-
-            if (argIndex >= argTypeList.size()) {
-                cerr << "Error: Too few arguments\n";
-                return false;
-            }
-
-            int expectedType1 = -1, expectedType2 = -1;
-            switch (*ptr) {
-                case 'd': expectedType1 = 2, expectedType2 = 3; break;  // int or long
-                case 'f': expectedType1 = 5, expectedType2 = 6; break;  // float or double
-                case 's': expectedType1 = 8; break;  // string
-                case 'c': expectedType1 = 1; break;  // char
-                default: 
-                    cerr << "Error: Unknown format specifier '%" << *ptr << "'\n";
-                    return false;
-            }
-
-            if (argTypeList[argIndex] != expectedType1 && argTypeList[argIndex] != expectedType2) {
-                cerr << "Error: Type mismatch for '%" << *ptr << "'\n";
-                return false;
-            }
-            argIndex++;
-        }
-        ptr++;
-    }
-
-    if (argIndex < argTypeList.size()) {
-        cerr << "Error: Too many arguments\n";
-        return false;
-    }
-
-    return true;
-}
-
-DeclaratorInfo isValidVariableDeclaration(vector<TreeNode*>& nodes, bool isFunction = false) {
-    DeclaratorInfo declInfo;
-    unordered_map<string, int> storageClasses = {
-        {"extern", 0}, {"static", 1}, {"auto", 2}, {"register", 3}
-    };
-    unordered_map<string, int> baseTypes = {
-        {"void", 0}, {"char", 1}, {"short", 2}, {"int", 3}, {"long", 5}, {"float", 6}, {"double", 7}
-    };
-    unordered_set<string> typeModifiers = {"signed", "unsigned"};
-    unordered_set<string> qualifiers = {"const", "volatile"};
-
-    int storageClassCount = 0, typeSpecifierCount = 0, typeModifierCount = 0, qualifierCount = 0;
-    bool hasSignedOrUnsigned = false;
-
-    for (const auto& node : nodes) {
-        string val = node->valueToString();
-        
-        if (node->type == NODE_STORAGE_CLASS_SPECIFIER) {
-            if (!storageClasses.count(val)) return {};
-            declInfo.storageClass = storageClasses[val];
-            if (val == "static") declInfo.isStatic = true;
-            storageClassCount++;
-            if (storageClassCount > 1) return {};
-        } else if (node->type == NODE_TYPE_SPECIFIER) {
-            if (classOrStructOrUnion.count(val)) {
-                if (declInfo.typeSpecifier != -1) return {};
-                declInfo.typeCategory = 4;
-                declInfo.typeSpecifier = 20;
-                declInfo.isCustomType = true;
-                typeSpecifierCount++;
-            }
-            else if (baseTypes.count(val)) {
-                if (declInfo.typeSpecifier != -1) return {};
-                declInfo.typeSpecifier = baseTypes[val];
-                typeSpecifierCount++;
-            }
-            else if (typeModifiers.count(val)) {
-                typeModifierCount++;
-                if (val == "unsigned") declInfo.isUnsigned = true;
-                if (val == "signed") hasSignedOrUnsigned = true;
-            } else {
-                return {};
-            }
-        } else if (node->type == NODE_TYPE_QUALIFIER) {
-            if (!qualifiers.count(val)) return {};
-            if (val == "const") declInfo.isConst = true;
-            if (val == "volatile") declInfo.isVolatile = true;
-            qualifierCount++;
-        } else {
-            return {};
-        }
-    }
-
-    if (typeSpecifierCount == 0) return {};
-    if (typeModifierCount > 2) return {};
-
-    if (!isFunction && declInfo.typeSpecifier == 0) return {};
-    declInfo.isValid = true;
-    return declInfo;
-}
-
-
-bool isTypeCompatible(int lhstype, int rhstype, string op, bool lhsIsConst = false) {
-    // Define type categories by storage class numbers
-    unordered_set<int> integerTypes = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}; // char to unsigned long long
-    unordered_set<int> floatingTypes = {12, 13, 14}; // float, double, long double
-    unordered_set<int> numericTypes = integerTypes;
-    numericTypes.insert(floatingTypes.begin(), floatingTypes.end());
-    // Check if types are numeric or integer
-    bool lhsIsNumeric = numericTypes.count(lhstype);
-    bool rhsIsNumeric = numericTypes.count(rhstype);
-    bool lhsIsInteger = integerTypes.count(lhstype);
-    bool rhsIsInteger = integerTypes.count(rhstype);
-    // Validate type numbers (1-14 are valid)
-    if (lhstype < 1 || rhstype < 1) {
-        return false; // Invalid storage class
-    }
-    // Arithmetic operators
-    if (op == "+" || op == "-" || op == "*" || op == "/") {
-        return lhsIsNumeric && rhsIsNumeric; // Both must be numeric
-    }
-    if (op == "%") {
-        return lhsIsInteger && rhsIsInteger; // Both must be integers
-    }
-    // Comparison operators
-    if (op == "==" || op == "!=" || op == "<" || op == ">" || op == "<=" || op == ">=") {
-        return lhsIsNumeric && rhsIsNumeric; // Both must be numeric
-    }
-    // Assignment operator
-    if (op == "=") {
-        if (lhsIsConst) return false; // Cannot assign to const
-        if (lhstype == rhstype) return true; // Exact match
-        if (lhsIsNumeric && rhsIsNumeric){
-            if(rhstype>lhstype){
-                return false;
-            }
-            else{
-                return true;
-            }
-        } // Numeric conversion
-        return false;
-    }
-    // Compound arithmetic operators
-    if (op == "+=" || op == "-=" || op == "*=" || op == "/=") {
-        if (lhsIsConst) return false; // Cannot modify const
-        return lhsIsNumeric && rhsIsNumeric; // Both must be numeric
-    }
-    // Compound bitwise operators
-    if (op == "^=" || op == "&=" || op == "|=") {
-        if (lhsIsConst) return false; // Cannot modify const
-        return lhsIsInteger && rhsIsInteger; // Both must be integers
-    }
-    // Shift operators
-    if (op == "<<=" || op == ">>=") {
-        if (lhsIsConst) return false; // Cannot modify const
-        return lhsIsInteger && rhsIsInteger; // Both must be integers
-    }
-    // Unknown operator
-    return false;
-}
-
-bool checkInitializerLevel(TreeNode* initList, int baseType, vector<int>& dimensions, int level) {
-    int vecSize = dimensions.size();
-
-    if (baseType != 1 && baseType != 3) {
-        cerr << "Invalid declaration for an array" << endl;
-        return false;
-    }
-
-    // Ensure all dimensions except the first are specified
-    for (int i = 1; i < vecSize; i++) {
-        if (dimensions[i] == -1) { // Use -1 instead of 0 for unspecified dimensions
-            cerr << "Invalid Declaration: dimension " << i << " cannot be unspecified" << endl;
-            return false;
-        }
-    }
-
-    // Ensure level doesn't exceed defined dimensions
-    if (level >= vecSize) {
-        cerr << "Too many nesting levels at level " << level << endl;
-        return false;
-    }
-
-    // Infer first dimension if unspecified
-    if (level == 0 && dimensions[0] == -1) {
-        dimensions[0] = initList->children.size();  
-    }
-
-    // Check that the initializer list does not exceed the expected dimension
-    if (initList->children.size() > dimensions[level]) {
-        cerr << "Dimension mismatch at level " << level << ": expected at most " 
-             << dimensions[level] << ", got " << initList->children.size() << endl;
-        return false;
-    }
-
-    if (level == vecSize - 1) {
-        // Innermost level: check scalar types
-        for (TreeNode* child : initList->children) {
-            if (child->type != NODE_UNARY_EXPRESSION) {
-                cerr << "Expected scalar at level " << level << ", got " << child->type << endl;
-                return false;
-            }
-            // Check type correctness
-            if (child->typeSpecifier != baseType) {
-                cerr << "Type mismatch at level " << level << ": expected " 
-                     << baseType << ", got " << child->typeSpecifier << endl;
-                return false;
-            }
-        }
-    } else {
-        // Recurse for nested lists, check all children
-        for (TreeNode* child : initList->children) {
-            if (child->type != NODE_INITIALIZER_LIST) {
-                cerr << "Expected nested initializer list at level " << level << endl;
-                return false;
-            }
-            if (!checkInitializerLevel(child, baseType, dimensions, level + 1)) {
-                return false;
-            }
-        }
-    }
-    
-    return true;
-}
-
-
-vector<int> findArrayDimensions(TreeNode* arr) {
-    if (!arr || arr->children.empty()) 
-        return {};
-
-    vector<int> dimensions;
-    TreeNode* current = arr;
-
-    while (current) {
-        if (current->type == ARRAY) {
-            if (current->children.size() > 1 && current->children[1] &&
-                current->children[1]->type == INTEGER_LITERAL) {
-                dimensions.push_back(stoi(current->children[1]->valueToString()));
-            } else {
-                dimensions.push_back(-1);
-            }
-        }
-        current = (!current->children.empty()) ? current->children[0] : nullptr;
-    }
-    reverse(dimensions.begin(), dimensions.end());
-    return dimensions;
-}
-
-
-bool checkInvalidReturn(TreeNode* node, int returnType = -1) {
-    if (!node) return false;
-
-    if (node->type == NODE_JUMP_STATEMENT) {
-        if (node->children.size() >= 1 && node->children[0]->type == NODE_KEYWORD &&
-            node->children[0]->valueToString() == "return") {
-            
-            if (returnType == 0) {
-                if (node->children.size() > 1) {
-                    cout << "Error: Return statement with a value in a void function.\n";
-                    return true;
-                }
-                return false;
-            }
-
-            if (returnType != 0) {
-                if (node->children.size() == 1) {
-                    cout << "Error: Return statement without an expression.\n";
-                    return true;
-                }
-
-                TreeNode* returnExpr = node->children[1];
-                if (!isTypeCompatible(returnType, returnExpr->typeSpecifier, "=")) {
-                    cout << "Error: Type mismatch in return statement.\n";
-                    return true;
-                }
-            }
-        }
-    }
-
-    for (TreeNode* child : node->children) {
-        if (checkInvalidReturn(child, returnType)) return true;
-    }
-
-    return false;
-}
-
-
-bool structInitializerCheck(TreeNode* identifierNode, TreeNode* initializerList) {
-    if (identifierNode->symbolTable.empty()) {
-        cerr << "Error: No struct definition found for type checking" << endl;
-        return false;
-    }
-
-    size_t expectedSize = identifierNode->symbolTable.size();
-    size_t actualSize = initializerList->children.size();
-
-    if (expectedSize != actualSize) {
-        cerr << "Error: Struct initialization mismatch - expected " 
-             << expectedSize << " values, got " << actualSize << endl;
-        return false;
-    }
-
-    for (size_t i = 0; i < expectedSize; i++) {
-        const auto& memberPair = identifierNode->symbolTable[i];
-        TreeNode* memberNode = memberPair.second;
-        TreeNode* initNode = initializerList->children[i];
-
-        int expectedType = memberNode->typeSpecifier;
-        int actualType = initNode->typeSpecifier;
-
-        bool typesCompatible = isTypeCompatible(expectedType, actualType, "=");
-        
-        if (!typesCompatible) {
-            cerr << "Error: Type mismatch at position " << i + 1 
-                 << " (member '" << memberPair.first << "'): expected " 
-                 << expectedType
-                 << ", got " << actualType << endl;
-            return false;
-        }
-
-        if (memberNode->isConst) {
-            cerr << "Error: Cannot initialize const member '" 
-                 << memberPair.first << "' in struct" << endl;
-            return false;
-        }
-
-        if (memberNode->pointerLevel > 0) {
-            cerr << "Error: Pointer initialization not supported in struct initializer for '" 
-                 << memberPair.first << "'" << endl;
-            return false;
-        }
-    }
-
-    return true;
-}
-
-vector<int> typeExtract(TreeNode* node){
-    vector<int> ans;
-    for(auto child:node->children){
-        ans.push_back(child->typeSpecifier);
-    }
-    return ans;
-}
-
-int inLoop = 0;
-bool inFunc = false;
-
-
-void addDeclarators(TreeNode* specifier, TreeNode* list)
-{
-    DeclaratorInfo declInfo = isValidVariableDeclaration(specifier->children, false);
-    if (declInfo.isValid)
-    {
-        auto helper = specifier;
-        for (auto child : specifier->children)
-        {
-            if (child->type == NODE_TYPE_SPECIFIER)
-            {
-                helper = child;
-                break;
-            }
-        }
-        if (declInfo.typeCategory == 4)
-            helper = lookupSymbol(helper->valueToString());
-        for (auto child : list->children)
-        {
-            if (child->type != NODE_DECLARATOR)
-                continue;
-
-            TreeNode *firstChild = child->children[0];
-            string varName;
-            TreeNode *identifierNode = firstChild;
-            // Helper function to set common node attributes
-            auto setNodeAttributes = [&](TreeNode *node, int typeCategory, int pointerLevel = 0)
-            {
-                node->typeCategory = typeCategory;
-                node->pointerLevel = pointerLevel;
-                node->storageClass = declInfo.storageClass;
-                node->typeSpecifier = declInfo.typeSpecifier;
-                node->isConst = declInfo.isConst;
-                node->isStatic = declInfo.isStatic;
-                node->isVolatile = declInfo.isVolatile;
-                node->isUnsigned = declInfo.isUnsigned;
-                node->symbolTable = helper->symbolTable;
-            };
-            // Check for duplicate declaration
-            auto checkDuplicate = [&](const string &name)
-            {
-                for (const auto &entry : currentTable->symbolTable)
-                {
-                    if (entry.first == name)
-                    {
-                        cerr << "Error: Duplicate declaration of '" << name << "'\n";
-                        return true;
-                    }
-                }
-                return false;
-            };
-
-            if (firstChild->type == ARRAY) // Pointer-to-array (e.g., int (*arr)[3])
-            {
-                vector<int> dimensions = findArrayDimensions(firstChild);
-                while (identifierNode && identifierNode->type == ARRAY)
-                {
-                    if (identifierNode->children.empty())
-                        break;
-                    identifierNode = identifierNode->children[0];
-                }
-                varName = identifierNode->valueToString();
-                if (checkDuplicate(varName))
-                    continue;
-
-                int size = child->children.size();
-                if (size == 1 || size == 2)
-                {
-                    bool validDims = all_of(dimensions.begin(), dimensions.end(), [](int d)
-                                            { return d != -1; });
-                    if (!validDims)
-                    {
-                        cerr << "Invalid declaration dimension cannot be empty\n";
-                        continue;
-                    }
-                    if (size == 2 && !checkInitializerLevel(child->children[1], declInfo.typeSpecifier, dimensions, 0))
-                    {
-                        cout << "Error\n";
-                        continue;
-                    }
-                    setNodeAttributes(identifierNode, 2); // Array
-                    identifierNode->dimensions = dimensions;
-                    insertSymbol(varName, identifierNode);
-                }
-            }
-            else if (firstChild->type == NODE_POINTER) // Pointers, including array of pointers
-            {
-                int pointerDepth = 0;
-                while (identifierNode && identifierNode->type == NODE_POINTER)
-                {
-                    pointerDepth++;
-                    if (identifierNode->children.empty())
-                        break;
-                    identifierNode = identifierNode->children[0];
-                }
-                for (int i = 0; i < pointerDepth; i++)
-                {
-                    declInfo.typeSpecifier *= 10;
-                }
-                varName = identifierNode->valueToString();
-
-                if (identifierNode->type == ARRAY) // Array of pointers (e.g., int *arr[3])
-                {
-                    vector<int> dimensions = findArrayDimensions(identifierNode);
-                    varName = identifierNode->children[0]->valueToString();
-                    if (checkDuplicate(varName))
-                        continue;
-
-                    int size = child->children.size();
-                    if (size == 1 || size == 2)
-                    {
-                        bool validDims = all_of(dimensions.begin(), dimensions.end(), [](int d)
-                                                { return d != -1; });
-                        if (!validDims)
-                        {
-                            cerr << "Invalid declaration dimension cannot be empty\n";
-                            continue;
-                        }
-                        if (size == 2 && !checkInitializerLevel(child->children[1], declInfo.typeSpecifier, dimensions, pointerDepth))
-                        {
-                            cerr << "Error: Invalid initializer for array of pointers '" << varName << "'\n";
-                            continue;
-                        }
-                        setNodeAttributes(identifierNode, 2, pointerDepth);
-                        identifierNode->dimensions = dimensions;
-                        insertSymbol(varName, identifierNode);
-                    }
-                }
-                else // Regular pointer (e.g., int *p)
-                {
-                    if (checkDuplicate(varName))
-                        continue;
-                    int size = child->children.size();
-    
-                    cout << declInfo.typeSpecifier<< endl;
-                    cout << *child->children[1] << endl;
-                    cout << child->children[1]->typeSpecifier << endl;
-                    if(size == 1){
-                        setNodeAttributes(identifierNode, 1, pointerDepth);
-                        insertSymbol(varName, identifierNode);
-                    }
-                    else if(declInfo.typeSpecifier==30 && child->children[1]->typeCategory==2){
-                        setNodeAttributes(identifierNode, 1, pointerDepth);
-                        insertSymbol(varName, identifierNode);
-                    }
-                    else if (isTypeCompatible(declInfo.typeSpecifier, child->children[1]->typeSpecifier, "="))
-                    {
-                        setNodeAttributes(identifierNode, 1, pointerDepth);
-                        insertSymbol(varName, identifierNode);
-                    }
-                    else
-                    {
-                        cerr << "Error: Invalid pointer " << (size == 2 ? "initialization" : "declarator syntax") << " for '" << varName << "'\n";
-                    }
-                }
-            }
-            else // Regular variable (e.g., int x)
-            {
-                varName = firstChild->valueToString();
-                if (checkDuplicate(varName))
-                    continue;
-                int size = child->children.size();
-                if (size == 1)
-                {
-                    if (declInfo.isConst)
-                    {
-                        cerr << "Error: Const variable '" << varName << "' must be initialized\n";
-                        continue;
-                    }
-                    setNodeAttributes(identifierNode, 0);
-                    insertSymbol(varName, identifierNode);
-                }
-                else if (size == 2 && declInfo.typeSpecifier == 20)
-                {
-                    if (structInitializerCheck(helper, child->children[1]))
-                    {
-                        insertSymbol(varName, identifierNode);
-                        setNodeAttributes(identifierNode, 0);
-                    }
-                }
-                else if (size == 2 && isTypeCompatible(declInfo.typeSpecifier, child->children[1]->typeSpecifier, "="))
-                {
-                    setNodeAttributes(identifierNode, 0);
-                    insertSymbol(varName, identifierNode);
-                }
-                else
-                {
-                    cerr << "Error: " << (size == 2 ? "Type mismatch in initialization" : "Invalid declarator syntax") << " for '" << varName << "'\n";
-                }
-            }
-        }
-    }
-}
-stack<bool> inSwitch;
-
 %}
 
 
@@ -716,7 +146,8 @@ primary_expression
         $$->isLValue = false;
     }
 	| LPAREN expression RPAREN { 
-        $$ = $2; 
+        $$ = $2;
+        $$->tacResult = $2->tacResult; 
     }
 	;
 
@@ -732,8 +163,8 @@ postfix_expression
             $$->typeSpecifier = $1->typeSpecifier;
             $$->isLValue = true; 
             string temp = codeGen.newTemp();
-        codeGen.emit(TACOp::INDEX, temp, $1->tacResult, $3->tacResult, $1->storageClass, $1->dimensions);
-        $$->tacResult = temp;
+            codeGen.emit(TACOp::INDEX, temp, $1->tacResult, $3->tacResult, $1->storageClass, $1->dimensions);
+            $$->tacResult = temp;
         } else if ($1->typeCategory == 1) {
             if ($1->typeSpecifier != 1 && $1->typeSpecifier != 3) {
                 cerr << "Error: can only index a char or int pointer" << endl;
@@ -742,8 +173,8 @@ postfix_expression
                 $$->isLValue = true;
                 $$->typeCategory = 0;
                 string temp = codeGen.newTemp();
-        codeGen.emit(TACOp::INDEX, temp, $1->tacResult, $3->tacResult, $1->storageClass, $1->dimensions);
-        $$->tacResult = temp;
+                codeGen.emit(TACOp::INDEX, temp, $1->tacResult, $3->tacResult, $1->storageClass, $1->dimensions);
+                $$->tacResult = temp;
             }   
         } else {
             cerr << $1->valueToString() << " is not an array" << endl;
@@ -754,12 +185,21 @@ postfix_expression
         if ($$->paramCount > 0) {
             cerr << "Error: function call with no params, expected " << $$->paramCount << endl;
         }
+        string temp = codeGen.newTemp();
+        codeGen.emit(TACOp::ASSIGN, temp, $1->tacResult + "()", nullopt, $1->storageClass);
+        $$->tacResult = temp;
         $$->isLValue = false; 
     }
 	| postfix_expression LPAREN argument_expression_list RPAREN { /* function call with params */
         $$ = createNode(NODE_POSTFIX_EXPRESSION, monostate(), $1, $3); 
         $$->typeSpecifier = $1->typeSpecifier;
-        $$->isLValue = false; 
+        $$->isLValue = false;
+        string temp = codeGen.newTemp();
+         for (auto* arg : $3->children) {
+            codeGen.emit(TACOp::ASSIGN, "param", arg->tacResult, nullopt, arg->storageClass);
+        }
+        codeGen.emit(TACOp::ASSIGN, temp, $1->tacResult + to_string($3->children.size()), nullopt, $1->storageClass);
+        $$->tacResult = temp;
         if ($1->typeCategory == 3) {
             if ($1->paramCount == $3->children.size()) {
                 for (int i = 0; i < $1->paramCount; i++) {
@@ -791,6 +231,11 @@ postfix_expression
                         $$->isVolatile = entry.second->isVolatile;
                         $$->isUnsigned = entry.second->isUnsigned;
                         $$->isLValue = true;
+                        string temp = codeGen.newTemp();
+                        string memberAccess = $1->tacResult + "." + $3->valueToString();
+                        codeGen.emit(TACOp::ASSIGN, temp, memberAccess, nullopt, $1->storageClass);
+                        $$->tacResult = temp;
+                        $$->storageClass = $1->storageClass;
                         break;
                     }
                 }
@@ -805,10 +250,18 @@ postfix_expression
 	| postfix_expression POINTER_TO_MEMBER_ARROW_OPERATOR ID { 
         $$ = createNode(NODE_POSTFIX_EXPRESSION, $2, $1, $3);
         $$->isLValue = true; 
+        string temp = codeGen.newTemp();
+        string memberAccess = $1->tacResult + "->" + $3->valueToString();
+        codeGen.emit(TACOp::ASSIGN, temp, memberAccess, nullopt, $1->storageClass);
+        $$->tacResult = temp;
     }
     | postfix_expression POINTER_TO_MEMBER_DOT_OPERATOR ID { 
         $$ = createNode(NODE_POSTFIX_EXPRESSION, $2, $1, $3);
-        $$->isLValue = true; 
+        $$->isLValue = true;
+        string temp = codeGen.newTemp();
+        string memberAccess = $1->tacResult + ".*" + $3->valueToString();
+        codeGen.emit(TACOp::ASSIGN, temp, memberAccess, nullopt, $1->storageClass);
+        $$->tacResult = temp;
     }
 	| postfix_expression INCREMENT_OPERATOR { 
         if (!$1->isLValue) {  
@@ -821,6 +274,11 @@ postfix_expression
             cerr << "Error: invalid type for increment operator" << endl;
         }
         $$->isLValue = false; 
+        string temp = codeGen.newTemp();
+        codeGen.emit(TACOp::ASSIGN, temp, $1->tacResult, nullopt, $1->storageClass);
+        string one = "1";
+        codeGen.emit(TACOp::ADD, $1->tacResult, $1->tacResult, one, $1->storageClass);
+        $$->tacResult = temp; // Returns original value
     }
 	| postfix_expression DECREMENT_OPERATOR {
         if (!$1->isLValue) {
@@ -832,6 +290,12 @@ postfix_expression
         if (typeSpec == 5 || typeSpec > 7) {
             cerr << "Error: invalid type for decrement operator" << endl;
         }
+        string temp = codeGen.newTemp();
+        codeGen.emit(TACOp::ASSIGN, temp, $1->tacResult, nullopt, $1->storageClass);
+        string one = "1";
+        codeGen.emit(TACOp::SUB, $1->tacResult, $1->tacResult, one, $1->storageClass);
+        $$->tacResult = temp; // Returns original value
+        $$->storageClass = $1->storageClass;
         $$->isLValue = false;
     }
 	;
@@ -911,9 +375,6 @@ unary_expression
     }
 
 	| KEYWORD_SIZEOF unary_expression {
-        string temp = codeGen.newTemp();
-        codeGen.emit(TACOp::ASSIGN, temp, "sizeof(" + $2->tacResult + ")", std::nullopt); 
-        $$->tacResult = temp; 
         $$ = createNode(NODE_UNARY_EXPRESSION, monostate(), $1, $2);
         $$->isLValue = false; 
     }
@@ -986,8 +447,8 @@ multiplicative_expression
                  << " at line " << yylineno << endl;
         }
         string temp = codeGen.newTemp();
-            codeGen.emit(TACOp::MUL, temp, $1->tacResult, $3->tacResult, $$->storageClass);
-            $$->tacResult = temp;
+        codeGen.emit(TACOp::MUL, temp, $1->tacResult, $3->tacResult, $$->storageClass);
+        $$->tacResult = temp;
         }
 	| multiplicative_expression DIVIDE_OPERATOR cast_expression { 
         $$ = createNode(NODE_MULTIPLICATIVE_EXPRESSION, $2, $1, $3);
@@ -1031,8 +492,8 @@ additive_expression
             if($1->typeCategory==2 || $3->typeCategory==2){
                 $$->typeCategory = 2;
                 string temp = codeGen.newTemp();
-            codeGen.emit(TACOp::ADD, temp, $1->tacResult, $3->tacResult, $$->storageClass);
-            $$->tacResult = temp;  
+                codeGen.emit(TACOp::ADD, temp, $1->tacResult, $3->tacResult, $$->storageClass);
+                $$->tacResult = temp;  
             }
         } else {
             cerr << "Incompatible Type: " << $1->typeSpecifier << " and " 
@@ -1127,8 +588,8 @@ relational_expression
         if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "<=")) {
             $$->typeSpecifier = 3;
             string temp = codeGen.newTemp();
-                codeGen.emit(TACOp::LE, temp, $1->tacResult, $3->tacResult, $$->storageClass);
-                $$->tacResult = temp;  
+            codeGen.emit(TACOp::LE, temp, $1->tacResult, $3->tacResult, $$->storageClass);
+            $$->tacResult = temp;  
         } else {
             cerr << "Incompatible Type: " << $1->typeSpecifier << " and " 
                  << $3->typeSpecifier << " at line " << yylineno << endl;
@@ -1140,8 +601,8 @@ relational_expression
         if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, ">=")) {
             $$->typeSpecifier = 3;
             string temp = codeGen.newTemp();
-                codeGen.emit(TACOp::GE, temp, $1->tacResult, $3->tacResult, $$->storageClass);
-                $$->tacResult = temp; 
+            codeGen.emit(TACOp::GE, temp, $1->tacResult, $3->tacResult, $$->storageClass);
+            $$->tacResult = temp; 
         } else {
             cerr << "Incompatible Type: " << $1->typeSpecifier << " and " 
                  << $3->typeSpecifier << " at line " << yylineno << endl;
@@ -1157,8 +618,8 @@ equality_expression
         if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "==")) {
             $$->typeSpecifier = 3;
             string temp = codeGen.newTemp();
-                codeGen.emit(TACOp::EQ, temp, $1->tacResult, $3->tacResult, $$->storageClass);
-                $$->tacResult = temp; 
+            codeGen.emit(TACOp::EQ, temp, $1->tacResult, $3->tacResult, $$->storageClass);
+            $$->tacResult = temp; 
         } else {
             cerr << "Incompatible Type: " << $1->typeSpecifier << " and " 
                  << $3->typeSpecifier << " at line " << yylineno << endl;
@@ -1170,8 +631,8 @@ equality_expression
         if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "!=")) {
             $$->typeSpecifier = 3;
             string temp = codeGen.newTemp();
-                codeGen.emit(TACOp::NE, temp, $1->tacResult, $3->tacResult, $$->storageClass);
-                $$->tacResult = temp; 
+            codeGen.emit(TACOp::NE, temp, $1->tacResult, $3->tacResult, $$->storageClass);
+            $$->tacResult = temp; 
         } else {
             cerr << "Incompatible Type: " << $1->typeSpecifier << " and " 
                  << $3->typeSpecifier << " at line " << yylineno << endl;
@@ -1190,8 +651,8 @@ and_expression
             isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "&")) {
             $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
             string temp = codeGen.newTemp();
-                codeGen.emit(TACOp::BIT_AND, temp, $1->tacResult, $3->tacResult, $$->storageClass);
-                $$->tacResult = temp;
+            codeGen.emit(TACOp::BIT_AND, temp, $1->tacResult, $3->tacResult, $$->storageClass);
+            $$->tacResult = temp;
         } else {
             cerr << "Incompatible Type: " << $1->typeSpecifier << " and " 
                  << $3->typeSpecifier << " at line " << yylineno << endl;
@@ -1209,8 +670,8 @@ exclusive_or_expression
             isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "^")) {
             $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
             string temp = codeGen.newTemp();
-                codeGen.emit(TACOp::BIT_XOR, temp, $1->tacResult, $3->tacResult, $$->storageClass);
-                $$->tacResult = temp;
+            codeGen.emit(TACOp::BIT_XOR, temp, $1->tacResult, $3->tacResult, $$->storageClass);
+            $$->tacResult = temp;
         } else {
             cerr << "Incompatible Type: " << $1->typeSpecifier << " and " 
                  << $3->typeSpecifier << " at line " << yylineno << endl;
@@ -1228,8 +689,8 @@ inclusive_or_expression
             isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "|")) {
             $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
             string temp = codeGen.newTemp();
-                codeGen.emit(TACOp::BIT_OR, temp, $1->tacResult, $3->tacResult, $$->storageClass);
-                $$->tacResult = temp;
+            codeGen.emit(TACOp::BIT_OR, temp, $1->tacResult, $3->tacResult, $$->storageClass);
+            $$->tacResult = temp;
         } else {
             cerr << "Incompatible Type: " << $1->typeSpecifier << " and " 
                  << $3->typeSpecifier << " at line " << yylineno << endl;
@@ -1245,8 +706,8 @@ logical_and_expression
         if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "&&")) {
             $$->typeSpecifier = 3;
             string temp = codeGen.newTemp();
-                codeGen.emit(TACOp::AND, temp, $1->tacResult, $3->tacResult, $$->storageClass);
-                $$->tacResult = temp; 
+            codeGen.emit(TACOp::AND, temp, $1->tacResult, $3->tacResult, $$->storageClass);
+            $$->tacResult = temp; 
         } else {
             cerr << "Incompatible Type: " << $1->typeSpecifier << " and " 
                  << $3->typeSpecifier << " at line " << yylineno << endl;
@@ -1262,8 +723,8 @@ logical_or_expression
         if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "||")) {
             $$->typeSpecifier = 3;
             string temp = codeGen.newTemp();
-                codeGen.emit(TACOp::OR, temp, $1->tacResult, $3->tacResult, $$->storageClass);
-                $$->tacResult = temp; 
+            codeGen.emit(TACOp::OR, temp, $1->tacResult, $3->tacResult, $$->storageClass);
+            $$->tacResult = temp; 
         } else {
             cerr << "Incompatible Type: " << $1->typeSpecifier << " and " 
                  << $3->typeSpecifier << " at line " << yylineno << endl;
@@ -1313,30 +774,30 @@ assignment_expression
                  << yylineno << endl;
         }
         string temp = codeGen.newTemp();
-            if($2->valueToString() == "="){
-                codeGen.emit(TACOp::ASSIGN, $1->tacResult, $3->tacResult, nullopt, $1->storageClass);
-            }else if($2->valueToString() == "+="){
-                codeGen.emit(TACOp::ADD, $1->tacResult, $1->tacResult, $3->tacResult, $1->storageClass);
-            }else if($2->valueToString() == "-="){
-                codeGen.emit(TACOp::SUB, $1->tacResult, $1->tacResult, $3->tacResult, $1->storageClass);
-            }else if($2->valueToString() == "*="){
-                codeGen.emit(TACOp::MUL, $1->tacResult, $1->tacResult, $3->tacResult, $1->storageClass);
-            }else if($2->valueToString() == "/="){
-                codeGen.emit(TACOp::DIV, $1->tacResult, $1->tacResult, $3->tacResult, $1->storageClass);
-            }else if($2->valueToString() == "%="){
-                codeGen.emit(TACOp::MOD, $1->tacResult, $1->tacResult, $3->tacResult, $1->storageClass);
-            }else if($2->valueToString() == "&="){
-                codeGen.emit(TACOp::BIT_AND, $1->tacResult, $1->tacResult, $3->tacResult, $1->storageClass);
-            }else if($2->valueToString() == "|="){
-                codeGen.emit(TACOp::BIT_OR, $1->tacResult, $1->tacResult, $3->tacResult, $1->storageClass);
-            }else if($2->valueToString() == "^="){
-                codeGen.emit(TACOp::BIT_XOR, $1->tacResult, $1->tacResult, $3->tacResult, $1->storageClass);
-            }else if($2->valueToString() == "<<="){
-                codeGen.emit(TACOp::LSHFT,$1->tacResult,$1->tacResult,$3->tacResult,$1->storageClass);
-            }else if($2->valueToString() == ">>="){
-                codeGen.emit(TACOp::RSHFT,$1->tacResult,$1->tacResult,$3->tacResult,$1->storageClass);
-            }
-            $$->tacResult = temp;
+        if($2->valueToString() == "="){
+            codeGen.emit(TACOp::ASSIGN, $1->tacResult, $3->tacResult, nullopt, $1->storageClass);
+        }else if($2->valueToString() == "+="){
+            codeGen.emit(TACOp::ADD, $1->tacResult, $1->tacResult, $3->tacResult, $1->storageClass);
+        }else if($2->valueToString() == "-="){
+            codeGen.emit(TACOp::SUB, $1->tacResult, $1->tacResult, $3->tacResult, $1->storageClass);
+        }else if($2->valueToString() == "*="){
+            codeGen.emit(TACOp::MUL, $1->tacResult, $1->tacResult, $3->tacResult, $1->storageClass);
+        }else if($2->valueToString() == "/="){
+            codeGen.emit(TACOp::DIV, $1->tacResult, $1->tacResult, $3->tacResult, $1->storageClass);
+        }else if($2->valueToString() == "%="){
+            codeGen.emit(TACOp::MOD, $1->tacResult, $1->tacResult, $3->tacResult, $1->storageClass);
+        }else if($2->valueToString() == "&="){
+            codeGen.emit(TACOp::BIT_AND, $1->tacResult, $1->tacResult, $3->tacResult, $1->storageClass);
+        }else if($2->valueToString() == "|="){
+            codeGen.emit(TACOp::BIT_OR, $1->tacResult, $1->tacResult, $3->tacResult, $1->storageClass);
+        }else if($2->valueToString() == "^="){
+            codeGen.emit(TACOp::BIT_XOR, $1->tacResult, $1->tacResult, $3->tacResult, $1->storageClass);
+        }else if($2->valueToString() == "<<="){
+            codeGen.emit(TACOp::LSHFT,$1->tacResult,$1->tacResult,$3->tacResult,$1->storageClass);
+        }else if($2->valueToString() == ">>="){
+            codeGen.emit(TACOp::RSHFT,$1->tacResult,$1->tacResult,$3->tacResult,$1->storageClass);
+        }
+        $$->tacResult = temp;
         string op = $2->valueToString();
         if (op == "=") {
             if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, op)) {
@@ -1421,7 +882,7 @@ declaration
                         codeGen.emit(TACOp::ASSIGN, varName, initValue, nullopt, type);
                     }
                 }
-                }
+            }
         }
     };
 
@@ -1500,22 +961,18 @@ struct_type_specifier
 	;
 
 class_specifier
-    : KEYWORD_CLASS ID LBRACE member_declaration_list RBRACE 
+    : {if (insideClass) yyerror("Nested classes are not allowed.");} 
+        KEYWORD_CLASS ID LBRACE 
         {
-            classOrStructOrUnion.insert($2->valueToString());
+            classOrStructOrUnion.insert($3->valueToString());
+            insideClass = true;
             enterScope();
-            $$ = createNode(NODE_CLASS_SPECIFIER, monostate(), $2, $4); 
-            exitScope();
         }
-    | KEYWORD_CLASS LBRACE member_declaration_list RBRACE
+      member_declaration_list RBRACE 
         {
-            enterScope();
-            $$ = createNode(NODE_CLASS_SPECIFIER, monostate(), $1, $3); 
+            $$ = createNode(NODE_CLASS_SPECIFIER, monostate(), $3, $6);
             exitScope();
-        }
-    | KEYWORD_CLASS ID
-        {   classOrStructOrUnion.insert($2->valueToString());
-            $$ = createNode(NODE_CLASS_SPECIFIER, monostate(), $1, $2);
+            insideClass = false;
         }
     ;
 
@@ -1533,15 +990,17 @@ member_declaration
         { $$ = $1; }
     | constructor_function
         { $$ = $1; }
-    | function_definition {$$ = $1;}
+    | function_definition
+        { $$ = $1; }
     | destructor_function
         { $$ = $1; }
     ;
 
+
 access_specifier
-    : KEYWORD_PUBLIC { $$ = $1; }
-    | KEYWORD_PRIVATE { $$ = $1; }
-    | KEYWORD_PROTECTED { $$ = $1; }
+    : KEYWORD_PUBLIC {accessSpecifier = 1; $$ = $1; }
+    | KEYWORD_PRIVATE {accessSpecifier = 0; $$ = $1; }
+    | KEYWORD_PROTECTED {accessSpecifier = 2;  $$ = $1; }
     ;
 
 struct_or_union_specifier
@@ -1920,7 +1379,7 @@ io_statement
             }
             for (auto* arg : $5->children) {
             // codeGen.emit("PARAM", arg->tacResult, nullopt, nullopt, arg->storageClass);
-        }
+            }
         // codeGen.emit("PRINT", $3->tacResult, nullopt, nullopt, 8);
         }
     | KEYWORD_SCANF LPAREN STRING COMMA argument_expression_list RPAREN SEMICOLON 
@@ -2022,7 +1481,6 @@ iteration_statement
         string endLabel = codeGen.newTemp() + "_end";
         codeGen.emit(TACOp::LABEL, startLabel);
         codeGen.emit(TACOp::IF_NE, $3->tacResult, "0", endLabel);
-        // $5 generates its TAC
         codeGen.emit(TACOp::GOTO, startLabel);
         codeGen.emit(TACOp::LABEL, endLabel);
     }
@@ -2031,7 +1489,6 @@ iteration_statement
         string startLabel = codeGen.newTemp() + "_start";
         string endLabel = codeGen.newTemp() + "_end";
         codeGen.emit(TACOp::LABEL, startLabel);
-        // $5 generates its TAC
         codeGen.emit(TACOp::IF_NE, $3->tacResult, "0", endLabel);
         codeGen.emit(TACOp::GOTO, startLabel);
         codeGen.emit(TACOp::LABEL, endLabel);
@@ -2042,7 +1499,6 @@ iteration_statement
         string endLabel = codeGen.newTemp() + "_end";
         codeGen.emit(TACOp::LABEL, startLabel);
         codeGen.emit(TACOp::IF_NE, $5->tacResult, "0", endLabel);
-        // $5 generates its TAC
         codeGen.emit(TACOp::GOTO, startLabel);
         codeGen.emit(TACOp::LABEL, endLabel);
     }
@@ -2052,7 +1508,6 @@ iteration_statement
         string endLabel = codeGen.newTemp() + "_end";
         codeGen.emit(TACOp::LABEL, startLabel);
         codeGen.emit(TACOp::IF_NE, $5->tacResult, "0", endLabel);
-        // $5 generates its TAC
         codeGen.emit(TACOp::GOTO, startLabel);
         codeGen.emit(TACOp::LABEL, endLabel);
     }
@@ -2062,7 +1517,6 @@ iteration_statement
         string endLabel = codeGen.newTemp() + "_end";
         codeGen.emit(TACOp::LABEL, startLabel);
         codeGen.emit(TACOp::IF_NE, $5->tacResult, "0", endLabel);
-        // $5 generates its TAC
         codeGen.emit(TACOp::GOTO, startLabel);
         codeGen.emit(TACOp::LABEL, endLabel);
     }
@@ -2072,7 +1526,6 @@ iteration_statement
         string endLabel = codeGen.newTemp() + "_end";
         codeGen.emit(TACOp::LABEL, startLabel);
         codeGen.emit(TACOp::IF_NE, $5->tacResult, "0", endLabel);
-        // $5 generates its TAC
         codeGen.emit(TACOp::GOTO, startLabel);
         codeGen.emit(TACOp::LABEL, endLabel);
     }
@@ -2140,6 +1593,7 @@ constructor_function
 function_definition
     : declaration_specifiers declarator {
         DeclaratorInfo declInfo = isValidVariableDeclaration($1->children, true);
+        enterScope();
         if (declInfo.isValid) {
             string funcName = $2->children[0]->valueToString();
             codeGen.emit(TACOp::LABEL, funcName);
@@ -2152,7 +1606,6 @@ function_definition
             funcNode->isVolatile = declInfo.isVolatile;
             funcNode->isUnsigned = declInfo.isUnsigned;
             funcNode->typeCategory = 3;
-            enterScope();
             if($2->children.size() > 1 && $2->children[1]->type == NODE_PARAMETER_LIST) {
             for (auto param : $2->children[1]->children) {
                 if (param->type == NODE_PARAMETER_DECLARATION) {
