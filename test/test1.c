@@ -1,3 +1,4 @@
-void func(int a, int b){
-    return;
+int main(){
+    int a;
+    return 12;
 }

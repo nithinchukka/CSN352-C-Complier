@@ -113,6 +113,7 @@ public:
     int paramCount = 0;
     int pointerLevel = 0;
     bool isLValue = false; // true if the node is an lvalue
+    int access = 0;
     vector<int> paramTypes;
     vector<int> dimensions;
     vector<pair<string, TreeNode*>> symbolTable;
