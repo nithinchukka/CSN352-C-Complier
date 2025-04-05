@@ -22,5 +22,3 @@ for file in test/*; do
     echo "---------------------------------" | tee -a output.log
     echo " " | tee -a output.log
 done
-
-cat tac.txt

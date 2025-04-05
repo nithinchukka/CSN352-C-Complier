@@ -103,7 +103,7 @@ public:
     NodeValue value;
     int offset = 0;
     vector<TreeNode *> children;
-    int typeCategory = -1; // var = 0, pointer = 1, arr = 2,  func = 3, struct = 4, union = 5, class = 6, label = 7
+    int typeCategory = -1; // var = 0, pointer = 1, arr = 2,  func = 3, struct = 4, union = 5, class = 6, label = 7, reference = 8
     bool isConst = false;
     bool isStatic = false;
     bool isVolatile = false;
@@ -118,6 +118,8 @@ public:
     vector<int> dimensions;
     vector<pair<string, TreeNode*>> symbolTable;
     string tacResult;
+    vector<int> false_list;
+    vector<int> next_list;
     TreeNode(NodeType type, NodeValue value = monostate()) : type(type), value(value)
     {
     }
@@ -132,7 +134,7 @@ public:
     {
         for (int i = 0; i < depth; ++i)
             os << "  ";
-        os << "|- " << nodeTypeToString(type) << " " << valueToString() << "\n";
+        os << "|- " << nodeTypeToString(type) << " " << valueToString() << " " << tacResult << "\n";
 
         for (const TreeNode *child : children)
         {
