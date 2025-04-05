@@ -3,6 +3,8 @@
 
 #include <bits/stdc++.h>
 #include "ast.h"
+#include "tac.h"
+CodeGenerator codeGen;
 using namespace std;
 extern unordered_set<string> classOrStructOrUnion;
 
@@ -12,10 +14,10 @@ struct Table
     Table *parent;
 };
 
-stack<Table *> tableStack;
+stack<Table*> tableStack;
 stack<int> offsetStack;
 Table *currentTable;
-vector<Table *> allTables;
+vector<Table*> allTables;
 
 
 TreeNode* lookupSymbol(string symbol)
@@ -293,97 +295,10 @@ bool isTypeCompatible(int lhstype, int rhstype, string op, bool lhsIsConst = fal
     return false;
 }
 
-bool checkInitializerLevel(TreeNode* initList, int baseType, vector<int>& dimensions, int level) {
-    int vecSize = dimensions.size();
-
-    if (baseType != 1 && baseType != 3) {
-        cerr << "Invalid declaration for an array" << endl;
-        return false;
-    }
-
-    // Ensure all dimensions except the first are specified
-    for (int i = 1; i < vecSize; i++) {
-        if (dimensions[i] == -1) { // Use -1 instead of 0 for unspecified dimensions
-            cerr << "Invalid Declaration: dimension " << i << " cannot be unspecified" << endl;
-            return false;
-        }
-    }
-
-    // Ensure level doesn't exceed defined dimensions
-    if (level >= vecSize) {
-        cerr << "Too many nesting levels at level " << level << endl;
-        return false;
-    }
-
-    // Infer first dimension if unspecified
-    if (level == 0 && dimensions[0] == -1) {
-        dimensions[0] = initList->children.size();  
-    }
-
-    // Check that the initializer list does not exceed the expected dimension
-    if (initList->children.size() > dimensions[level]) {
-        cerr << "Dimension mismatch at level " << level << ": expected at most " 
-             << dimensions[level] << ", got " << initList->children.size() << endl;
-        return false;
-    }
-
-    if (level == vecSize - 1) {
-        // Innermost level: check scalar types
-        for (TreeNode* child : initList->children) {
-            if (child->type != NODE_UNARY_EXPRESSION) {
-                cerr << "Expected scalar at level " << level << ", got " << child->type << endl;
-                return false;
-            }
-            // Check type correctness
-            if (child->typeSpecifier != baseType) {
-                cerr << "Type mismatch at level " << level << ": expected " 
-                     << baseType << ", got " << child->typeSpecifier << endl;
-                return false;
-            }
-        }
-    } else {
-        // Recurse for nested lists, check all children
-        for (TreeNode* child : initList->children) {
-            if (child->type != NODE_INITIALIZER_LIST) {
-                cerr << "Expected nested initializer list at level " << level << endl;
-                return false;
-            }
-            if (!checkInitializerLevel(child, baseType, dimensions, level + 1)) {
-                return false;
-            }
-        }
-    }
-    
-    return true;
-}
-
-
-vector<int> findArrayDimensions(TreeNode* arr) {
-    if (!arr || arr->children.empty()) 
-        return {};
-
-    vector<int> dimensions;
-    TreeNode* current = arr;
-
-    while (current) {
-        if (current->type == ARRAY) {
-            if (current->children.size() > 1 && current->children[1] &&
-                current->children[1]->type == INTEGER_LITERAL) {
-                dimensions.push_back(stoi(current->children[1]->valueToString()));
-            } else {
-                dimensions.push_back(-1);
-            }
-        }
-        current = (!current->children.empty()) ? current->children[0] : nullptr;
-    }
-    reverse(dimensions.begin(), dimensions.end());
-    return dimensions;
-}
 
 
 bool checkInvalidReturn(TreeNode* node, int returnType = -1) {
     if (!node) return false;
-
     if (node->type == NODE_JUMP_STATEMENT) {
         if (node->children.size() >= 1 && node->children[0]->type == NODE_KEYWORD &&
             node->children[0]->valueToString() == "return") {
@@ -414,7 +329,7 @@ bool checkInvalidReturn(TreeNode* node, int returnType = -1) {
     for (TreeNode* child : node->children) {
         if (checkInvalidReturn(child, returnType)) return true;
     }
-
+    //codeGen.emit(TACOp::LABEL,)
     return false;
 }
 
@@ -481,7 +396,121 @@ bool inFunc = false;
 bool insideClass = false;
 int accessSpecifier = 0;
 
-void addDeclarators(TreeNode* specifier, TreeNode* list)
+void GenerateTAC(TreeNode* initList, vector<int> dimensions, int level, string name) {
+    int vecSize = dimensions.size();
+    if (level == vecSize - 1) { // Base case: innermost dimension
+        int i = 0;
+        for (TreeNode* child : initList->children) {
+            string indexedName = name + "[" + to_string(i) + "]";
+            codeGen.emit(TACOp::ASSIGN, indexedName, child->valueToString(), nullopt);
+            i++;
+        }
+    } 
+    else { // Recursive case: outer dimensions
+        int i = 0;
+        for (TreeNode* child : initList->children) {
+            string newName = name + "[" + to_string(i) + "]";
+            GenerateTAC(child, dimensions, level + 1, newName);
+            i++;
+        }
+    }
+}
+
+bool checkInitializerLevel(TreeNode* initList, int baseType, vector<int>& dimensions, int level) {
+    int vecSize = dimensions.size();
+
+    if (baseType != 1 && baseType != 3) {
+        cerr << "Invalid declaration for an array" << endl;
+        return false;
+    }
+
+    // Ensure all dimensions except the first are specified
+    for (int i = 1; i < vecSize; i++) {
+        if (dimensions[i] == -1) { // Use -1 instead of 0 for unspecified dimensions
+            cerr << "Invalid Declaration: dimension " << i << " cannot be unspecified" << endl;
+            return false;
+        }
+    }
+
+    // Ensure level doesn't exceed defined dimensions
+    if (level >= vecSize) {
+        cerr << "Too many nesting levels at level " << level << endl;
+        return false;
+    }
+
+    // Infer first dimension if unspecified
+    if (level == 0 && dimensions[0] == -1) {
+        dimensions[0] = initList->children.size();  
+    }
+
+    // Check that the initializer list does not exceed the expected dimension
+    if (initList->children.size() > dimensions[level]) {
+        cerr << "Dimension mismatch at level " << level << ": expected at most " 
+             << dimensions[level] << ", got " << initList->children.size() << endl;
+        return false;
+    }
+
+    if (level == vecSize - 1) {
+        // Innermost level: check scalar types
+        for (TreeNode* child : initList->children) {
+            if (child->type != NODE_UNARY_EXPRESSION) {
+                cerr << "Expected scalar at level " << level << ", got " << child->type << endl;
+                return false;
+            }
+            // Check type correctness
+            if (child->typeSpecifier != baseType) {
+                cerr << "Type mismatch at level " << level << ": expected " 
+                     << baseType << ", got " << child->typeSpecifier << endl;
+                return false;
+            }
+        }
+    } else {
+        // Recurse for nested lists, check all children
+        for (TreeNode* child : initList->children) {
+            if (child->type != NODE_INITIALIZER_LIST) {
+                cerr << "Expected nested initializer list at level " << level << endl;
+                return false;
+            }
+            if (!checkInitializerLevel(child, baseType, dimensions, level + 1)) {
+                return false;
+            }
+        }
+    }
+    GenerateTAC(initList,dimensions,0,"arr");
+    return true;
+}
+
+
+vector<int> findArrayDimensions(TreeNode* arr) {
+    if (!arr || arr->children.empty()) 
+        return {};
+
+    vector<int> dimensions;
+    TreeNode* current = arr;
+
+    while (current) {
+        if (current->type == ARRAY) {
+            if (current->children.size() > 1 && current->children[1] &&
+                current->children[1]->type == INTEGER_LITERAL) {
+                dimensions.push_back(stoi(current->children[1]->valueToString()));
+            } else {
+                dimensions.push_back(-1);
+            }
+        }
+        current = (!current->children.empty()) ? current->children[0] : nullptr;
+    }
+    reverse(dimensions.begin(), dimensions.end());
+    return dimensions;
+}
+
+
+
+
+
+
+
+
+    void addDeclarators(TreeNode* specifier, TreeNode* list)
 {
     DeclaratorInfo declInfo = isValidVariableDeclaration(specifier->children, false);
     if (declInfo.isValid)
@@ -611,12 +640,8 @@ void addDeclarators(TreeNode* specifier, TreeNode* list)
                 else // Regular pointer (e.g., int *p)
                 {
                     if (checkDuplicate(varName))
-                        continue;
+                    continue;
                     int size = child->children.size();
-    
-                    cout << declInfo.typeSpecifier<< endl;
-                    cout << *child->children[1] << endl;
-                    cout << child->children[1]->typeSpecifier << endl;
                     if(size == 1){
                         setNodeAttributes(identifierNode, 1, pointerDepth);
                         insertSymbol(varName, identifierNode);
@@ -624,11 +649,13 @@ void addDeclarators(TreeNode* specifier, TreeNode* list)
                     else if(declInfo.typeSpecifier==30 && child->children[1]->typeCategory==2){
                         setNodeAttributes(identifierNode, 1, pointerDepth);
                         insertSymbol(varName, identifierNode);
+                        codeGen.emit(TACOp::ASSIGN,child->children[0]->children[0]->valueToString(),child->children[1]->valueToString(),nullopt);
                     }
                     else if (isTypeCompatible(declInfo.typeSpecifier, child->children[1]->typeSpecifier, "="))
                     {
                         setNodeAttributes(identifierNode, 1, pointerDepth);
                         insertSymbol(varName, identifierNode);
+                        codeGen.emit(TACOp::ASSIGN,child->children[0]->children[0]->valueToString(),"&"+child->children[1]->children[1]->valueToString(),nullopt);
                     }
                     else
                     {
@@ -664,6 +691,7 @@ void addDeclarators(TreeNode* specifier, TreeNode* list)
                 {
                     setNodeAttributes(identifierNode, 0);
                     insertSymbol(varName, identifierNode);
+                    codeGen.emit(TACOp::ASSIGN,child->children[0]->valueToString(),child->children[1]->valueToString(),nullopt);
                 }
                 else
                 {
@@ -673,6 +701,7 @@ void addDeclarators(TreeNode* specifier, TreeNode* list)
         }
     }
 }
+
 stack<bool> inSwitch;
 
 

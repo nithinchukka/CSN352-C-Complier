@@ -11,12 +11,15 @@
     #include "../inc/tac.h"
     using namespace std;
     void yyerror(const char *s);
-    CodeGenerator codeGen; // Global instance
+    extern CodeGenerator codeGen;
 
     extern int yylex();
     extern int yylineno;
     extern FILE *yyin;
     extern unordered_set<string> classOrStructOrUnion;
+
+
+
 %}
 
 
@@ -107,8 +110,8 @@
 primary_expression
 	: ID { 
         $$ = $1; 
-        $$->tacResult = $1->valueToString();
         $$ = lookupSymbol($$->valueToString()); 
+        $$->tacResult = $1->valueToString();
         $$->isLValue = true;
     }
 	| INTEGER { 
@@ -186,7 +189,7 @@ postfix_expression
             cerr << "Error: function call with no params, expected " << $$->paramCount << endl;
         }
         string temp = codeGen.newTemp();
-        codeGen.emit(TACOp::ASSIGN, temp, $1->tacResult + "()", nullopt, $1->storageClass);
+        codeGen.emit(TACOp::CALL, temp, $1->tacResult, "", $1->storageClass);
         $$->tacResult = temp;
         $$->isLValue = false; 
     }
@@ -198,7 +201,7 @@ postfix_expression
          for (auto* arg : $3->children) {
             codeGen.emit(TACOp::ASSIGN, "param", arg->tacResult, nullopt, arg->storageClass);
         }
-        codeGen.emit(TACOp::ASSIGN, temp, $1->tacResult + to_string($3->children.size()), nullopt, $1->storageClass);
+        codeGen.emit(TACOp::CALL, temp, $1->tacResult ,to_string($3->children.size()));
         $$->tacResult = temp;
         if ($1->typeCategory == 3) {
             if ($1->paramCount == $3->children.size()) {
@@ -275,9 +278,9 @@ postfix_expression
         }
         $$->isLValue = false; 
         string temp = codeGen.newTemp();
-        codeGen.emit(TACOp::ASSIGN, temp, $1->tacResult, nullopt, $1->storageClass);
         string one = "1";
-        codeGen.emit(TACOp::ADD, $1->tacResult, $1->tacResult, one, $1->storageClass);
+        codeGen.emit(TACOp::ADD, temp, $1->tacResult, one);
+        codeGen.emit(TACOp::ASSIGN, $1->tacResult, temp);
         $$->tacResult = temp; // Returns original value
     }
 	| postfix_expression DECREMENT_OPERATOR {
@@ -483,22 +486,29 @@ multiplicative_expression
 additive_expression
 	: multiplicative_expression { 
         $$ = $1; 
+
     }
 	| additive_expression PLUS_OPERATOR multiplicative_expression {
-        $$ = createNode(NODE_ADDITIVE_EXPRESSION, $2, $1, $3);
-        $$->isLValue = false; 
-        if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "+")) {
-            $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
-            if($1->typeCategory==2 || $3->typeCategory==2){
-                $$->typeCategory = 2;
-                string temp = codeGen.newTemp();
-                codeGen.emit(TACOp::ADD, temp, $1->tacResult, $3->tacResult, $$->storageClass);
-                $$->tacResult = temp;  
-            }
+    $$ = createNode(NODE_ADDITIVE_EXPRESSION, $2, $1, $3);
+    $$->isLValue = false; 
+    if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "+")) {
+        $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
+        string temp = codeGen.newTemp(); // Create a new temporary variable
+        if ($1->typeCategory == 2 || $3->typeCategory == 2) {
+            // Array case (not applicable here, but kept for completeness)
+            $$->typeCategory = 2;
+            codeGen.emit(TACOp::ADD, temp, $1->tacResult, $3->tacResult, $$->storageClass);
         } else {
-            cerr << "Incompatible Type: " << $1->typeSpecifier << " and " 
-                 << $3->typeSpecifier << " at line " << yylineno << endl;
-        } 
+            // Integer (or scalar) case
+            $$->typeCategory = 0; // Assuming 0 is for scalars like int
+            codeGen.emit(TACOp::ADD, temp, $1->tacResult, $3->tacResult); // No storage class needed for temp
+        }
+        $$->tacResult = temp; // Store the result in the node's tacResult
+    } else {
+        cerr << "Incompatible Type: " << $1->typeSpecifier << " and " 
+             << $3->typeSpecifier << " at line " << yylineno << endl;
+    } 
+
     }
 	| additive_expression MINUS_OPERATOR multiplicative_expression { 
         $$ = createNode(NODE_MULTIPLICATIVE_EXPRESSION, $2, $1, $3);
@@ -873,16 +883,6 @@ declaration
             delete newDeclSpec;
         }else{
             addDeclarators($1, $2);
-            int type = $1->storageClass; // Get type from declaration_specifiers
-            for (auto* initDecl : $2->children) {
-                string varName = initDecl->children[0]->valueToString(); // declarator’s ID
-                if (initDecl->children.size() > 1 && initDecl->children[1]) { // Has initializer
-                    string initValue = initDecl->children[1]->tacResult; // From initializer
-                    if (!initValue.empty()) {
-                        codeGen.emit(TACOp::ASSIGN, varName, initValue, nullopt, type);
-                    }
-                }
-            }
         }
     };
 
@@ -1593,7 +1593,6 @@ constructor_function
 function_definition
     : declaration_specifiers declarator {
         DeclaratorInfo declInfo = isValidVariableDeclaration($1->children, true);
-        enterScope();
         if (declInfo.isValid) {
             string funcName = $2->children[0]->valueToString();
             codeGen.emit(TACOp::LABEL, funcName);
@@ -1692,6 +1691,6 @@ int main(int argc, char **argv) {
     fclose(yyin);
     cout<<"Generating TAC..." << endl;
     codeGen.printTAC();
-    printAllTables();
+    /* printAllTables(); */
     return 0;
 }

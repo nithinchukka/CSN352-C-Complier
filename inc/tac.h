@@ -5,7 +5,7 @@
 #include <bits/stdc++.h>
 using namespace std;
 enum class TACOp {
-    ASSIGN, ADD, SUB, MUL, DIV, MOD, INDEX, LABEL, GOTO, IF_EQ, IF_NE,LSHFT,RSHFT,LT,GT,LE,GE,EQ,NE,BIT_AND,BIT_OR,BIT_XOR,AND,OR,XOR,PRINT,RETURN
+    ASSIGN, ADD, SUB, MUL, DIV, MOD, INDEX, LABEL, GOTO, IF_EQ, IF_NE,LSHFT,RSHFT,LT,GT,LE,GE,EQ,NE,BIT_AND,BIT_OR,BIT_XOR,AND,OR,XOR,PRINT,RETURN,CALL
 };
 
 struct TACInstruction {
@@ -53,6 +53,7 @@ struct TACInstruction {
             case TACOp::IF_EQ: str = "if " + *operand1 + " == " + *operand2 + " goto " + result; break;
             case TACOp::IF_NE: str = "if " + *operand1 + " != " + *operand2 + " goto " + result; break;
             case TACOp::RETURN: str = "return " + result; break;
+            case TACOp::CALL: str = result + " = call "+*operand1+"("+(operand2?*operand2:"")+")";break; 
             default: str = "Unknown"; break;
         }
         if (!dimensions.empty()) {
@@ -69,6 +70,11 @@ struct CodeGenerator {
     int tempCounter = 0;
     int labelCounter = 0;
     int currentInstrIndex = 0;
+    ofstream out;
+
+    CodeGenerator() {
+        out.open("tac");
+    }
 
     string newTemp() {
         return "t" + to_string(tempCounter++);
@@ -108,9 +114,10 @@ struct CodeGenerator {
         }
     }
 
-    void printTAC() const {
+    void printTAC() {
         for (const auto& instr : tacCode) {
             cout << instr.toString() << "\n";
+            out << instr.toString() << "\n";
         }
     }
 };
