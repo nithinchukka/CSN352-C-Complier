@@ -2,12 +2,320 @@
 #define SYMBOL_TABLE_H
 
 #include <bits/stdc++.h>
-#include "ast.h"
-#include "tac.h"
-CodeGenerator codeGen;
-int expectedReturnType = -1;
+#include "treeNode.h"
+enum class TACOp
+{
+    ASSIGN,
+    ADD,
+    SUB,
+    MUL,
+    DIV,
+    MOD,
+    INDEX,
+    ARR_INDEX,
+    LABEL,
+    GOTO,
+    IF_EQ,
+    IF_NE,
+    LSHFT,
+    RSHFT,
+    LT,
+    GT,
+    LE,
+    GE,
+    EQ,
+    NE,
+    BIT_AND,
+    BIT_OR,
+    BIT_XOR,
+    AND,
+    OR,
+    XOR,
+    PRINT,
+    RETURN,
+    CALL,
+    TYPECAST,
+    CALL2,
+    oth
+};
 
-using namespace std;
+inline string opToStr(TACOp op)
+{
+    switch (op)
+    {
+    case TACOp::ADD:
+        return "+";
+    case TACOp::SUB:
+        return "-";
+    case TACOp::MUL:
+        return "*";
+    case TACOp::DIV:
+        return "/";
+    case TACOp::MOD:
+        return "%";
+    case TACOp::LSHFT:
+        return "<<";
+    case TACOp::RSHFT:
+        return ">>";
+    case TACOp::LT:
+        return "<";
+    case TACOp::GT:
+        return ">";
+    case TACOp::LE:
+        return "<=";
+    case TACOp::GE:
+        return ">=";
+    case TACOp::EQ:
+        return "==";
+    case TACOp::NE:
+        return "!=";
+    case TACOp::BIT_AND:
+        return "&";
+    case TACOp::BIT_OR:
+        return "|";
+    case TACOp::BIT_XOR:
+        return "^";
+    case TACOp::AND:
+        return "&&";
+    case TACOp::OR:
+        return "||";
+    case TACOp::XOR:
+        return "^";
+    case TACOp::ASSIGN:
+        return "=";
+    case TACOp::GOTO:
+        return "goto";
+    case TACOp::IF_EQ:
+        return "if ==";
+    case TACOp::IF_NE:
+        return "if !=";
+    case TACOp::TYPECAST:
+        return "cast";
+    case TACOp::CALL:
+        return "call";
+    case TACOp::PRINT:
+        return "print";
+    case TACOp::INDEX:
+        return "index";
+    case TACOp::ARR_INDEX:
+        return "arr_index";
+    case TACOp::RETURN:
+        return "return";
+    case TACOp::LABEL:
+        return "label";
+    case TACOp::oth:
+        return "";
+    default:
+        return "unknown";
+    }
+}
+
+struct TACInstruction
+{
+    TACOp op;
+    string result;
+    optional<string> operand1;
+    optional<string> operand2;
+    bool isGoto = false;
+    TACInstruction(TACOp operation, const string &res,
+                   const optional<string> &op1 = nullopt,
+                   const optional<string> &op2 = nullopt,
+                   bool isGotoFlag = false)
+        : op(operation), result(res), operand1(op1), operand2(op2),
+          isGoto(isGotoFlag) {}
+
+    string toString() const
+    {
+        string str;
+        if (isGoto)
+        {
+            if (op == TACOp::oth)
+                str = "goto " + result;
+            else
+                str = "goto " + result + " if " + *operand1 + " " + opToStr(op) + " " + *operand2;
+            return str;
+        }
+        switch (op)
+        {
+        case TACOp::ASSIGN:
+            str = result + " = " + (operand1 ? *operand1 : "");
+            break;
+        case TACOp::ADD:
+            str = result + " = " + *operand1 + " + " + *operand2;
+            break;
+        case TACOp::SUB:
+            str = result + " = " + *operand1 + " - " + *operand2;
+            break;
+        case TACOp::MUL:
+            str = result + " = " + *operand1 + " * " + *operand2;
+            break;
+        case TACOp::DIV:
+            str = result + " = " + *operand1 + " / " + *operand2;
+            break;
+        case TACOp::MOD:
+            str = result + " = " + *operand1 + " % " + *operand2;
+            break;
+        case TACOp::LSHFT:
+            str = result + " = " + *operand1 + " << " + *operand2;
+            break;
+        case TACOp::RSHFT:
+            str = result + " = " + *operand1 + " >> " + *operand2;
+            break;
+        case TACOp::LT:
+            str = result + " = " + *operand1 + " < " + *operand2;
+            break;
+        case TACOp::GT:
+            str = result + " = " + *operand1 + " > " + *operand2;
+            break;
+        case TACOp::LE:
+            str = result + " = " + *operand1 + " <= " + *operand2;
+            break;
+        case TACOp::GE:
+            str = result + " = " + *operand1 + " >= " + *operand2;
+            break;
+        case TACOp::EQ:
+            str = result + " = " + *operand1 + " == " + *operand2;
+            break;
+        case TACOp::NE:
+            str = result + " = " + *operand1 + " != " + *operand2;
+            break;
+        case TACOp::BIT_AND:
+            str = result + " = " + *operand1 + " & " + *operand2;
+            break;
+        case TACOp::BIT_OR:
+            str = result + " = " + *operand1 + " | " + *operand2;
+            break;
+        case TACOp::BIT_XOR:
+            str = result + " = " + *operand1 + " ^ " + *operand2;
+            break;
+        case TACOp::AND:
+            str = result + " = " + *operand1 + " && " + *operand2;
+            break;
+        case TACOp::OR:
+            str = result + " = " + *operand1 + " || " + *operand2;
+            break;
+        case TACOp::XOR:
+            str = result + " = " + *operand1 + " ^ " + *operand2;
+            break;
+        case TACOp::PRINT:
+            str = "print " + result;
+            break;
+        case TACOp::INDEX:
+            str = result + " = " + *operand1 + "[" + *operand2 + "]";
+            break;
+        case TACOp::LABEL:
+            str = result + ":";
+            break;
+        case TACOp::GOTO:
+            str = "goto " + result;
+            break;
+        case TACOp::IF_EQ:
+            str = "if " + *operand1 + " == " + *operand2 + " goto " + result;
+            break;
+        case TACOp::IF_NE:
+            str = "if " + *operand1 + " != " + *operand2 + " goto " + result;
+            break;
+        case TACOp::RETURN:
+            str = "return " + result;
+            break;
+        case TACOp::CALL:
+            str = result + " = call " + *operand1 + "(" + (operand2 ? *operand2 : "") + ")";
+            break;
+        case TACOp::CALL2:
+            str = "call " + *operand1 + "(" + (operand2 ? *operand2 : "") + ")";
+            break;
+        case TACOp::TYPECAST:
+            str = result + " = " + *operand1 + "(" + *operand2 + ")";
+            break;
+        case TACOp::oth:
+        {
+            str = "goto " + result + " " + *operand1 + " " + *operand2;
+        }
+        default:
+            str = "Unknown";
+            break;
+        }
+        return str;
+        ;
+    }
+};
+
+struct CodeGenerator
+{
+    vector<TACInstruction> tacCode;
+    int tempCounter = 0;
+    int labelCounter = 0;
+    int currentInstrIndex = 0;
+    
+
+    string newTemp()
+    {
+        return "t" + to_string(tempCounter++);
+    }
+
+    string newLabel()
+    {
+        return "L" + to_string(labelCounter++);
+    }
+    int emit(TACOp op, const string &result,
+             const optional<string> &op1 = nullopt,
+             const optional<string> &op2 = nullopt, bool isGotoFlag = false)
+    {
+        tacCode.emplace_back(op, result, op1, op2, isGotoFlag);
+        return currentInstrIndex++;
+    }
+
+    void printTAC()
+    {
+        for (const auto &instr : tacCode)
+            cout << instr.toString() << '\n';
+    }
+};
+
+CodeGenerator codeGen;
+
+struct backpatchNode
+{
+    int index;
+    backpatchNode *next;
+};
+
+class Backpatch
+{
+public:
+    static backpatchNode *addToBackpatchList(backpatchNode *list, int index)
+    {
+        auto *newNode = new backpatchNode{index, list};
+        return newNode;
+    }
+
+    static void backpatch(backpatchNode *list, const string &label)
+    {
+        for (backpatchNode *current = list; current; current = current->next)
+        {
+            int idx = current->index;
+            if (idx >= 0 && idx < codeGen.tacCode.size())
+            {
+                codeGen.tacCode[idx].result = label;
+            }
+        }
+    }
+
+    static backpatchNode *mergeBackpatchLists(backpatchNode *list1, backpatchNode *list2)
+    {
+        if (!list1)
+            return list2;
+        if (!list2)
+            return list1;
+        backpatchNode *current = list1;
+        while (current->next)
+            current = current->next;
+        current->next = list2;
+        return list1;
+    }
+};
+
+int expectedReturnType = -1;
 extern unordered_set<string> classOrStructOrUnion;
 
 struct Table
@@ -21,7 +329,7 @@ stack<int> offsetStack;
 Table *currentTable;
 vector<Table *> allTables;
 
-TreeNode *lookupSymbol(string symbol)
+TreeNode *lookupSymbol(string symbol, bool arg = false)
 {
     Table *temp = currentTable;
     while (temp != nullptr)
@@ -35,7 +343,8 @@ TreeNode *lookupSymbol(string symbol)
         }
         temp = temp->parent;
     }
-    cout << "Symbol " << symbol << " not found in table" << endl;
+    if(!arg)
+        cerr << "Symbol " << symbol << " not found in table" << endl;
     return nullptr;
 }
 
@@ -53,14 +362,13 @@ void exitScope()
 {
     if (currentTable->parent == nullptr)
     {
-        cout << "Cannot exit global scope" << endl;
+        cerr << "Cannot exit global scope" << endl;
         return;
     }
     Table *temp = currentTable;
     currentTable = currentTable->parent;
     tableStack.pop();
     offsetStack.pop();
-    // delete temp;
 }
 
 void insertSymbol(string symbol, TreeNode *node)
@@ -69,7 +377,7 @@ void insertSymbol(string symbol, TreeNode *node)
     {
         if (entry.first == symbol)
         {
-            cout << "Symbol " << symbol << " already exists in table" << endl;
+            cerr << "Symbol " << symbol << " already exists in table" << endl;
             return;
         }
     }
@@ -122,22 +430,34 @@ struct DeclaratorInfo
     bool isCustomType = false; // true if it's a class, struct, or union
 };
 
-string typeCastInfo(int lhs, int rhs) {
-    if (lhs == 1 && rhs == 3) return "int_to_char";
-    if (lhs == 2 && rhs == 3) return "int_to_short";
-    if (lhs == 3 && rhs == 4) return "long_to_int";
-    if (lhs == 1 && rhs == 4) return "long_to_char";
-    if (lhs == 2 && rhs == 4) return "long_to_short";
-    if (lhs == 3 && rhs == 6) return "float_to_int";
-    if (lhs == 6 && rhs == 7) return "double_to_float";
-    if (lhs == 3 && rhs == 7) return "double_to_int";
-    if (lhs == 7 && rhs == 6) return "float_to_double";
-    if (lhs == 6 && rhs == 3) return "int_to_float";
-    if (lhs == 7 && rhs == 3) return "int_to_double";
-    if (lhs == 3 && rhs == 1) return "char_to_int";
-    return "invalid";  // Default to invalid if no specific conversion
+string typeCastInfo(int lhs, int rhs)
+{
+    if (lhs == 1 && rhs == 3)
+        return "int_to_char";
+    if (lhs == 2 && rhs == 3)
+        return "int_to_short";
+    if (lhs == 3 && rhs == 4)
+        return "long_to_int";
+    if (lhs == 1 && rhs == 4)
+        return "long_to_char";
+    if (lhs == 2 && rhs == 4)
+        return "long_to_short";
+    if (lhs == 3 && rhs == 6)
+        return "float_to_int";
+    if (lhs == 6 && rhs == 7)
+        return "double_to_float";
+    if (lhs == 3 && rhs == 7)
+        return "double_to_int";
+    if (lhs == 7 && rhs == 6)
+        return "float_to_double";
+    if (lhs == 6 && rhs == 3)
+        return "int_to_float";
+    if (lhs == 7 && rhs == 3)
+        return "int_to_double";
+    if (lhs == 3 && rhs == 1)
+        return "char_to_int";
+    return "invalid"; 
 }
-
 
 bool isValidCast(int toType, int fromType)
 {
@@ -156,10 +476,9 @@ bool checkFormatSpecifiers(string formatString, vector<int> argTypeList)
         {
             ptr++;
             if (*ptr == '\0')
-                break; // Avoid accessing out-of-bounds memory
-
+                break;
             if (*ptr == '%')
-            { // Literal '%%'
+            { 
                 ptr++;
                 continue;
             }
@@ -175,16 +494,16 @@ bool checkFormatSpecifiers(string formatString, vector<int> argTypeList)
             {
             case 'd':
                 expectedType1 = 2, expectedType2 = 3;
-                break; // int or long
+                break; 
             case 'f':
                 expectedType1 = 5, expectedType2 = 6;
-                break; // float or double
+                break; 
             case 's':
                 expectedType1 = 8;
-                break; // string
+                break; 
             case 'c':
                 expectedType1 = 1;
-                break; // char
+                break; 
             default:
                 cerr << "Error: Unknown format specifier '%" << *ptr << "'\n";
                 return false;
@@ -311,9 +630,9 @@ bool isTypeCompatible(int lhstype, int rhstype, string op, bool lhsIsConst = fal
     bool lhsIsString = (lhstype == 8);
     bool rhsIsString = (rhstype == 8);
 
-    if (lhstype < -1 || rhstype < -1 || 
-        (lhstype > 8 || rhstype > 8) || 
-        (lhstype == 0 || rhstype == 0) || 
+    if (lhstype < -1 || rhstype < -1 ||
+        (lhstype > 8 || rhstype > 8) ||
+        (lhstype == 0 || rhstype == 0) ||
         (lhstype == 5 || rhstype == 5))
     {
         return false;
@@ -350,7 +669,7 @@ bool isTypeCompatible(int lhstype, int rhstype, string op, bool lhsIsConst = fal
             return true;
         if (lhsIsNumeric && rhsIsNumeric)
         {
-    
+
             return true;
         }
         return false;
@@ -396,14 +715,14 @@ bool isTypeCompatible(int lhstype, int rhstype, string op, bool lhsIsConst = fal
 
     if (op == "!" || op == "~")
     {
-        return (lhstype != 8) && (rhstype == -1 || rhstype == 8); // Unary, only lhs matters
+        return (lhstype != 8) && (rhstype == -1 || rhstype == 8);
     }
 
     if (op == "++" || op == "--")
     {
         if (lhsIsConst)
             return false;
-        return lhsIsNumeric && (rhstype == -1 || rhstype == 8); // Unary, only lhs matters
+        return lhsIsNumeric && (rhstype == -1 || rhstype == 8);
     }
 
     return false;
@@ -445,9 +764,11 @@ bool structInitializerCheck(TreeNode *identifierNode, TreeNode *initializerList)
                  << expectedType
                  << ", got " << actualType << endl;
             return false;
-        }else{
+        }
+        else
+        {
             string temp = codeGen.newTemp();
-            codeGen.emit(TACOp::TYPECAST, temp,typeCastInfo(expectedType, actualType) , initNode->tacResult);
+            codeGen.emit(TACOp::TYPECAST, temp, typeCastInfo(expectedType, actualType), initNode->tacResult);
             initNode->tacResult = temp;
         }
 
@@ -488,7 +809,7 @@ void GenerateTAC(TreeNode *initList, vector<int> dimensions, int level, string n
 {
     int vecSize = dimensions.size();
     if (level == vecSize - 1)
-    { // Base case: innermost dimension
+    { 
         int i = 0;
         for (TreeNode *child : initList->children)
         {
@@ -498,12 +819,12 @@ void GenerateTAC(TreeNode *initList, vector<int> dimensions, int level, string n
         }
     }
     else
-    { // Recursive case: outer dimensions
+    { 
         int i = 0;
         for (TreeNode *child : initList->children)
         {
             string newName = name + "[" + to_string(i) + "]";
-            if(child->type != NODE_INITIALIZER_LIST)
+            if (child->type != NODE_INITIALIZER_LIST)
             {
                 return;
             }
@@ -523,30 +844,26 @@ bool checkInitializerLevel(TreeNode *initList, int baseType, vector<int> &dimens
         return false;
     }
 
-    // Ensure all dimensions except the first are specified
     for (int i = 1; i < vecSize; i++)
     {
         if (dimensions[i] == -1)
-        { // Use -1 instead of 0 for unspecified dimensions
+        { 
             cerr << "Invalid Declaration: dimension " << i << " cannot be unspecified" << endl;
             return false;
         }
     }
 
-    // Ensure level doesn't exceed defined dimensions
     if (level >= vecSize)
     {
         cerr << "Too many nesting levels at level " << level << endl;
         return false;
     }
 
-    // Infer first dimension if unspecified
     if (level == 0 && dimensions[0] == -1)
     {
         dimensions[0] = initList->children.size();
     }
 
-    // Check that the initializer list does not exceed the expected dimension
     if (initList->children.size() > dimensions[level])
     {
         cerr << "Dimension mismatch at level " << level << ": expected at most "
@@ -556,15 +873,8 @@ bool checkInitializerLevel(TreeNode *initList, int baseType, vector<int> &dimens
 
     if (level == vecSize - 1)
     {
-        // Innermost level: check scalar types
         for (TreeNode *child : initList->children)
         {
-            // if (child->type != NODE_UNARY_EXPRESSION)
-            // {
-            //     cerr << "Expected scalar at level " << level << ", got " << child->typeCategory << endl;
-            //     return false;
-            // }
-            // Check type correctness
             if (child->typeSpecifier != baseType)
             {
                 cerr << "Type mismatch at level " << level << ": expected "
@@ -575,7 +885,6 @@ bool checkInitializerLevel(TreeNode *initList, int baseType, vector<int> &dimens
     }
     else
     {
-        // Recurse for nested lists, check all children
         for (TreeNode *child : initList->children)
         {
             if (child->type != NODE_INITIALIZER_LIST)
@@ -645,7 +954,6 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
             TreeNode *firstChild = child->children[0];
             string varName;
             TreeNode *identifierNode = firstChild;
-            // Helper function to set common node attributes
             auto setNodeAttributes = [&](TreeNode *node, int typeCategory, int pointerLevel = 0)
             {
                 node->typeCategory = typeCategory;
@@ -658,7 +966,6 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
                 node->isUnsigned = declInfo.isUnsigned;
                 node->symbolTable = helper->symbolTable;
             };
-            // Check for duplicate declaration
             auto checkDuplicate = [&](const string &name)
             {
                 for (const auto &entry : currentTable->symbolTable)
@@ -672,7 +979,7 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
                 return false;
             };
 
-            if (firstChild->type == ARRAY) // Pointer-to-array (e.g., int (*arr)[3])
+            if (firstChild->type == ARRAY)
             {
                 vector<int> dimensions = findArrayDimensions(firstChild);
                 while (identifierNode && identifierNode->type == ARRAY)
@@ -697,15 +1004,15 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
                     }
                     if (size == 2 && !checkInitializerLevel(child->children[1], declInfo.typeSpecifier, dimensions, 0))
                     {
-                        cout << "Error\n";
+                        cerr << "Error\n";
                         continue;
                     }
-                    setNodeAttributes(identifierNode, 2); // Array
+                    setNodeAttributes(identifierNode, 2); 
                     identifierNode->dimensions = dimensions;
                     insertSymbol(varName, identifierNode);
                 }
             }
-            else if (firstChild->type == NODE_POINTER) // Pointers, including array of pointers
+            else if (firstChild->type == NODE_POINTER) 
             {
                 int pointerDepth = 0;
                 while (identifierNode && identifierNode->type == NODE_POINTER)
@@ -717,7 +1024,7 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
                 }
                 varName = identifierNode->valueToString();
 
-                if (identifierNode->type == ARRAY) // Array of pointers (e.g., int *arr[3])
+                if (identifierNode->type == ARRAY) 
                 {
                     vector<int> dimensions = findArrayDimensions(identifierNode);
                     varName = identifierNode->children[0]->valueToString();
@@ -744,7 +1051,7 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
                         insertSymbol(varName, identifierNode);
                     }
                 }
-                else // Regular pointer (e.g., int *p)
+                else 
                 {
                     if (checkDuplicate(varName))
                         continue;
@@ -754,54 +1061,39 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
                         setNodeAttributes(identifierNode, 1, pointerDepth);
                         insertSymbol(varName, identifierNode);
                     }
-                    // else if (declInfo.typeSpecifier == 3 && child->children[1]->typeCategory == 2)
-                    // {
-                    //     setNodeAttributes(identifierNode, 1, pointerDepth);
-                    //     insertSymbol(varName, identifierNode);
-                    //     codeGen.emit(TACOp::ASSIGN, varName, child->children[1]->tacResult, nullopt);
-                    // }
-                    // else if (isTypeCompatible(declInfo.typeSpecifier, child->children[1]->typeSpecifier, "="))
-                    // {
-                    //     if(declInfo.typeSpecifier != child->children[1]->typeSpecifier){
-                    //         string temp = codeGen.newTemp();
-                    //         codeGen.emit(TACOp::TYPECAST, temp,typeCastInfo(declInfo.typeSpecifier, child->children[1]->typeSpecifier) , child->children[1]->tacResult);
-                    //         child->children[1]->tacResult = temp;
-                    //     }
-                    //     setNodeAttributes(identifierNode, 1, pointerDepth);
-                    //     insertSymbol(varName, identifierNode);
-                    //     codeGen.emit(TACOp::ASSIGN, varName, "&" + child->children[1]->tacResult, nullopt);
-                    // }
-                    // else
-                    // {
-                    //     cerr << "Error: Invalid pointer " << (size == 2 ? "initialization" : "declarator syntax") << " for '" << varName << "'\n";
-                    // }
-                    else{
+                    else
+                    {
                         int lhsPointerlevel = child->children[0]->pointerLevel;
                         int rhsPointerlevel = child->children[1]->pointerLevel;
-                        if(lhsPointerlevel != rhsPointerlevel){
+                        if (lhsPointerlevel != rhsPointerlevel && !(declInfo.typeSpecifier == 3 && child->children[1]->typeCategory == 2))
+                        {
                             cerr << "Error: Invalid pointer initialization for '" << varName << "'\n";
                         }
-                        else{
-                            if (declInfo.typeSpecifier == 3 && child->children[1]->typeCategory == 2){
+                        else
+                        {
+                            if (declInfo.typeSpecifier == 3 && child->children[1]->typeCategory == 2)
+                            {
                                 setNodeAttributes(identifierNode, 1, pointerDepth);
                                 insertSymbol(varName, identifierNode);
                                 codeGen.emit(TACOp::ASSIGN, varName, child->children[1]->tacResult, nullopt);
                             }
-                            else if (isTypeCompatible(declInfo.typeSpecifier, child->children[1]->typeSpecifier, "=")){
-                                if(declInfo.typeSpecifier != child->children[1]->typeSpecifier){
+                            else if (isTypeCompatible(declInfo.typeSpecifier, child->children[1]->typeSpecifier, "="))
+                            {
+                                if (declInfo.typeSpecifier != child->children[1]->typeSpecifier)
+                                {
                                     string temp = codeGen.newTemp();
-                                    codeGen.emit(TACOp::TYPECAST, temp,typeCastInfo(declInfo.typeSpecifier, child->children[1]->typeSpecifier) , child->children[1]->tacResult);
+                                    codeGen.emit(TACOp::TYPECAST, temp, typeCastInfo(declInfo.typeSpecifier, child->children[1]->typeSpecifier), child->children[1]->tacResult);
                                     child->children[1]->tacResult = temp;
                                 }
                                 setNodeAttributes(identifierNode, 1, pointerDepth);
                                 insertSymbol(varName, identifierNode);
-                                codeGen.emit(TACOp::ASSIGN, varName,child->children[1]->tacResult, nullopt);
+                                codeGen.emit(TACOp::ASSIGN, varName, child->children[1]->tacResult, nullopt);
                             }
                         }
                     }
                 }
             }
-            else // Regular variable (e.g., int x)
+            else
             {
                 varName = firstChild->valueToString();
                 if (checkDuplicate(varName))
@@ -817,46 +1109,30 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
                     setNodeAttributes(identifierNode, 0);
                     insertSymbol(varName, identifierNode);
                 }
-                // else if (size == 2 && declInfo.typeSpecifier == 20)
-                // {
-                //     if (structInitializerCheck(helper, child->children[1]))
-                //     {
-                //         insertSymbol(varName, identifierNode);
-                //         setNodeAttributes(identifierNode, 0);
-                //     }
-                // }
-                // else if (size == 2 && isTypeCompatible(declInfo.typeSpecifier, child->children[1]->typeSpecifier, "="))
-                // {
-                //     if(declInfo.typeSpecifier != child->children[1]->typeSpecifier){
-                //         string temp = codeGen.newTemp();
-                //         codeGen.emit(TACOp::TYPECAST, temp,typeCastInfo(declInfo.typeSpecifier,child->children[1]->typeSpecifier) , child->children[1]->tacResult);
-                //         child->children[1]->tacResult = temp;
-                //     }
-                //     setNodeAttributes(identifierNode, 0);
-                //     insertSymbol(varName, identifierNode);
-                //     codeGen.emit(TACOp::ASSIGN, varName, child->children[1]->tacResult, nullopt);
-                // }
-                // else
-                // {
-                //     cerr << "Error: " << (size == 2 ? "Type mismatch in initialization" : "Invalid declarator syntax") << " for '" << varName << "'\n";
-                // }
-                else{
+                else
+                {
                     int lhsPointerLevel = child->children[0]->pointerLevel;
                     int rhsPointerLevel = child->children[1]->pointerLevel;
-                    if(rhsPointerLevel != lhsPointerLevel){
+                    if (rhsPointerLevel != lhsPointerLevel)
+                    {
                         cerr << "Error: Invalid pointer initialization for '" << varName << "'\n";
                     }
-                    else{
-                        if (size == 2 && declInfo.typeSpecifier == 20){
-                            if (structInitializerCheck(helper, child->children[1])){
+                    else
+                    {
+                        if (size == 2 && declInfo.typeSpecifier == 20)
+                        {
+                            if (structInitializerCheck(helper, child->children[1]))
+                            {
                                 insertSymbol(varName, identifierNode);
                                 setNodeAttributes(identifierNode, 0);
                             }
                         }
-                        else if (size == 2 && isTypeCompatible(declInfo.typeSpecifier, child->children[1]->typeSpecifier, "=")){
-                            if(declInfo.typeSpecifier != child->children[1]->typeSpecifier){
+                        else if (size == 2 && isTypeCompatible(declInfo.typeSpecifier, child->children[1]->typeSpecifier, "="))
+                        {
+                            if (declInfo.typeSpecifier != child->children[1]->typeSpecifier)
+                            {
                                 string temp = codeGen.newTemp();
-                                codeGen.emit(TACOp::TYPECAST, temp,typeCastInfo(declInfo.typeSpecifier,child->children[1]->typeSpecifier) , child->children[1]->tacResult);
+                                codeGen.emit(TACOp::TYPECAST, temp, typeCastInfo(declInfo.typeSpecifier, child->children[1]->typeSpecifier), child->children[1]->tacResult);
                                 child->children[1]->tacResult = temp;
                             }
                             setNodeAttributes(identifierNode, 0);

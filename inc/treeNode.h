@@ -3,7 +3,7 @@
 
 #include <bits/stdc++.h>
 using namespace std;
-
+struct backpatchNode;
 enum NodeType
 {
     NODE_ASSIGNMENT,
@@ -92,6 +92,8 @@ enum NodeType
     NODE_SWITCH_STATEMENT,
     NODE_SWITCH_CASE_LIST,
     NODE_DEFAULT_CASE,
+    NODE_NEXT_LIST,
+    OTHERS
 };
 
 using NodeValue = variant<monostate, string, int, double, bool, char>;
@@ -116,10 +118,17 @@ public:
     int access = 0;
     vector<int> paramTypes;
     vector<int> dimensions;
-    vector<pair<string, TreeNode*>> symbolTable;
+    vector<pair<string, TreeNode *>> symbolTable;
     string tacResult;
-    vector<int> false_list;
-    vector<int> next_list;
+
+    backpatchNode *nextList = nullptr;
+    backpatchNode *falseList = nullptr;
+    backpatchNode *trueList = nullptr;
+    backpatchNode *breakList = nullptr;
+    backpatchNode *continueList = nullptr;
+    backpatchNode *returnList = nullptr;
+    backpatchNode *caseList = nullptr;
+    backpatchNode *defaultList = nullptr;
     TreeNode(NodeType type, NodeValue value = monostate()) : type(type), value(value)
     {
     }

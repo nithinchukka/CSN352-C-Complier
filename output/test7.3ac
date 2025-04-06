@@ -1,0 +1,26 @@
+main:
+t0 = 1
+t1 = 2
+t2 = 3
+t3 = 4
+t4 = 5
+arr[0] = t0
+arr[1] = t1
+arr[2] = t2
+arr[3] = t3
+arr[4] = t4
+p = arr
+t5 = 1
+t6 = arr + t5
+p = t6
+p = p + 1
+t8 = 4
+x = t8
+t9 = &x
+p = t9
+t11 = 4
+t12 = p + t11
+t13 = *t12
+a = t13
+t14 = 6
+t15 = arr[t14]
