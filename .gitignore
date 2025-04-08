@@ -16,6 +16,7 @@
 # Executables
 *.exe
 *.out
+output/
 
 # CMake
 CMakeCache.txt
@@ -41,3 +42,4 @@ build/
 test.*
 *.log
 *.txt
+output/test1.3ac
