@@ -1,10 +1,8 @@
-int main() {
-    int a = 10;
-    int b = 3;
-    int sum = a + b;           
-    int mod = a % b;        
-    float c = a+b;
-    float d = a*b;
-    int e = c;      
-    return 0;
+int main()
+{
+    int x = 5;
+    for(int i = 0; i < 5; i++) {
+        x++;
+        if(x==6)continue;
+    }
 }

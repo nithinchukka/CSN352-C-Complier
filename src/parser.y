@@ -23,8 +23,8 @@
     void backTrackExpr(TreeNode* nd){
         if(nd == nullptr) return;
         if(nd->trueList || nd->falseList){
-            Backpatch::backpatch(nd->trueList, to_string(codeGen.currentInstrIndex  +1));
-            Backpatch::backpatch(nd->falseList, to_string(codeGen.currentInstrIndex  + 2));
+            Backpatch::backpatch(nd->trueList, to_string(codeGen.currentInstrIndex));
+            Backpatch::backpatch(nd->falseList, to_string(codeGen.currentInstrIndex  + 1));
             codeGen.emit(TACOp::oth, nd->tacResult, "1", nullopt);
             codeGen.emit(TACOp::oth, nd->tacResult, "0", nullopt);
     }
@@ -237,27 +237,40 @@ postfix_expression
         $$ = createNode(NODE_POSTFIX_EXPRESSION, monostate(), $1, $3);
         if ($3->typeSpecifier != 3) {
             cerr << "Error: array index must be an integer" << endl;
-        } else if ($1->typeCategory == 2) {
+        } else if ($1->typeCategory == 2 || $1->typeCategory == 1) {
+            if ($1->typeSpecifier != 1 && $1->typeSpecifier != 3) {
+                cerr << "Error: can only index a char or int pointer" << endl;
+            } else {
             $$->typeSpecifier = $1->typeSpecifier;
             $$->typeCategory = 2;
             $$->isLValue = true; 
             string temp = codeGen.newTemp();
-            codeGen.emit(TACOp::INDEX, temp, $1->tacResult, $3->tacResult);
-            $$->tacResult = temp;
-        } else if ($1->typeCategory == 1) {
-            if ($1->typeSpecifier != 1 && $1->typeSpecifier != 3) {
-                cerr << "Error: can only index a char or int pointer" << endl;
-            } else {
-                $$->typeSpecifier = $1->typeSpecifier;
-                $$->isLValue = true;
-                $$->typeCategory = 0;
-                string temp = codeGen.newTemp();
-                codeGen.emit(TACOp::INDEX, temp, $1->tacResult, $3->tacResult);
-                $$->tacResult = temp;
-            }   
-        } else {
+            if($1->typeSpecifier == 1){
+                codeGen.emit(TACOp::MUL, temp, "1", $3->tacResult);
+            }else{
+                codeGen.emit(TACOp::MUL, temp, "4", $3->tacResult);
+            }
+            string temp1 = codeGen.newTemp();
+            codeGen.emit(TACOp::ADD, temp1, $1->tacResult, temp);
+            $$->tacResult = "*" + temp1;
+            }
+        } 
+        // else if ($1->typeCategory == 1) {
+        //     if ($1->typeSpecifier != 1 && $1->typeSpecifier != 3) {
+        //         cerr << "Error: can only index a char or int pointer" << endl;
+        //     } else {
+        //         $$->typeSpecifier = $1->typeSpecifier;
+        //         $$->isLValue = true;
+        //         $$->typeCategory = 0;
+        //         string temp = codeGen.newTemp();
+        //         codeGen.emit(TACOp::INDEX, temp, $1->tacResult, $3->tacResult);
+        //         $$->tacResult = temp;
+        //     }   
+        // }
+         else {
             cerr << $1->valueToString() << " is not an array" << endl;
         }
+        $$->pointerLevel = 0;
     }
     | postfix_expression LPAREN RPAREN { 
         $$ = $1;
@@ -390,7 +403,7 @@ postfix_expression
         string temp = codeGen.newTemp();
         codeGen.emit(TACOp::ASSIGN, temp, $1->tacResult, nullopt);
         string temp2 = codeGen.newTemp();
-        codeGen.emit(TACOp::ADD, temp2, $1->tacResult, "1");
+        codeGen.emit(TACOp::ADD, temp2, temp, "1");
         codeGen.emit(TACOp::ASSIGN, $1->tacResult, temp2, nullopt);
         $$->tacResult = temp;
     }
@@ -408,7 +421,7 @@ postfix_expression
         string temp = codeGen.newTemp();
         codeGen.emit(TACOp::ASSIGN, temp, $1->tacResult, nullopt);
         string temp2 = codeGen.newTemp();
-        codeGen.emit(TACOp::SUB, temp2, $1->tacResult, "1");
+        codeGen.emit(TACOp::SUB, temp2, temp, "1");
         codeGen.emit(TACOp::ASSIGN, $1->tacResult, temp2, nullopt);
         $$->tacResult = temp;
     }
@@ -417,6 +430,7 @@ postfix_expression
 argument_expression_list
     : assignment_expression { 
         $$ = createNode(NODE_ARGUMENT_EXPRESSION_LIST, monostate(), $1); 
+        $$->tacResult = $1->tacResult;
     }
     | argument_expression_list COMMA assignment_expression { 
         $$ = $1;
@@ -435,8 +449,12 @@ unary_expression
             cerr << "Error: Cannot pre-increment an R-value at line " << yylineno << endl;
         } 
         $$ = $2;
-        codeGen.emit(TACOp::ADD, $2->tacResult, $2->tacResult, "1");
-        $$->tacResult = $2->tacResult;
+        string temp = codeGen.newTemp();
+        codeGen.emit(TACOp::ASSIGN, temp, $2->tacResult, nullopt);
+        string temp2 = codeGen.newTemp();
+        codeGen.emit(TACOp::ADD, temp2, temp, "1");
+        codeGen.emit(TACOp::ASSIGN, $2->tacResult, temp2, nullopt);
+        $$->tacResult = temp2; 
         int typeSpec = $2->typeSpecifier;
         if (typeSpec == 5 || typeSpec > 7) {
             cerr << "Error: invalid type for increment operator" << endl;
@@ -448,8 +466,12 @@ unary_expression
             cerr << "Error: Cannot pre-decrement an R-value at line " << yylineno << endl;
         }
         $$ = $2;
-        codeGen.emit(TACOp::SUB, $2->tacResult, $2->tacResult, "1");
-        $$->tacResult = $2->tacResult;
+        string temp = codeGen.newTemp();
+        codeGen.emit(TACOp::ASSIGN, temp, $2->tacResult, nullopt);
+        string temp2 = codeGen.newTemp();
+        codeGen.emit(TACOp::SUB, temp2, temp, "1");
+        codeGen.emit(TACOp::ASSIGN, $2->tacResult, temp2, nullopt);
+        $$->tacResult = temp2;        
         int typeSpec = $2->typeSpecifier;
         $$->isLValue = false; 
         if (typeSpec == 5 || typeSpec > 7) {
@@ -529,8 +551,6 @@ multiplicative_expression
     }
 	| multiplicative_expression MULTIPLY_OPERATOR cast_expression { 
         $$ = createNode(NODE_MULTIPLICATIVE_EXPRESSION, $2, $1, $3);
-        backTrackExpr($1);
-        backTrackExpr($3);
         $$->isLValue = false; 
         int rhsPointerLevel = $1->pointerLevel;
         int lhsPointerLevel = $3->pointerLevel;
@@ -542,11 +562,18 @@ multiplicative_expression
         else{
         if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "*")) {
             $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
-            if($1->typeSpecifier != $3->typeSpecifier){
-                string temp = codeGen.newTemp();
-                codeGen.emit(TACOp::TYPECAST, temp,typeCastInfo($1->typeSpecifier, $3->typeSpecifier) , $3->tacResult);
-                $3->tacResult = temp;
-            }
+            if($1->typeSpecifier < $3->typeSpecifier){
+            string temp = codeGen.newTemp();
+            codeGen.emit(TACOp::TYPECAST, temp,typeCastInfo($3->typeSpecifier, $1->typeSpecifier) , $1->tacResult);
+            $1->tacResult = temp;
+        }
+        else if($1->typeSpecifier > $3->typeSpecifier){
+            string temp = codeGen.newTemp();
+            codeGen.emit(TACOp::TYPECAST, temp,typeCastInfo($1->typeSpecifier, $3->typeSpecifier) , $3->tacResult);
+            $3->tacResult = temp;
+        }
+            backTrackExpr($1);
+            backTrackExpr($3);
             string temp = codeGen.newTemp();
             codeGen.emit(TACOp::MUL, temp, $1->tacResult, $3->tacResult);
             $$->tacResult = temp;
@@ -560,8 +587,6 @@ multiplicative_expression
 	| multiplicative_expression DIVIDE_OPERATOR cast_expression { 
         $$ = createNode(NODE_MULTIPLICATIVE_EXPRESSION, $2, $1, $3);
         $$->isLValue = false;
-        backTrackExpr($1);
-        backTrackExpr($3);
         int rhsPointerLevel = $1->pointerLevel;
         int lhsPointerLevel = $3->pointerLevel;
         if(rhsPointerLevel||lhsPointerLevel){
@@ -571,11 +596,18 @@ multiplicative_expression
         }
         else{
         if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "/")) {
-            if($1->typeSpecifier != $3->typeSpecifier){
-                string temp = codeGen.newTemp();
-                codeGen.emit(TACOp::TYPECAST, temp,typeCastInfo($1->typeSpecifier, $3->typeSpecifier) , $3->tacResult);
-                $3->tacResult = temp;
-            }
+            if($1->typeSpecifier < $3->typeSpecifier){
+            string temp = codeGen.newTemp();
+            codeGen.emit(TACOp::TYPECAST, temp,typeCastInfo($3->typeSpecifier, $1->typeSpecifier) , $1->tacResult);
+            $1->tacResult = temp;
+        }
+        else if($1->typeSpecifier > $3->typeSpecifier){
+            string temp = codeGen.newTemp();
+            codeGen.emit(TACOp::TYPECAST, temp,typeCastInfo($1->typeSpecifier, $3->typeSpecifier) , $3->tacResult);
+            $3->tacResult = temp;
+        }
+            backTrackExpr($1);
+            backTrackExpr($3);
             $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
             string temp = codeGen.newTemp();
             codeGen.emit(TACOp::DIV, temp, $1->tacResult, $3->tacResult);
@@ -588,8 +620,6 @@ multiplicative_expression
     }
 	| multiplicative_expression MODULO_OPERATOR cast_expression { 
         $$ = createNode(NODE_MULTIPLICATIVE_EXPRESSION, $2, $1, $3);
-        backTrackExpr($1);
-        backTrackExpr($3);
         int rhsPointerLevel = $1->pointerLevel;
         int lhsPointerLevel = $3->pointerLevel;
         if(rhsPointerLevel || lhsPointerLevel){
@@ -602,11 +632,18 @@ multiplicative_expression
         if (($1->typeSpecifier == 3 || $1->typeSpecifier == 4) && 
             ($3->typeSpecifier == 3 || $3->typeSpecifier == 4) && 
             isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "%")) {
-                if($1->typeSpecifier != $3->typeSpecifier){
-                    string temp = codeGen.newTemp();
-                    codeGen.emit(TACOp::TYPECAST, temp,typeCastInfo($1->typeSpecifier, $3->typeSpecifier) , $3->tacResult);
-                    $3->tacResult = temp;
-                }
+            if($1->typeSpecifier < $3->typeSpecifier){
+            string temp = codeGen.newTemp();
+            codeGen.emit(TACOp::TYPECAST, temp,typeCastInfo($3->typeSpecifier, $1->typeSpecifier) , $1->tacResult);
+            $1->tacResult = temp;
+        }
+        else if($1->typeSpecifier > $3->typeSpecifier){
+            string temp = codeGen.newTemp();
+            codeGen.emit(TACOp::TYPECAST, temp,typeCastInfo($1->typeSpecifier, $3->typeSpecifier) , $3->tacResult);
+            $3->tacResult = temp;
+        }
+                backTrackExpr($1);
+                backTrackExpr($3);
                 $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
                 string temp = codeGen.newTemp();
                 codeGen.emit(TACOp::MOD, temp, $1->tacResult, $3->tacResult);
@@ -626,8 +663,6 @@ additive_expression
     }
 	| additive_expression PLUS_OPERATOR multiplicative_expression {
         $$ = createNode(NODE_ADDITIVE_EXPRESSION, $2, $1, $3);
-        backTrackExpr($1);
-        backTrackExpr($3);
         int rhsPointerLevel = $1->pointerLevel;
         int lhsPointerLevel = $3->pointerLevel;
         if(rhsPointerLevel && lhsPointerLevel){
@@ -640,11 +675,18 @@ additive_expression
     $$->pointerLevel = lhsPointerLevel + rhsPointerLevel;
     if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "+")) {
         $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
-        if($1->typeSpecifier != $3->typeSpecifier){
+        if($1->typeSpecifier < $3->typeSpecifier){
+            string temp = codeGen.newTemp();
+            codeGen.emit(TACOp::TYPECAST, temp,typeCastInfo($3->typeSpecifier, $1->typeSpecifier) , $1->tacResult);
+            $1->tacResult = temp;
+        }
+        else if($1->typeSpecifier > $3->typeSpecifier){
             string temp = codeGen.newTemp();
             codeGen.emit(TACOp::TYPECAST, temp,typeCastInfo($1->typeSpecifier, $3->typeSpecifier) , $3->tacResult);
             $3->tacResult = temp;
         }
+                backTrackExpr($1);
+        backTrackExpr($3);
         string temp = codeGen.newTemp(); 
         if ($1->typeCategory == 2 || $3->typeCategory == 2) {
             $$->typeCategory = 2;
@@ -662,8 +704,6 @@ additive_expression
     }
 	| additive_expression MINUS_OPERATOR multiplicative_expression { 
         $$ = createNode(NODE_ADDITIVE_EXPRESSION, $2, $1, $3);
-        backTrackExpr($1);
-        backTrackExpr($3);
         $$->isLValue = false;
         int rhsPointerLevel = $1->pointerLevel;
         int lhsPointerLevel = $3->pointerLevel;
@@ -675,11 +715,18 @@ additive_expression
         else{
         $$->pointerLevel = lhsPointerLevel + rhsPointerLevel;
         if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "-")) {
-            if($1->typeSpecifier != $3->typeSpecifier){
-                string temp = codeGen.newTemp();
-                codeGen.emit(TACOp::TYPECAST, temp,typeCastInfo($1->typeSpecifier, $3->typeSpecifier) , $3->tacResult);
-                $3->tacResult = temp;
-            }
+            if($1->typeSpecifier < $3->typeSpecifier){
+            string temp = codeGen.newTemp();
+            codeGen.emit(TACOp::TYPECAST, temp,typeCastInfo($3->typeSpecifier, $1->typeSpecifier) , $1->tacResult);
+            $1->tacResult = temp;
+        }
+        else if($1->typeSpecifier > $3->typeSpecifier){
+            string temp = codeGen.newTemp();
+            codeGen.emit(TACOp::TYPECAST, temp,typeCastInfo($1->typeSpecifier, $3->typeSpecifier) , $3->tacResult);
+            $3->tacResult = temp;
+        }
+                backTrackExpr($1);
+        backTrackExpr($3);
             $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
             if($1->typeCategory==2 || $3->typeCategory==2){
                 $$->typeCategory = 2;
@@ -701,8 +748,6 @@ shift_expression
     }
 	| shift_expression LEFT_SHIFT_OPERATOR additive_expression { 
         $$ = createNode(NODE_MULTIPLICATIVE_EXPRESSION, $2, $1, $3);
-        backTrackExpr($1);
-        backTrackExpr($3);
         int rhsPointerLevel = $1->pointerLevel;
         int lhsPointerLevel = $3->pointerLevel;
         if(rhsPointerLevel||lhsPointerLevel){
@@ -715,11 +760,18 @@ shift_expression
         if (($1->typeSpecifier == 3 || $1->typeSpecifier == 4) && 
             ($3->typeSpecifier == 3 || $3->typeSpecifier == 4) && 
             (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "<<"))) {
-            if($1->typeSpecifier != $3->typeSpecifier){
-                string temp = codeGen.newTemp();
-                codeGen.emit(TACOp::TYPECAST, temp,typeCastInfo($1->typeSpecifier, $3->typeSpecifier) , $3->tacResult);
-                $3->tacResult = temp;
-            }
+            if($1->typeSpecifier < $3->typeSpecifier){
+            string temp = codeGen.newTemp();
+            codeGen.emit(TACOp::TYPECAST, temp,typeCastInfo($3->typeSpecifier, $1->typeSpecifier) , $1->tacResult);
+            $1->tacResult = temp;
+        }
+        else if($1->typeSpecifier > $3->typeSpecifier){
+            string temp = codeGen.newTemp();
+            codeGen.emit(TACOp::TYPECAST, temp,typeCastInfo($1->typeSpecifier, $3->typeSpecifier) , $3->tacResult);
+            $3->tacResult = temp;
+        }
+                backTrackExpr($1);
+        backTrackExpr($3);
             $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
             string temp = codeGen.newTemp();
             codeGen.emit(TACOp::LSHFT, temp, $1->tacResult, $3->tacResult);
@@ -733,8 +785,6 @@ shift_expression
 	| shift_expression RIGHT_SHIFT_OPERATOR additive_expression {
         $$ = createNode(NODE_MULTIPLICATIVE_EXPRESSION, $2, $1, $3);
         $$->isLValue = false;
-        backTrackExpr($1);
-        backTrackExpr($3);
         int rhsPointerLevel = $1->pointerLevel;
         int lhsPointerLevel = $3->pointerLevel;
         if(rhsPointerLevel||lhsPointerLevel){
@@ -747,11 +797,18 @@ shift_expression
             ($3->typeSpecifier == 3 || $3->typeSpecifier == 4) && 
             (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, ">>"))) {
             $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
-            if($1->typeSpecifier != $3->typeSpecifier){
-                string temp = codeGen.newTemp();
-                codeGen.emit(TACOp::TYPECAST, temp,typeCastInfo($1->typeSpecifier, $3->typeSpecifier) , $3->tacResult);
-                $3->tacResult = temp;
-            }
+            if($1->typeSpecifier < $3->typeSpecifier){
+            string temp = codeGen.newTemp();
+            codeGen.emit(TACOp::TYPECAST, temp,typeCastInfo($3->typeSpecifier, $1->typeSpecifier) , $1->tacResult);
+            $1->tacResult = temp;
+        }
+        else if($1->typeSpecifier > $3->typeSpecifier){
+            string temp = codeGen.newTemp();
+            codeGen.emit(TACOp::TYPECAST, temp,typeCastInfo($1->typeSpecifier, $3->typeSpecifier) , $3->tacResult);
+            $3->tacResult = temp;
+        }
+            backTrackExpr($1);
+            backTrackExpr($3);
             string temp = codeGen.newTemp();
             codeGen.emit(TACOp::RSHFT, temp, $1->tacResult, $3->tacResult);
             $$->tacResult = temp; 
@@ -767,7 +824,6 @@ relational_expression
 	: shift_expression { $$ = $1; }
 	| relational_expression LESS_THAN_OPERATOR shift_expression {
         $$ = createNode(NODE_RELATIONAL_EXPRESSION, $2, $1, $3);
-        backTrackRelExpr($$);
         int rhsPointerLevel = $1->pointerLevel;
         int lhsPointerLevel = $3->pointerLevel;
         if(rhsPointerLevel||lhsPointerLevel){
@@ -779,11 +835,17 @@ relational_expression
         $$->isLValue = false; 
         if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "<")) {
             $$->typeSpecifier = 3;
-            if($1->typeSpecifier != $3->typeSpecifier){
-                string temp = codeGen.newTemp();
-                codeGen.emit(TACOp::TYPECAST, temp,typeCastInfo($1->typeSpecifier, $3->typeSpecifier) , $3->tacResult);
-                $3->tacResult = temp;
-            }
+            if($1->typeSpecifier < $3->typeSpecifier){
+            string temp = codeGen.newTemp();
+            codeGen.emit(TACOp::TYPECAST, temp,typeCastInfo($3->typeSpecifier, $1->typeSpecifier) , $1->tacResult);
+            $1->tacResult = temp;
+        }
+        else if($1->typeSpecifier > $3->typeSpecifier){
+            string temp = codeGen.newTemp();
+            codeGen.emit(TACOp::TYPECAST, temp,typeCastInfo($1->typeSpecifier, $3->typeSpecifier) , $3->tacResult);
+            $3->tacResult = temp;
+        }
+            backTrackRelExpr($$);
             $$->tacResult = codeGen.newTemp();
             codeGen.emit(TACOp::LT, "", $1->tacResult, $3->tacResult, true);
             codeGen.emit(TACOp::oth, "", nullopt, nullopt, true);
@@ -795,7 +857,6 @@ relational_expression
     }
 	| relational_expression GREATER_THAN_OPERATOR shift_expression { 
         $$ = createNode(NODE_RELATIONAL_EXPRESSION, $2, $1, $3);
-        backTrackRelExpr($$);
         $$->isLValue = false;
         int rhsPointerLevel = $1->pointerLevel;
         int lhsPointerLevel = $3->pointerLevel;
@@ -807,11 +868,17 @@ relational_expression
         else{
         if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, ">")) {
             $$->typeSpecifier = 3;
-            if($1->typeSpecifier != $3->typeSpecifier){
-                string temp = codeGen.newTemp();
-                codeGen.emit(TACOp::TYPECAST, temp,typeCastInfo($1->typeSpecifier, $3->typeSpecifier) , $3->tacResult);
-                $3->tacResult = temp;
-            }
+            if($1->typeSpecifier < $3->typeSpecifier){
+            string temp = codeGen.newTemp();
+            codeGen.emit(TACOp::TYPECAST, temp,typeCastInfo($3->typeSpecifier, $1->typeSpecifier) , $1->tacResult);
+            $1->tacResult = temp;
+        }
+        else if($1->typeSpecifier > $3->typeSpecifier){
+            string temp = codeGen.newTemp();
+            codeGen.emit(TACOp::TYPECAST, temp,typeCastInfo($1->typeSpecifier, $3->typeSpecifier) , $3->tacResult);
+            $3->tacResult = temp;
+        }
+            backTrackRelExpr($$);
             codeGen.emit(TACOp::GT, "", $1->tacResult, $3->tacResult, true);
             codeGen.emit(TACOp::oth, "", nullopt, nullopt, true);
             $$->tacResult = codeGen.newTemp();
@@ -823,7 +890,6 @@ relational_expression
     }
 	| relational_expression LESS_THAN_OR_EQUAL_OPERATOR shift_expression {
         $$ = createNode(NODE_RELATIONAL_EXPRESSION, $2, $1, $3);
-        backTrackRelExpr($$);
         $$->isLValue = false;
         int rhsPointerLevel = $1->pointerLevel;
         int lhsPointerLevel = $3->pointerLevel;
@@ -835,11 +901,17 @@ relational_expression
         else{
         if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "<=")) {
             $$->typeSpecifier = 3;
-            if($1->typeSpecifier != $3->typeSpecifier){
-                string temp = codeGen.newTemp();
-                codeGen.emit(TACOp::TYPECAST, temp,typeCastInfo($1->typeSpecifier, $3->typeSpecifier) , $3->tacResult);
-                $3->tacResult = temp;
-            }
+            if($1->typeSpecifier < $3->typeSpecifier){
+            string temp = codeGen.newTemp();
+            codeGen.emit(TACOp::TYPECAST, temp,typeCastInfo($3->typeSpecifier, $1->typeSpecifier) , $1->tacResult);
+            $1->tacResult = temp;
+        }
+        else if($1->typeSpecifier > $3->typeSpecifier){
+            string temp = codeGen.newTemp();
+            codeGen.emit(TACOp::TYPECAST, temp,typeCastInfo($1->typeSpecifier, $3->typeSpecifier) , $3->tacResult);
+            $3->tacResult = temp;
+        }
+            backTrackRelExpr($$);
             codeGen.emit(TACOp::LE, "", $1->tacResult, $3->tacResult, true);
             codeGen.emit(TACOp::oth, "", nullopt, nullopt, true);
             $$->tacResult = codeGen.newTemp();
@@ -854,7 +926,6 @@ relational_expression
         $$->isLValue = false;
         int rhsPointerLevel = $1->pointerLevel;
         int lhsPointerLevel = $3->pointerLevel;
-        backTrackRelExpr($$);
         if(rhsPointerLevel||lhsPointerLevel){
                 cerr << "Incompatible types: " 
                      << $1->typeSpecifier << " and " << $3->typeSpecifier 
@@ -863,11 +934,17 @@ relational_expression
         else{
         if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, ">=")) {
             $$->typeSpecifier = 3;
-            if($1->typeSpecifier != $3->typeSpecifier){
-                string temp = codeGen.newTemp();
-                codeGen.emit(TACOp::TYPECAST, "",typeCastInfo($1->typeSpecifier, $3->typeSpecifier) , $3->tacResult);
-                $3->tacResult = temp;
-            }
+            if($1->typeSpecifier < $3->typeSpecifier){
+            string temp = codeGen.newTemp();
+            codeGen.emit(TACOp::TYPECAST, temp,typeCastInfo($3->typeSpecifier, $1->typeSpecifier) , $1->tacResult);
+            $1->tacResult = temp;
+        }
+        else if($1->typeSpecifier > $3->typeSpecifier){
+            string temp = codeGen.newTemp();
+            codeGen.emit(TACOp::TYPECAST, temp,typeCastInfo($1->typeSpecifier, $3->typeSpecifier) , $3->tacResult);
+            $3->tacResult = temp;
+        }
+        backTrackRelExpr($$);
             codeGen.emit(TACOp::GE, "", $1->tacResult, $3->tacResult, true);
             codeGen.emit(TACOp::oth, "", nullopt, nullopt, true);
             $$->tacResult = codeGen.newTemp();
@@ -884,6 +961,16 @@ equality_expression
 	| equality_expression EQUALS_COMPARISON_OPERATOR relational_expression { 
         $$ = createNode(NODE_EQUALITY_EXPRESSION, $2, $1, $3);
         $$->isLValue = false;
+        if($1->typeSpecifier < $3->typeSpecifier){
+            string temp = codeGen.newTemp();
+            codeGen.emit(TACOp::TYPECAST, temp,typeCastInfo($3->typeSpecifier, $1->typeSpecifier) , $1->tacResult);
+            $1->tacResult = temp;
+        }
+        else if($1->typeSpecifier > $3->typeSpecifier){
+            string temp = codeGen.newTemp();
+            codeGen.emit(TACOp::TYPECAST, temp,typeCastInfo($1->typeSpecifier, $3->typeSpecifier) , $3->tacResult);
+            $3->tacResult = temp;
+        }
         backTrackRelExpr($$);
         int rhsPointerLevel = $1->pointerLevel;
         int lhsPointerLevel = $3->pointerLevel;
@@ -895,11 +982,8 @@ equality_expression
         else{
         if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "==")) {
             $$->typeSpecifier = 3;
-            if($1->typeSpecifier != $3->typeSpecifier){
-                string temp = codeGen.newTemp();
-                codeGen.emit(TACOp::TYPECAST, temp,typeCastInfo($1->typeSpecifier, $3->typeSpecifier) , $3->tacResult);
-                $3->tacResult = temp;
-            }
+
+            backTrackRelExpr($$);
             codeGen.emit(TACOp::EQ, "", $1->tacResult, $3->tacResult, true);
             codeGen.emit(TACOp::oth, "", nullopt, nullopt, true);
             $$->tacResult = codeGen.newTemp();
@@ -912,7 +996,6 @@ equality_expression
 	| equality_expression NOT_EQUALS_OPERATOR relational_expression { 
         $$ = createNode(NODE_EQUALITY_EXPRESSION, $2, $1, $3);
         $$->isLValue = false;
-        backTrackRelExpr($$);
         int rhsPointerLevel = $1->pointerLevel;
         int lhsPointerLevel = $3->pointerLevel;
         if(rhsPointerLevel!=lhsPointerLevel){
@@ -923,11 +1006,17 @@ equality_expression
         else{
         if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "!=")) {
             $$->typeSpecifier = 3;
-            if($1->typeSpecifier != $3->typeSpecifier){
-                string temp = codeGen.newTemp();
-                codeGen.emit(TACOp::TYPECAST, temp,typeCastInfo($1->typeSpecifier, $3->typeSpecifier) , $3->tacResult);
-                $3->tacResult = temp;
-            }
+            if($1->typeSpecifier < $3->typeSpecifier){
+            string temp = codeGen.newTemp();
+            codeGen.emit(TACOp::TYPECAST, temp,typeCastInfo($3->typeSpecifier, $1->typeSpecifier) , $1->tacResult);
+            $1->tacResult = temp;
+        }
+        else if($1->typeSpecifier > $3->typeSpecifier){
+            string temp = codeGen.newTemp();
+            codeGen.emit(TACOp::TYPECAST, temp,typeCastInfo($1->typeSpecifier, $3->typeSpecifier) , $3->tacResult);
+            $3->tacResult = temp;
+        }
+        backTrackRelExpr($$);
             codeGen.emit(TACOp::NE, "", $1->tacResult, $3->tacResult, true);
             codeGen.emit(TACOp::oth, "", nullopt, nullopt, true);
             $$->tacResult = codeGen.newTemp();
@@ -957,11 +1046,16 @@ and_expression
             ($3->typeSpecifier == 3 || $3->typeSpecifier == 4) &&
             (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "&"))) {
             $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
-            if($1->typeSpecifier != $3->typeSpecifier){
-                string temp = codeGen.newTemp();
-                codeGen.emit(TACOp::TYPECAST, temp,typeCastInfo($1->typeSpecifier, $3->typeSpecifier) , $3->tacResult);
-                $3->tacResult = temp;
-            }
+            if($1->typeSpecifier < $3->typeSpecifier){
+            string temp = codeGen.newTemp();
+            codeGen.emit(TACOp::TYPECAST, temp,typeCastInfo($3->typeSpecifier, $1->typeSpecifier) , $1->tacResult);
+            $1->tacResult = temp;
+        }
+        else if($1->typeSpecifier > $3->typeSpecifier){
+            string temp = codeGen.newTemp();
+            codeGen.emit(TACOp::TYPECAST, temp,typeCastInfo($1->typeSpecifier, $3->typeSpecifier) , $3->tacResult);
+            $3->tacResult = temp;
+        }
             string temp = codeGen.newTemp();
             codeGen.emit(TACOp::BIT_AND, temp, $1->tacResult, $3->tacResult);
             $$->tacResult = temp;
@@ -990,11 +1084,16 @@ exclusive_or_expression
             ($3->typeSpecifier == 3 || $3->typeSpecifier == 4) &&
             (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "^"))) {
             $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
-            if($1->typeSpecifier != $3->typeSpecifier){
-                string temp = codeGen.newTemp();
-                codeGen.emit(TACOp::TYPECAST, temp,typeCastInfo($1->typeSpecifier, $3->typeSpecifier) , $3->tacResult);
-                $3->tacResult = temp;
-            }
+            if($1->typeSpecifier < $3->typeSpecifier){
+            string temp = codeGen.newTemp();
+            codeGen.emit(TACOp::TYPECAST, temp,typeCastInfo($3->typeSpecifier, $1->typeSpecifier) , $1->tacResult);
+            $1->tacResult = temp;
+        }
+        else if($1->typeSpecifier > $3->typeSpecifier){
+            string temp = codeGen.newTemp();
+            codeGen.emit(TACOp::TYPECAST, temp,typeCastInfo($1->typeSpecifier, $3->typeSpecifier) , $3->tacResult);
+            $3->tacResult = temp;
+        }
             string temp = codeGen.newTemp();
             codeGen.emit(TACOp::BIT_XOR, temp, $1->tacResult, $3->tacResult);
             $$->tacResult = temp;
@@ -1023,11 +1122,16 @@ inclusive_or_expression
             ($3->typeSpecifier == 3 || $3->typeSpecifier == 4) &&
             (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "|"))) {
             $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
-            if($1->typeSpecifier != $3->typeSpecifier){
-                string temp = codeGen.newTemp();
-                codeGen.emit(TACOp::TYPECAST, temp,typeCastInfo($1->typeSpecifier, $3->typeSpecifier) , $3->tacResult);
-                $3->tacResult = temp;
-            }
+            if($1->typeSpecifier < $3->typeSpecifier){
+            string temp = codeGen.newTemp();
+            codeGen.emit(TACOp::TYPECAST, temp,typeCastInfo($3->typeSpecifier, $1->typeSpecifier) , $1->tacResult);
+            $1->tacResult = temp;
+        }
+        else if($1->typeSpecifier > $3->typeSpecifier){
+            string temp = codeGen.newTemp();
+            codeGen.emit(TACOp::TYPECAST, temp,typeCastInfo($1->typeSpecifier, $3->typeSpecifier) , $3->tacResult);
+            $3->tacResult = temp;
+        }
             string temp = codeGen.newTemp();
             codeGen.emit(TACOp::BIT_OR, temp, $1->tacResult, $3->tacResult);
             $$->tacResult = temp;
@@ -1048,7 +1152,12 @@ logical_and_expression
         $$->isLValue = false;
         if (isTypeCompatible($1->typeSpecifier, $4->typeSpecifier, "&&")) {
             $$->typeSpecifier = 3;
-            if($1->typeSpecifier != $4->typeSpecifier){
+            if($1->typeSpecifier < $4->typeSpecifier){
+                string temp = codeGen.newTemp();
+                codeGen.emit(TACOp::TYPECAST, temp,typeCastInfo($4->typeSpecifier, $1->typeSpecifier) , $1->tacResult);
+                $1->tacResult = temp;
+            }
+            else if($1->typeSpecifier > $4->typeSpecifier){
                 string temp = codeGen.newTemp();
                 codeGen.emit(TACOp::TYPECAST, temp,typeCastInfo($1->typeSpecifier, $4->typeSpecifier) , $4->tacResult);
                 $4->tacResult = temp;
@@ -1096,10 +1205,15 @@ logical_or_expression
         $$->isLValue = false;
         if (isTypeCompatible($1->typeSpecifier, $4->typeSpecifier, "||")) {
             $$->typeSpecifier = 3;
-            if($1->typeSpecifier != $4->typeSpecifier){
+            if($1->typeSpecifier < $4->typeSpecifier){
+                string temp = codeGen.newTemp();
+                codeGen.emit(TACOp::TYPECAST, temp,typeCastInfo($4->typeSpecifier, $1->typeSpecifier) , $1->tacResult);
+                $1->tacResult = temp;
+            }
+            else if($1->typeSpecifier > $4->typeSpecifier){
                 string temp = codeGen.newTemp();
                 codeGen.emit(TACOp::TYPECAST, temp,typeCastInfo($1->typeSpecifier, $4->typeSpecifier) , $4->tacResult);
-                $3->tacResult = temp;
+                $4->tacResult = temp;
             }
             if(lookupSymbol($1->tacResult, true)){
                 backpatchNode* curr = $1->trueList;
@@ -1137,7 +1251,7 @@ logical_or_expression
 M
   : {
       $$ = new TreeNode(OTHERS);
-      $$->tacResult = to_string(codeGen.currentInstrIndex + 1);
+      $$->tacResult = to_string(codeGen.currentInstrIndex);
     }
 
 
@@ -1228,39 +1342,86 @@ assignment_expression
                      << " at line " << yylineno << endl;
             }
         }
-        // if ($3->trueList || $3->falseList) {
-        //     Backpatch::backpatch($3->trueList, to_string(codeGen.currentInstrIndex + 1));
-        //     Backpatch::backpatch($3->falseList, to_string(codeGen.currentInstrIndex + 2));
-        //     handleAssignment($2->valueToString(), $1->tacResult, "1", true);
-        //     handleAssignment($2->valueToString(), $1->tacResult, "0", true);
-        // } else {
-        //     handleAssignment($2->valueToString(), $1->tacResult, $3->tacResult);
-        // }
-        string temp = codeGen.newTemp();
-        if($2->valueToString() == "="){
-            codeGen.emit(TACOp::ASSIGN, $1->tacResult, $3->tacResult, nullopt);
-        }else if($2->valueToString() == "+="){
-            codeGen.emit(TACOp::ADD, $1->tacResult, $1->tacResult, $3->tacResult);
-        }else if($2->valueToString() == "-="){
-            codeGen.emit(TACOp::SUB, $1->tacResult, $1->tacResult, $3->tacResult);
-        }else if($2->valueToString() == "*="){
-            codeGen.emit(TACOp::MUL, $1->tacResult, $1->tacResult, $3->tacResult);
-        }else if($2->valueToString() == "/="){
-            codeGen.emit(TACOp::DIV, $1->tacResult, $1->tacResult, $3->tacResult);
-        }else if($2->valueToString() == "%="){
-            codeGen.emit(TACOp::MOD, $1->tacResult, $1->tacResult, $3->tacResult);
-        }else if($2->valueToString() == "&="){
-            codeGen.emit(TACOp::BIT_AND, $1->tacResult, $1->tacResult, $3->tacResult);
-        }else if($2->valueToString() == "|="){
-            codeGen.emit(TACOp::BIT_OR, $1->tacResult, $1->tacResult, $3->tacResult);
-        }else if($2->valueToString() == "^="){
-            codeGen.emit(TACOp::BIT_XOR, $1->tacResult, $1->tacResult, $3->tacResult);
-        }else if($2->valueToString() == "<<="){
-            codeGen.emit(TACOp::LSHFT,$1->tacResult,$1->tacResult,$3->tacResult);
-        }else if($2->valueToString() == ">>="){
-            codeGen.emit(TACOp::RSHFT,$1->tacResult,$1->tacResult,$3->tacResult);
+        if ($3->trueList || $3->falseList) {
+            Backpatch::backpatch($3->trueList, to_string(codeGen.currentInstrIndex + 1));
+            Backpatch::backpatch($3->falseList, to_string(codeGen.currentInstrIndex + 2));
+            if($2->valueToString() == "="){
+                codeGen.emit(TACOp::oth, $1->tacResult, "1", nullopt);
+            }else{
+                if($2->valueToString() == "+="){
+                    codeGen.emit(TACOp::ADD, $1->tacResult, $1->tacResult, "1");
+                }else if($2->valueToString() == "-="){
+                    codeGen.emit(TACOp::SUB, $1->tacResult, $1->tacResult, "1");
+                }else if($2->valueToString() == "*="){
+                    codeGen.emit(TACOp::MUL, $1->tacResult, $1->tacResult, "1");
+                }else if($2->valueToString() == "/="){
+                    codeGen.emit(TACOp::DIV, $1->tacResult, $1->tacResult, "1");
+                }else if($2->valueToString() == "%="){
+                    codeGen.emit(TACOp::MOD, $1->tacResult, $1->tacResult, "1");
+                }else if($2->valueToString() == "&="){
+                    codeGen.emit(TACOp::BIT_AND, $1->tacResult, $1->tacResult, "1");
+                }else if($2->valueToString() == "|="){
+                    codeGen.emit(TACOp::BIT_OR, $1->tacResult, $1->tacResult, "1");
+                }else if($2->valueToString() == "^="){
+                    codeGen.emit(TACOp::BIT_XOR, $1->tacResult, $1->tacResult, "1");
+                }else if($2->valueToString() == "<<="){
+                    codeGen.emit(TACOp::LSHFT,$1->tacResult,$1->tacResult,"1");
+                }else if($2->valueToString() == ">>="){
+                    codeGen.emit(TACOp::RSHFT,$1->tacResult,$1->tacResult,"1");
+                }
+            }
+            if($2->valueToString() == "="){
+                codeGen.emit(TACOp::oth, $1->tacResult, "0", nullopt);
+            }else{
+                if($2->valueToString() == "+="){
+                    codeGen.emit(TACOp::ADD, $1->tacResult, $1->tacResult, "0");
+                }else if($2->valueToString() == "-="){
+                    codeGen.emit(TACOp::SUB, $1->tacResult, $1->tacResult, "0");
+                }else if($2->valueToString() == "*="){
+                    codeGen.emit(TACOp::MUL, $1->tacResult, $1->tacResult, "0");
+                }else if($2->valueToString() == "/="){
+                    codeGen.emit(TACOp::DIV, $1->tacResult, $1->tacResult, "0");
+                }else if($2->valueToString() == "%="){
+                    codeGen.emit(TACOp::MOD, $1->tacResult, $1->tacResult, "0");
+                }else if($2->valueToString() == "&="){
+                    codeGen.emit(TACOp::BIT_AND, $1->tacResult, $1->tacResult, "0");
+                }else if($2->valueToString() == "|="){
+                    codeGen.emit(TACOp::BIT_OR, $1->tacResult, $1->tacResult, "0");
+                }else if($2->valueToString() == "^="){
+                    codeGen.emit(TACOp::BIT_XOR, $1->tacResult, $1->tacResult, "0");
+                }else if($2->valueToString() == "<<="){
+                    codeGen.emit(TACOp::LSHFT,$1->tacResult,$1->tacResult,"0");
+                }else if($2->valueToString() == ">>="){
+                    codeGen.emit(TACOp::RSHFT,$1->tacResult,$1->tacResult,"0");
+                }
+            }
+         } else {
+                string temp = codeGen.newTemp();
+                if($2->valueToString() == "="){
+                    codeGen.emit(TACOp::ASSIGN, $1->tacResult, $3->tacResult, nullopt);
+                }else if($2->valueToString() == "+="){
+                    codeGen.emit(TACOp::ADD, $1->tacResult, $1->tacResult, $3->tacResult);
+                }else if($2->valueToString() == "-="){
+                    codeGen.emit(TACOp::SUB, $1->tacResult, $1->tacResult, $3->tacResult);
+                }else if($2->valueToString() == "*="){
+                    codeGen.emit(TACOp::MUL, $1->tacResult, $1->tacResult, $3->tacResult);
+                }else if($2->valueToString() == "/="){
+                    codeGen.emit(TACOp::DIV, $1->tacResult, $1->tacResult, $3->tacResult);
+                }else if($2->valueToString() == "%="){
+                    codeGen.emit(TACOp::MOD, $1->tacResult, $1->tacResult, $3->tacResult);
+                }else if($2->valueToString() == "&="){
+                    codeGen.emit(TACOp::BIT_AND, $1->tacResult, $1->tacResult, $3->tacResult);
+                }else if($2->valueToString() == "|="){
+                    codeGen.emit(TACOp::BIT_OR, $1->tacResult, $1->tacResult, $3->tacResult);
+                }else if($2->valueToString() == "^="){
+                    codeGen.emit(TACOp::BIT_XOR, $1->tacResult, $1->tacResult, $3->tacResult);
+                }else if($2->valueToString() == "<<="){
+                    codeGen.emit(TACOp::LSHFT,$1->tacResult,$1->tacResult,$3->tacResult);
+                }else if($2->valueToString() == ">>="){
+                    codeGen.emit(TACOp::RSHFT,$1->tacResult,$1->tacResult,$3->tacResult);
+                }
+                $$->tacResult = temp;
         }
-        $$->tacResult = temp;
     }
     }
     ;
@@ -1793,11 +1954,11 @@ statement
 	| expression_statement { $$ = $1; }
 	| selection_statement { 
         $$ = $1;
-        Backpatch::backpatch($1->nextList, to_string(codeGen.currentInstrIndex + 1)); 
+        Backpatch::backpatch($1->nextList, to_string(codeGen.currentInstrIndex)); 
         }
 	| iteration_statement { 
         $$ = $1;
-        Backpatch::backpatch($1->nextList, to_string(codeGen.currentInstrIndex  + 1)); 
+        Backpatch::backpatch($1->nextList, to_string(codeGen.currentInstrIndex)); 
         }
 	| jump_statement { $$ = $1; }
     | io_statement{$$ = $1;}
@@ -1875,8 +2036,11 @@ labeled_statement
         $1->typeSpecifier = 9;
         insertSymbol($1->valueToString(), $1);
         }
-    | KEYWORD_CASE constant_expression COLON statement
-    | KEYWORD_DEFAULT COLON{
+    | KEYWORD_CASE constant_expression COLON M statement{
+        $$ = $5;
+        $$->switchList = Backpatch::addToBackpatchList(nullptr, stoi($4->tacResult), $2->tacResult);
+    }
+    | KEYWORD_DEFAULT COLON M statement{
         // if(inSwitch.size()==0){
         //     cerr << "Default case should be used inside switch statement" << endl;
         // }
@@ -1887,6 +2051,8 @@ labeled_statement
         //     inSwitch.pop();
         //     inSwitch.push(true);
         // }
+        $$ = $4;
+        $$->continueList = Backpatch::addToBackpatchList(nullptr, stoi($3->tacResult));
     }
 	;
 
@@ -1898,15 +2064,15 @@ compound_statement
 
 block_item_list
     : block_item { 
-        $$ = createNode(NODE_BLOCK_ITEM_LIST, monostate(), $1);
-        $$->continueList = $1->continueList;
-        $$->breakList = $1->breakList; 
+        $$ = $1;
     }
     | block_item_list block_item { 
         $$ = $1; 
         $$->children.push_back($2);
         $$->continueList = Backpatch::mergeBackpatchLists($1->continueList, $2->continueList);
         $$->breakList = Backpatch::mergeBackpatchLists($1->breakList, $2->breakList);
+        $$->switchList = Backpatch::mergeBackpatchLists($1->switchList, $2->switchList);
+        $$->goToList = Backpatch::mergeBackpatchLists($1->goToList, $2->goToList);
         }
     ;
 
@@ -1925,16 +2091,43 @@ selection_statement
     :KEYWORD_IF LPAREN single_expression RPAREN M statement N %prec NO_ELSE  {
         Backpatch::backpatch($3->trueList, $5->tacResult); 
         backpatchNode* merged = Backpatch::mergeBackpatchLists($3->falseList, $7->nextList); 
-        $$->nextList = Backpatch::mergeBackpatchLists(merged, $6->nextList);                
+        $$->nextList = Backpatch::mergeBackpatchLists(merged, $6->nextList);
+        $$->goToList = $6->goToList;
+        $$->breakList = $6->breakList;
+        $$->continueList = $6->continueList;                
     }
     | KEYWORD_IF LPAREN single_expression RPAREN M statement N KEYWORD_ELSE M statement  {
         Backpatch::backpatch($3->trueList, $5->tacResult); 
         Backpatch::backpatch($3->falseList, $9->tacResult);
         backpatchNode* merged = Backpatch::mergeBackpatchLists($6->nextList, $7->nextList);
         $$->nextList = Backpatch::mergeBackpatchLists(merged, $10->nextList);
+        $$->goToList = Backpatch::mergeBackpatchLists($6->goToList, $10->goToList);;
+        $$->breakList = Backpatch::mergeBackpatchLists($6->breakList, $10->breakList);;
+        $$->continueList = Backpatch::mergeBackpatchLists($6->continueList, $10->continueList);;
     }
-    | KEYWORD_SWITCH LPAREN expression RPAREN statement{
+    | KEYWORD_SWITCH{
+        switchStack.push(codeGen.currentInstrIndex);
+        codeGen.emit(TACOp::oth, "", nullopt, nullopt, true);
+    } LPAREN expression RPAREN {enterScope(); inLoop++;} statement{
+        $$->nextList = Backpatch::addToBackpatchList($$->nextList, codeGen.currentInstrIndex);
+        codeGen.emit(TACOp::oth, "", nullopt, nullopt, true);
+        codeGen.tacCode[switchStack.top()].result = to_string(codeGen.currentInstrIndex);
+        switchStack.pop();
+
+        backpatchNode* curr = $7->switchList;
+        $$->nextList = Backpatch::mergeBackpatchLists($$->nextList, $7->breakList);
+        $$->goToList = $7->goToList;
+        while(curr){
+            codeGen.emit(TACOp::EQ, to_string(curr->index), $4->tacResult, curr->exp, true);
+            curr = curr->next;
+        }
+        if($7->continueList){
+            codeGen.emit(TACOp::oth, to_string($7->continueList->index), nullopt, nullopt, true);
+        }
+        exitScope();
+        inLoop--;
     }
+    ;
     
 iteration_statement
     : M KEYWORD_WHILE LPAREN single_expression RPAREN {enterScope(); inLoop++;} M statement  {
@@ -1943,6 +2136,7 @@ iteration_statement
         codeGen.emit(TACOp::oth, $1->tacResult, nullopt, nullopt, true);
         Backpatch::backpatch($8->continueList, $1->tacResult);
         $$->nextList = Backpatch::mergeBackpatchLists($8->breakList, $4->falseList);
+        $$->goToList = $8->goToList;
         inLoop--;
         exitScope();
     }
@@ -1950,6 +2144,7 @@ iteration_statement
         Backpatch::backpatch($9->trueList, $2->tacResult);
         Backpatch::backpatch($4->continueList, $5->tacResult);
         $$->nextList = Backpatch::mergeBackpatchLists($4->breakList, $9->falseList);
+        $$->goToList = $4->goToList;
     }
     | KEYWORD_FOR LPAREN {enterScope();} for_init M for_cond M for_inc RPAREN {
             inLoop++;
@@ -1959,6 +2154,7 @@ iteration_statement
             Backpatch::backpatch($12->nextList, $7->tacResult);
             Backpatch::backpatch($12->continueList, $7->tacResult);
             $$->nextList = Backpatch::mergeBackpatchLists($12->breakList, $6->falseList);
+            $$->goToList = $12->goToList;
             codeGen.emit(TACOp::oth, $7->tacResult, nullopt, nullopt, true);
             exitScope();
             inLoop--; 
@@ -1993,19 +2189,14 @@ jump_statement
         }else if(inSwitch.size() > 0){
             cerr << "Continue should not be used inside switch statement" << endl;
         }
-        $$ = $1;
-        backpatchNode* curr = nullptr;
-        backpatchNode* next = Backpatch::addToBackpatchList(curr, codeGen.currentInstrIndex);
-        $$->continueList = next;
+        $$->continueList = Backpatch::addToBackpatchList(nullptr, codeGen.currentInstrIndex);
         codeGen.emit(TACOp::oth, "", nullopt, nullopt, true);
     }
 	| KEYWORD_BREAK SEMICOLON { 
         if(inLoop <= 0){
             cerr << "Break should be used inside loops" << endl;
         }
-        backpatchNode* curr = nullptr;
-        backpatchNode* next = Backpatch::addToBackpatchList(curr, codeGen.currentInstrIndex);
-        $$->breakList = next;
+        $$->breakList = Backpatch::addToBackpatchList(nullptr, codeGen.currentInstrIndex);
         codeGen.emit(TACOp::oth, "", nullopt, nullopt, true);
      }
 	| KEYWORD_RETURN SEMICOLON { if(!inFunc) cerr << "Return statement should be used inside functions" << endl; 

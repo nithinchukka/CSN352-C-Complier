@@ -228,15 +228,13 @@ struct TACInstruction
             str = result + " = " + *operand1 + "(" + *operand2 + ")";
             break;
         case TACOp::oth:
-        {
-            str = "goto " + result + " " + *operand1 + " " + *operand2;
-        }
+            str = result + " = " + *operand1 + " " + *operand2;
+            break;
         default:
             str = "Unknown";
             break;
         }
         return str;
-        ;
     }
 };
 
@@ -278,14 +276,15 @@ struct backpatchNode
 {
     int index;
     backpatchNode *next;
+    string exp;
 };
 
 class Backpatch
 {
 public:
-    static backpatchNode *addToBackpatchList(backpatchNode *list, int index)
+    static backpatchNode *addToBackpatchList(backpatchNode *list, int index, string exp = "")
     {
-        auto *newNode = new backpatchNode{index, list};
+        auto *newNode = new backpatchNode{index, list, exp};
         return newNode;
     }
 
@@ -321,6 +320,7 @@ extern unordered_set<string> classOrStructOrUnion;
 struct Table
 {
     vector<pair<string, TreeNode *>> symbolTable;
+    int totalSize = 0;
     Table *parent;
 };
 
@@ -338,15 +338,19 @@ TreeNode *lookupSymbol(string symbol, bool arg = false)
         {
             if (entry.first == symbol)
             {
-                return entry.second;
+                TreeNode *original = entry.second;
+                TreeNode *copy = new TreeNode(*original);
+                return copy;
             }
         }
         temp = temp->parent;
     }
-    if(!arg)
+
+    if (!arg)
         cerr << "Symbol " << symbol << " not found in table" << endl;
     return nullptr;
 }
+
 
 void enterScope()
 {
@@ -367,6 +371,7 @@ void exitScope()
     }
     Table *temp = currentTable;
     currentTable = currentTable->parent;
+    currentTable->totalSize = offsetStack.top();
     tableStack.pop();
     offsetStack.pop();
 }
@@ -389,12 +394,16 @@ void printAllTables()
     int tblId = 0;
     for (auto &tbl : allTables)
     {
-        cout << "Tbl " << tblId++ << " (Scope Lvl):\n";
-        cout << "-------------------------------------------------------------------------------------------------------\n";
+        cout << "Tbl " << tblId++ << " (Table Size): " << tbl->totalSize << "\n";
+        // cout << "-------------------------------------------------------------------------------------------------------\n";
+        // cout << left << setw(12) << "Id" << setw(12) << "TypeCat" << setw(12) << "TypeSpec"
+        //      << setw(12) << "StorCls" << setw(8) << "Params" << setw(8) << "Const" << setw(8) << "Static"
+        //      << setw(8) << "Volat" << setw(12) << "PtrLvl" << setw(12) << "SymTabSize" << "\n";
+        // cout << "------------------------------------------------------------------------------------------------------\n";
+        cout << "-------------------------------------------\n";
         cout << left << setw(12) << "Id" << setw(12) << "TypeCat" << setw(12) << "TypeSpec"
-             << setw(12) << "StorCls" << setw(8) << "Params" << setw(8) << "Const" << setw(8) << "Static"
-             << setw(8) << "Volat" << setw(12) << "PtrLvl" << setw(12) << "SymTabSize" << "\n";
-        cout << "------------------------------------------------------------------------------------------------------\n";
+             << setw(12) << "Offset" << "\n";
+        cout << "------------------------------------------\n";
 
         for (const auto &entry : tbl->symbolTable)
         {
@@ -402,17 +411,11 @@ void printAllTables()
             cout << left << setw(12) << entry.first
                  << setw(12) << node->typeCategory
                  << setw(12) << node->typeSpecifier
-                 << setw(12) << node->storageClass
-                 << setw(8) << node->paramCount
-                 << setw(8) << (node->isConst ? "Y" : "N")
-                 << setw(8) << (node->isStatic ? "Y" : "N")
-                 << setw(8) << (node->isVolatile ? "Y" : "N")
-                 << setw(12) << node->pointerLevel
-                 << setw(12) << node->symbolTable.size()
+                 << setw(12) << node->offset
                  << "\n";
         }
 
-        cout << "------------------------------------------------------------------------------------\n\n";
+        cout << "-----------------------------------------\n\n";
     }
 }
 
@@ -428,6 +431,7 @@ struct DeclaratorInfo
     bool hasLong = false;
     bool isValid = false;
     bool isCustomType = false; // true if it's a class, struct, or union
+    int offset = 0;
 };
 
 string typeCastInfo(int lhs, int rhs)
@@ -456,7 +460,7 @@ string typeCastInfo(int lhs, int rhs)
         return "int_to_double";
     if (lhs == 3 && rhs == 1)
         return "char_to_int";
-    return "invalid"; 
+    return "invalid";
 }
 
 bool isValidCast(int toType, int fromType)
@@ -478,7 +482,7 @@ bool checkFormatSpecifiers(string formatString, vector<int> argTypeList)
             if (*ptr == '\0')
                 break;
             if (*ptr == '%')
-            { 
+            {
                 ptr++;
                 continue;
             }
@@ -494,16 +498,16 @@ bool checkFormatSpecifiers(string formatString, vector<int> argTypeList)
             {
             case 'd':
                 expectedType1 = 2, expectedType2 = 3;
-                break; 
+                break;
             case 'f':
                 expectedType1 = 5, expectedType2 = 6;
-                break; 
+                break;
             case 's':
                 expectedType1 = 8;
-                break; 
+                break;
             case 'c':
                 expectedType1 = 1;
-                break; 
+                break;
             default:
                 cerr << "Error: Unknown format specifier '%" << *ptr << "'\n";
                 return false;
@@ -610,6 +614,7 @@ DeclaratorInfo isValidVariableDeclaration(vector<TreeNode *> &nodes, bool isFunc
 
     if (!isFunction && declInfo.typeSpecifier == 0)
         return {};
+
     declInfo.isValid = true;
     return declInfo;
 }
@@ -809,7 +814,7 @@ void GenerateTAC(TreeNode *initList, vector<int> dimensions, int level, string n
 {
     int vecSize = dimensions.size();
     if (level == vecSize - 1)
-    { 
+    {
         int i = 0;
         for (TreeNode *child : initList->children)
         {
@@ -819,7 +824,7 @@ void GenerateTAC(TreeNode *initList, vector<int> dimensions, int level, string n
         }
     }
     else
-    { 
+    {
         int i = 0;
         for (TreeNode *child : initList->children)
         {
@@ -847,7 +852,7 @@ bool checkInitializerLevel(TreeNode *initList, int baseType, vector<int> &dimens
     for (int i = 1; i < vecSize; i++)
     {
         if (dimensions[i] == -1)
-        { 
+        {
             cerr << "Invalid Declaration: dimension " << i << " cannot be unspecified" << endl;
             return false;
         }
@@ -1007,12 +1012,12 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
                         cerr << "Error\n";
                         continue;
                     }
-                    setNodeAttributes(identifierNode, 2); 
+                    setNodeAttributes(identifierNode, 2);
                     identifierNode->dimensions = dimensions;
                     insertSymbol(varName, identifierNode);
                 }
             }
-            else if (firstChild->type == NODE_POINTER) 
+            else if (firstChild->type == NODE_POINTER)
             {
                 int pointerDepth = 0;
                 while (identifierNode && identifierNode->type == NODE_POINTER)
@@ -1024,7 +1029,7 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
                 }
                 varName = identifierNode->valueToString();
 
-                if (identifierNode->type == ARRAY) 
+                if (identifierNode->type == ARRAY)
                 {
                     vector<int> dimensions = findArrayDimensions(identifierNode);
                     varName = identifierNode->children[0]->valueToString();
@@ -1051,7 +1056,7 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
                         insertSymbol(varName, identifierNode);
                     }
                 }
-                else 
+                else
                 {
                     if (checkDuplicate(varName))
                         continue;
@@ -1147,5 +1152,6 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
 }
 
 stack<bool> inSwitch;
+stack<int> switchStack;
 
 #endif

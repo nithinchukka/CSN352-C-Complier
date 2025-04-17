@@ -128,7 +128,8 @@ public:
     backpatchNode *continueList = nullptr;
     backpatchNode *returnList = nullptr;
     backpatchNode *caseList = nullptr;
-    backpatchNode *defaultList = nullptr;
+    backpatchNode *switchList = nullptr;
+    backpatchNode *goToList = nullptr;
     TreeNode(NodeType type, NodeValue value = monostate()) : type(type), value(value)
     {
     }
