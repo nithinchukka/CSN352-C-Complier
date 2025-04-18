@@ -73,8 +73,6 @@ volatile    { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KE
 while       { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_WHILE); }
 "printf"    { yylval.node = createNode(NODE_KEYWORD, string("printf")); return (KEYWORD_PRINTF); }
 "scanf"     { yylval.node = createNode(NODE_KEYWORD, string("scanf")); return (KEYWORD_SCANF); }
-"true"        { yylval.node = createNode(NODE_BOOLEAN_LITERAL, string(yytext) == "true" ? true : false); return (BOOLEAN_LITERAL); }
-"false"       { yylval.node = createNode(NODE_BOOLEAN_LITERAL, string(yytext) == "false" ? false : true); return (BOOLEAN_LITERAL); }
 
 "+"         { yylval.str = strdup(yytext); return (PLUS_OPERATOR); }
 "-"         { yylval.str = strdup(yytext); return (MINUS_OPERATOR); }

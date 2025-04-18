@@ -839,7 +839,7 @@ void GenerateTAC(TreeNode *initList, vector<int> dimensions, int level, string n
     }
 }
 
-bool checkInitializerLevel(TreeNode *initList, int baseType, vector<int> &dimensions, int level)
+bool checkInitializerLevel(TreeNode *initList, int baseType, vector<int> &dimensions, int level, string name)
 {
     int vecSize = dimensions.size();
 
@@ -869,9 +869,9 @@ bool checkInitializerLevel(TreeNode *initList, int baseType, vector<int> &dimens
         dimensions[0] = initList->children.size();
     }
 
-    if (initList->children.size() > dimensions[level])
+    if (initList->children.size() != dimensions[level])
     {
-        cerr << "Dimension mismatch at level " << level << ": expected at most "
+        cerr << "Dimension mismatch at level " << level << ": expected "
              << dimensions[level] << ", got " << initList->children.size() << endl;
         return false;
     }
@@ -897,13 +897,13 @@ bool checkInitializerLevel(TreeNode *initList, int baseType, vector<int> &dimens
                 cerr << "Expected nested initializer list at level " << level << endl;
                 return false;
             }
-            if (!checkInitializerLevel(child, baseType, dimensions, level + 1))
+            if (!checkInitializerLevel(child, baseType, dimensions, level + 1, name))
             {
                 return false;
             }
         }
     }
-    GenerateTAC(initList, dimensions, 0, "arr");
+    GenerateTAC(initList, dimensions, 0, name);
     return true;
 }
 
@@ -1007,7 +1007,7 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
                         cerr << "Invalid declaration dimension cannot be empty\n";
                         continue;
                     }
-                    if (size == 2 && !checkInitializerLevel(child->children[1], declInfo.typeSpecifier, dimensions, 0))
+                    if (size == 2 && !checkInitializerLevel(child->children[1], declInfo.typeSpecifier, dimensions, 0, varName))
                     {
                         cerr << "Error\n";
                         continue;
@@ -1046,7 +1046,7 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
                             cerr << "Invalid declaration dimension cannot be empty\n";
                             continue;
                         }
-                        if (size == 2 && !checkInitializerLevel(child->children[1], declInfo.typeSpecifier, dimensions, pointerDepth))
+                        if (size == 2 && !checkInitializerLevel(child->children[1], declInfo.typeSpecifier, dimensions, pointerDepth, varName))
                         {
                             cerr << "Error: Invalid initializer for array of pointers '" << varName << "'\n";
                             continue;
@@ -1080,7 +1080,14 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
                             {
                                 setNodeAttributes(identifierNode, 1, pointerDepth);
                                 insertSymbol(varName, identifierNode);
-                                codeGen.emit(TACOp::ASSIGN, varName, child->children[1]->tacResult, nullopt);
+                                if(child->children[1]->trueList || child->children[1]->falseList){
+                                    Backpatch::backpatch(child->children[1]->trueList, to_string(codeGen.currentInstrIndex));
+                                    Backpatch::backpatch(child->children[1]->falseList, to_string(codeGen.currentInstrIndex  + 1));
+                                    codeGen.emit(TACOp::ASSIGN, varName, "1", nullopt);
+                                    codeGen.emit(TACOp::ASSIGN, varName, "0", nullopt);
+                                }else{
+                                    codeGen.emit(TACOp::ASSIGN, varName, child->children[1]->tacResult, nullopt);
+                                }                                    
                             }
                             else if (isTypeCompatible(declInfo.typeSpecifier, child->children[1]->typeSpecifier, "="))
                             {
@@ -1092,7 +1099,16 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
                                 }
                                 setNodeAttributes(identifierNode, 1, pointerDepth);
                                 insertSymbol(varName, identifierNode);
-                                codeGen.emit(TACOp::ASSIGN, varName, child->children[1]->tacResult, nullopt);
+                                if(child->children[1]->trueList || child->children[1]->falseList){
+                                    Backpatch::backpatch(child->children[1]->trueList, to_string(codeGen.currentInstrIndex));
+                                    Backpatch::backpatch(child->children[1]->falseList, to_string(codeGen.currentInstrIndex  + 1));
+                                    codeGen.emit(TACOp::ASSIGN, varName, "1", nullopt);
+                                    codeGen.emit(TACOp::ASSIGN, varName, "0", nullopt);
+                                }else{
+                                    codeGen.emit(TACOp::ASSIGN, varName, child->children[1]->tacResult, nullopt);
+                                }                             
+                            }else{
+                                cerr << "Type Incompatible\n"; //TODO
                             }
                         }
                     }
@@ -1142,7 +1158,17 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
                             }
                             setNodeAttributes(identifierNode, 0);
                             insertSymbol(varName, identifierNode);
-                            codeGen.emit(TACOp::ASSIGN, varName, child->children[1]->tacResult, nullopt);
+                            
+                            if(child->children[1]->trueList || child->children[1]->falseList){
+                                Backpatch::backpatch(child->children[1]->trueList, to_string(codeGen.currentInstrIndex));
+                                Backpatch::backpatch(child->children[1]->falseList, to_string(codeGen.currentInstrIndex  + 1));
+                                codeGen.emit(TACOp::ASSIGN, varName, "1", nullopt);
+                                codeGen.emit(TACOp::ASSIGN, varName, "0", nullopt);
+                            }else{
+                                codeGen.emit(TACOp::ASSIGN, varName, child->children[1]->tacResult, nullopt);
+                            }                        
+                        }else{
+                            cout << "Type Incompatible\n"; //TODO
                         }
                     }
                 }
@@ -1153,5 +1179,6 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
 
 stack<bool> inSwitch;
 stack<int> switchStack;
-
+int switch_type;
+stack<unordered_set<string>> case_id;
 #endif
