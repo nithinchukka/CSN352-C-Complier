@@ -19,7 +19,6 @@
     extern FILE *yyin;
     extern unordered_set<string> classOrStructOrUnion;
     extern int expectedReturnType;
-    map<string,string> Label_defn;
     void backTrackExpr(TreeNode* nd){
         if(nd == nullptr) return;
         if(nd->trueList || nd->falseList){
@@ -76,11 +75,11 @@ void handleAssignment(const string &assignOp, const string &lhs, const string &r
 
 %token <node>
     KEYWORD_AUTO KEYWORD_BREAK KEYWORD_CASE KEYWORD_CHAR 
-    KEYWORD_CLASS KEYWORD_CONST KEYWORD_CONTINUE KEYWORD_DEFAULT KEYWORD_DELETE KEYWORD_DO 
+     KEYWORD_CONST KEYWORD_CONTINUE KEYWORD_DEFAULT KEYWORD_DELETE KEYWORD_DO 
     KEYWORD_DOUBLE KEYWORD_ELSE KEYWORD_EXTERN KEYWORD_FLOAT 
     KEYWORD_FOR KEYWORD_GOTO KEYWORD_IF KEYWORD_INT 
-    KEYWORD_LONG KEYWORD_NEW KEYWORD_NULLPTR KEYWORD_PRIVATE KEYWORD_PROTECTED 
-    KEYWORD_PUBLIC KEYWORD_REGISTER KEYWORD_RETURN KEYWORD_SHORT KEYWORD_SIGNED KEYWORD_SIZEOF 
+    KEYWORD_LONG KEYWORD_NEW KEYWORD_NULLPTR   
+     KEYWORD_REGISTER KEYWORD_RETURN KEYWORD_SHORT KEYWORD_SIGNED KEYWORD_SIZEOF 
     KEYWORD_STATIC KEYWORD_STRUCT KEYWORD_SWITCH KEYWORD_THIS KEYWORD_UNION
     KEYWORD_TYPEDEF KEYWORD_UNSIGNED 
     KEYWORD_VOID KEYWORD_VOLATILE KEYWORD_WHILE KEYWORD_PRINTF KEYWORD_SCANF TYPE_NAME
@@ -121,11 +120,11 @@ void handleAssignment(const string &assignOp, const string &lhs, const string &r
     TERNARY_OPERATOR DOT_OPERATOR  SCOPE_RESOLUTION_OPERATOR  
     POINTER_TO_MEMBER_DOT_OPERATOR POINTER_TO_MEMBER_ARROW_OPERATOR
 
-%type<node> translation_unit external_declaration function_definition constructor_function destructor_function struct_type_specifier
+%type<node> translation_unit external_declaration function_definition struct_type_specifier
 
 %type<node> declaration declaration_specifiers declarator compound_statement struct_declaration_list M N  
 
-%type<node> storage_class_specifier type_specifier struct_or_union_specifier struct_or_union class_specifier member_declaration_list member_declaration access_specifier
+%type<node> storage_class_specifier type_specifier struct_or_union_specifier struct_or_union
 
 %type<node> struct_declaration struct_declarator_list specifier_qualifier_list type_qualifier constant_expression
 
@@ -139,7 +138,7 @@ void handleAssignment(const string &assignOp, const string &lhs, const string &r
 
 %type<node> unary_expression unary_operator cast_expression multiplicative_expression additive_expression shift_expression
 
-%type<node> relational_expression equality_expression and_expression exclusive_or_expression inclusive_or_expression scope_resolution_statements
+%type<node> relational_expression equality_expression and_expression exclusive_or_expression inclusive_or_expression
 
 %type<node> logical_and_expression logical_or_expression argument_expression_list assignment_operator io_statement scope_resolution_statement single_expression
 
@@ -199,23 +198,6 @@ primary_expression
         $$->isLValue = false; 
         $$->isConstVal = 1;
     }
-    /* | BOOLEAN_LITERAL { 
-        $$ = $1;
-        $$->typeSpecifier=5;
-        string temp = codeGen.newTemp();
-        $$->tacResult = temp;
-        $$->isLogical = true;
-        if($1->valueToString() == "false"){
-            backpatchNode* curr = $$->falseList;
-            backpatchNode* next = Backpatch::addToBackpatchList(curr, codeGen.currentInstrIndex);
-            $$->falseList = next;
-        }else{
-            backpatchNode* curr = $$->trueList;
-            backpatchNode* next = Backpatch::addToBackpatchList(curr, codeGen.currentInstrIndex);
-            $$->trueList = next;
-        }
-        codeGen.emit(TACOp::oth, "", nullopt, nullopt, true);
-    }  */
     | KEYWORD_NULLPTR { 
         $$ = $1;
         $$->tacResult = "nullptr";
@@ -240,7 +222,7 @@ postfix_expression
         $$ = createNode(NODE_POSTFIX_EXPRESSION, monostate(), $1, $3);
         if ($3->typeSpecifier != 3) {
             cerr << "Error: array index must be an integer" << endl;
-        } else if ($1->typeCategory == 2 || $1->typeCategory == 1) {
+        } else if (($1->typeCategory == 2 || $1->typeCategory == 1) && $1->type!=NODE_POSTFIX_EXPRESSION) {
             if ($1->typeSpecifier != 1 && $1->typeSpecifier != 3) {
                 cerr << "Error: can only index a char or int pointer" << endl;
             } else {
@@ -257,21 +239,75 @@ postfix_expression
             codeGen.emit(TACOp::ADD, temp1, $1->tacResult, temp);
             $$->tacResult = "*" + temp1;
             }
-        } 
-        // else if ($1->typeCategory == 1) {
-        //     if ($1->typeSpecifier != 1 && $1->typeSpecifier != 3) {
-        //         cerr << "Error: can only index a char or int pointer" << endl;
-        //     } else {
-        //         $$->typeSpecifier = $1->typeSpecifier;
-        //         $$->isLValue = true;
-        //         $$->typeCategory = 0;
-        //         string temp = codeGen.newTemp();
-        //         codeGen.emit(TACOp::INDEX, temp, $1->tacResult, $3->tacResult);
-        //         $$->tacResult = temp;
-        //     }   
-        // }
+        }
+        else if($1->type == NODE_POSTFIX_EXPRESSION && ($1->typeCategory == 2 || $1->typeCategory == 1)){
+            if ($1->typeSpecifier != 1 && $1->typeSpecifier != 3) {
+                cerr << "Error: can only index a char or int pointer" << endl;
+            }
+            if($1->children[0]->typeSpecifier == 20){
+            TreeNode* member = lookupSymbol($1->children[0]->valueToString());
+            int offset = 0;
+            if (member != nullptr) {
+                bool found = false;
+                for (auto entry : member->symbolTable) {
+                    if (entry.first == $1->children[1]->valueToString()){
+                        found = true;
+                        $$->typeSpecifier = entry.second->typeSpecifier;
+                        $$->typeCategory = entry.second->typeCategory;
+                        $$->pointerLevel = entry.second->pointerLevel;
+                        $$->storageClass = entry.second->storageClass;
+                        $$->isConst = entry.second->isConst;
+                        $$->isStatic = entry.second->isStatic;
+                        $$->isVolatile = entry.second->isVolatile;
+                        $$->isUnsigned = entry.second->isUnsigned;
+                        $$->isLValue = true;
+                        if($$->typeSpecifier == 1){
+                            offset += (2*stoi($3->valueToString()));
+                        }
+                        else{
+                            offset += (4*stoi($3->valueToString()));
+                        }
+                            string temp = codeGen.newTemp();
+                            codeGen.emit(TACOp::ADD,temp,$1->children[0]->tacResult,to_string(offset));
+                            $$->tacResult = "*" + temp;
+                            $$->storageClass = $1->storageClass;
+                    }
+                    else{
+                        if(entry.second->typeCategory == 1){
+                            offset += 4;
+                        }
+                        else if(entry.second->typeSpecifier==1){
+                            offset += 1;
+                        }
+                        else if(entry.second->typeSpecifier==2){
+                            offset += 2;
+                        }
+                        else if(entry.second->typeSpecifier==3){
+                            offset += 4;
+                        }
+                        else if(entry.second->typeSpecifier==4){
+                            offset += 8;
+                        }
+                        else if(entry.second->typeSpecifier==5){
+                            offset += 8;
+                        }
+                        else if(entry.second->typeSpecifier==6){
+                            offset += 16;
+                        }
+                    }
+                }
+                if (!found) {
+                    cerr << "Error: member " << $3->valueToString() << " not found in object " << $1->valueToString() << endl;
+                }
+            }
+            }
+        }
          else {
+            if($1->type != NODE_POSTFIX_EXPRESSION)
             cerr << $1->valueToString() << " is not an array" << endl;
+            else{
+               cerr << $1->children[1]->valueToString() << " is not an array" << endl; 
+            }
         }
         $$->pointerLevel = 0;
     }
@@ -329,10 +365,11 @@ postfix_expression
         $$ = createNode(NODE_POSTFIX_EXPRESSION, $2, $1, $3);
         if ($1->typeSpecifier == 20) {
             TreeNode* member = lookupSymbol($1->valueToString());
+            int offset = 0;
             if (member != nullptr) {
                 bool found = false;
                 for (auto entry : member->symbolTable) {
-                    if (entry.first == $3->valueToString()) {
+                    if (entry.first == $3->valueToString()){
                         found = true;
                         $$->typeSpecifier = entry.second->typeSpecifier;
                         $$->typeCategory = entry.second->typeCategory;
@@ -343,36 +380,46 @@ postfix_expression
                         $$->isVolatile = entry.second->isVolatile;
                         $$->isUnsigned = entry.second->isUnsigned;
                         $$->isLValue = true;
-                        string temp = codeGen.newTemp();
-                        int offset = 0;
-        bool found1 = false;
-        for (auto child : $1->symbolTable) {
-            if (child.first == $3->valueToString()) {
-                found1 = true;
-                break;
-            } else {
-                switch (child.second->typeSpecifier) {
-                    case 3: offset += 4; break; 
-                    case 4: offset += 4; break;  
-                    case 5: offset += 8; break;  
-                    case 6: offset += 1; break;  
-                    default: offset += 4; break;  
-                }
-            }
-        }
-                        codeGen.emit(TACOp::ADD,temp,$1->tacResult,to_string(offset));
-                        string temp1=codeGen.newTemp();
-                        codeGen.emit(TACOp::ASSIGN,temp1,"*"+temp,nullopt);
-                        $$->tacResult = temp1;
-                        $$->storageClass = $1->storageClass;
-                        break;
+                        if(entry.second->typeCategory == 2){
+                            break;
+                        }
+                        else{
+                            string temp = codeGen.newTemp();
+                            codeGen.emit(TACOp::ADD,temp,$1->tacResult,to_string(offset));
+                            $$->tacResult = "*" + temp;
+                            $$->storageClass = $1->storageClass;
+                        }
+                    }
+                    else{
+                        if(entry.second->typeCategory == 1){
+                            offset += 4;
+                        }
+                        else if(entry.second->typeSpecifier==1){
+                            offset += 1;
+                        }
+                        else if(entry.second->typeSpecifier==2){
+                            offset += 2;
+                        }
+                        else if(entry.second->typeSpecifier==3){
+                            offset += 4;
+                        }
+                        else if(entry.second->typeSpecifier==4){
+                            offset += 8;
+                        }
+                        else if(entry.second->typeSpecifier==5){
+                            offset += 8;
+                        }
+                        else if(entry.second->typeSpecifier==6){
+                            offset += 16;
+                        }
                     }
                 }
                 if (!found) {
                     cerr << "Error: member " << $3->valueToString() << " not found in object " << $1->valueToString() << endl;
                 }
             }
-        } else {
+        }
+        else{
             cerr << "Error: We can use member access only for classes, structs, and unions" << endl;
         }
     }
@@ -558,12 +605,10 @@ multiplicative_expression
         $$ = createNode(NODE_MULTIPLICATIVE_EXPRESSION, $2, $1, $3);
         $$->isLValue = false; 
         if($1->isConstVal && $3->isConstVal) $$->isConstVal = 1;
-        int rhsPointerLevel = $1->pointerLevel;
-        int lhsPointerLevel = $3->pointerLevel;
+        int rhsPointerLevel = $3->pointerLevel;
+        int lhsPointerLevel = $1->pointerLevel;
         if(rhsPointerLevel || lhsPointerLevel){
-                cerr << "Incompatible types: " 
-                     << $1->typeSpecifier << " and " << $3->typeSpecifier 
-                     << " at line " << yylineno << endl;
+            cerr << "Error: Invalid operands to binary '*' — multiplication involving pointer types is not allowed." << endl;
         }
         else{
         if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "*")) {
@@ -594,12 +639,10 @@ multiplicative_expression
         $$ = createNode(NODE_MULTIPLICATIVE_EXPRESSION, $2, $1, $3);
         if($1->isConstVal && $3->isConstVal) $$->isConstVal = 1;
         $$->isLValue = false;
-        int rhsPointerLevel = $1->pointerLevel;
-        int lhsPointerLevel = $3->pointerLevel;
-        if(rhsPointerLevel||lhsPointerLevel){
-                cerr << "Incompatible types: " 
-                     << $1->typeSpecifier << " and " << $3->typeSpecifier 
-                     << " at line " << yylineno << endl;
+        int rhsPointerLevel = $3->pointerLevel;
+        int lhsPointerLevel = $1->pointerLevel;
+        if(rhsPointerLevel || lhsPointerLevel){
+            cerr << "Error: Invalid operands to binary '/' — multiplication involving pointer types is not allowed." << endl;
         }
         else{
         if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "/")) {
@@ -628,12 +671,10 @@ multiplicative_expression
 	| multiplicative_expression MODULO_OPERATOR cast_expression { 
         $$ = createNode(NODE_MULTIPLICATIVE_EXPRESSION, $2, $1, $3);
         if($1->isConstVal && $3->isConstVal) $$->isConstVal = 1;
-        int rhsPointerLevel = $1->pointerLevel;
-        int lhsPointerLevel = $3->pointerLevel;
+        int rhsPointerLevel = $3->pointerLevel;
+        int lhsPointerLevel = $1->pointerLevel;
         if(rhsPointerLevel || lhsPointerLevel){
-                cerr << "Incompatible types: " 
-                     << $1->typeSpecifier << " and " << $3->typeSpecifier 
-                     << " at line " << yylineno << endl;
+            cerr << "Error: Invalid operands to binary '%' — multiplication involving pointer types is not allowed." << endl;
         }
         else{
         $$->isLValue = false; 
@@ -672,12 +713,11 @@ additive_expression
 	| additive_expression PLUS_OPERATOR multiplicative_expression {
         $$ = createNode(NODE_ADDITIVE_EXPRESSION, $2, $1, $3);
         if($1->isConstVal && $3->isConstVal) $$->isConstVal = 1;
-        int rhsPointerLevel = $1->pointerLevel;
-        int lhsPointerLevel = $3->pointerLevel;
+        int rhsPointerLevel = $3->pointerLevel;
+        int lhsPointerLevel = $1->pointerLevel;
         if(rhsPointerLevel && lhsPointerLevel){
-                cerr << "Incompatible types in compound assignment: " 
-                     << $1->typeSpecifier << " and " << $3->typeSpecifier 
-                     << " at line " << yylineno << endl;
+            cerr << "Error: Invalid operands to binary '+' — cannot add two pointers (LHS pointer level: "
+            << lhsPointerLevel << ", RHS pointer level: " << rhsPointerLevel << ")." << endl;
         }
         else{
     $$->isLValue = false; 
@@ -714,12 +754,11 @@ additive_expression
         $$ = createNode(NODE_ADDITIVE_EXPRESSION, $2, $1, $3);
         if($1->isConstVal && $3->isConstVal) $$->isConstVal = 1;
         $$->isLValue = false;
-        int rhsPointerLevel = $1->pointerLevel;
-        int lhsPointerLevel = $3->pointerLevel;
+        int rhsPointerLevel = $3->pointerLevel;
+        int lhsPointerLevel = $1->pointerLevel;
         if(rhsPointerLevel && lhsPointerLevel){
-                cerr << "Incompatible types in compound assignment: " 
-                     << $1->typeSpecifier << " and " << $3->typeSpecifier 
-                     << " at line " << yylineno << endl;
+            cerr << "Error: Invalid operands to binary '-' — cannot add two pointers (LHS pointer level: "
+            << lhsPointerLevel << ", RHS pointer level: " << rhsPointerLevel << ")." << endl;
         }
         else{
         $$->pointerLevel = lhsPointerLevel + rhsPointerLevel;
@@ -758,12 +797,10 @@ shift_expression
 	| shift_expression LEFT_SHIFT_OPERATOR additive_expression {
         $$ = createNode(NODE_MULTIPLICATIVE_EXPRESSION, $2, $1, $3);
         if($1->isConstVal && $3->isConstVal) $$->isConstVal = 1; 
-        int rhsPointerLevel = $1->pointerLevel;
-        int lhsPointerLevel = $3->pointerLevel;
-        if(rhsPointerLevel||lhsPointerLevel){
-                cerr << "Incompatible types: " 
-                     << $1->typeSpecifier << " and " << $3->typeSpecifier 
-                     << " at line " << yylineno << endl;
+        int rhsPointerLevel = $3->pointerLevel;
+        int lhsPointerLevel = $1->pointerLevel;
+        if(rhsPointerLevel || lhsPointerLevel){
+            cerr << "Error: Invalid operands to binary '<<' — shift operations require integral types, but got pointer types (LHS pointer level: "<< rhsPointerLevel << ", RHS pointer level: " << lhsPointerLevel << ") at line " << yylineno << "." << endl;
         }
         else{
         $$->isLValue = false; 
@@ -796,12 +833,10 @@ shift_expression
         $$ = createNode(NODE_MULTIPLICATIVE_EXPRESSION, $2, $1, $3);
         if($1->isConstVal && $3->isConstVal) $$->isConstVal = 1;
         $$->isLValue = false;
-        int rhsPointerLevel = $1->pointerLevel;
-        int lhsPointerLevel = $3->pointerLevel;
-        if(rhsPointerLevel||lhsPointerLevel){
-                cerr << "Incompatible types: " 
-                     << $1->typeSpecifier << " and " << $3->typeSpecifier 
-                     << " at line " << yylineno << endl;
+        int rhsPointerLevel = $3->pointerLevel;
+        int lhsPointerLevel = $1->pointerLevel;
+        if(rhsPointerLevel || lhsPointerLevel){
+            cerr << "Error: Invalid operands to binary '>>' — shift operations require integral types, but got pointer types (LHS pointer level: "<< rhsPointerLevel << ", RHS pointer level: " << lhsPointerLevel << ") at line " << yylineno << "." << endl;
         }
         else{
         if (($1->typeSpecifier == 3 || $1->typeSpecifier == 4) && 
@@ -837,12 +872,10 @@ relational_expression
         $$ = createNode(NODE_RELATIONAL_EXPRESSION, $2, $1, $3);
         if($1->isConstVal && $3->isConstVal) $$->isConstVal = 1;
         $$->isLogical = true;
-        int rhsPointerLevel = $1->pointerLevel;
-        int lhsPointerLevel = $3->pointerLevel;
-        if(rhsPointerLevel||lhsPointerLevel){
-            cerr << "Incompatible types: " 
-                    << $1->typeSpecifier << " and " << $3->typeSpecifier 
-                    << " at line " << yylineno << endl;
+        int rhsPointerLevel = $3->pointerLevel;
+        int lhsPointerLevel = $1->pointerLevel;
+        if(rhsPointerLevel || lhsPointerLevel){
+            cerr << "Error: Invalid operands to binary '<' — relational comparison requires arithmetic types, but one or both operands are pointers "<< "(LHS pointer level: " << rhsPointerLevel << ", RHS pointer level: " << lhsPointerLevel << ") at line " << yylineno << "." << endl;
         }
         else{
             $$->isLValue = false; 
@@ -873,12 +906,10 @@ relational_expression
         if($1->isConstVal && $3->isConstVal) $$->isConstVal = 1;
         $$->isLogical = true;
         $$->isLValue = false;
-        int rhsPointerLevel = $1->pointerLevel;
-        int lhsPointerLevel = $3->pointerLevel;
-        if(rhsPointerLevel||lhsPointerLevel){
-            cerr << "Incompatible types: " 
-                    << $1->typeSpecifier << " and " << $3->typeSpecifier 
-                    << " at line " << yylineno << endl;
+        int rhsPointerLevel = $3->pointerLevel;
+        int lhsPointerLevel = $1->pointerLevel;
+        if(rhsPointerLevel || lhsPointerLevel){
+            cerr << "Error: Invalid operands to binary '>' — relational comparison requires arithmetic types, but one or both operands are pointers "<< "(LHS pointer level: " << rhsPointerLevel << ", RHS pointer level: " << lhsPointerLevel << ") at line " << yylineno << "." << endl;
         }
         else{
             if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, ">")) {
@@ -908,12 +939,10 @@ relational_expression
         if($1->isConstVal && $3->isConstVal) $$->isConstVal = 1;
         $$->isLogical = true;
         $$->isLValue = false;
-        int rhsPointerLevel = $1->pointerLevel;
-        int lhsPointerLevel = $3->pointerLevel;
-        if(rhsPointerLevel||lhsPointerLevel){
-                cerr << "Incompatible types: " 
-                     << $1->typeSpecifier << " and " << $3->typeSpecifier 
-                     << " at line " << yylineno << endl;
+        int rhsPointerLevel = $3->pointerLevel;
+        int lhsPointerLevel = $1->pointerLevel;
+        if(rhsPointerLevel || lhsPointerLevel){
+            cerr << "Error: Invalid operands to binary '<=' — relational comparison requires arithmetic types, but one or both operands are pointers "<< "(LHS pointer level: " << rhsPointerLevel << ", RHS pointer level: " << lhsPointerLevel << ") at line " << yylineno << "." << endl;
         }
         else{
             if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "<=")) {
@@ -943,12 +972,10 @@ relational_expression
         $$->isLValue = false;
         $$->isLogical = true;
         if($1->isConstVal && $3->isConstVal) $$->isConstVal = 1;
-        int rhsPointerLevel = $1->pointerLevel;
-        int lhsPointerLevel = $3->pointerLevel;
-        if(rhsPointerLevel||lhsPointerLevel){
-                cerr << "Incompatible types: " 
-                     << $1->typeSpecifier << " and " << $3->typeSpecifier 
-                     << " at line " << yylineno << endl;
+        int rhsPointerLevel = $3->pointerLevel;
+        int lhsPointerLevel = $1->pointerLevel;
+        if(rhsPointerLevel || lhsPointerLevel){
+            cerr << "Error: Invalid operands to binary '>=' — relational comparison requires arithmetic types, but one or both operands are pointers "<< "(LHS pointer level: " << rhsPointerLevel << ", RHS pointer level: " << lhsPointerLevel << ") at line " << yylineno << "." << endl;
         }
         else{
             if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, ">=")) {
@@ -993,12 +1020,10 @@ equality_expression
             $3->tacResult = temp;
         }
         backTrackRelExpr($$);
-        int rhsPointerLevel = $1->pointerLevel;
-        int lhsPointerLevel = $3->pointerLevel;
-        if(rhsPointerLevel!=lhsPointerLevel){
-            cerr << "Incompatible types: " 
-                    << $1->typeSpecifier << " and " << $3->typeSpecifier 
-                    << " at line " << yylineno << endl;
+        int rhsPointerLevel = $3->pointerLevel;
+        int lhsPointerLevel = $1->pointerLevel;
+        if(rhsPointerLevel != lhsPointerLevel){
+            cerr << "Error: Invalid operands to binary '==' — cannot compare values with mismatched pointer levels "<< "(LHS pointer level: " << lhsPointerLevel << ", RHS pointer level: " << rhsPointerLevel << ") at line " << yylineno << "." << endl;
         }
         else{
             if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "==")) {
@@ -1018,12 +1043,10 @@ equality_expression
         $$->isLValue = false;
         $$->isLogical = true;
         if($1->isConstVal && $3->isConstVal) $$->isConstVal = 1;
-        int rhsPointerLevel = $1->pointerLevel;
-        int lhsPointerLevel = $3->pointerLevel;
-        if(rhsPointerLevel!=lhsPointerLevel){
-                cerr << "Incompatible types: " 
-                     << $1->typeSpecifier << " and " << $3->typeSpecifier 
-                     << " at line " << yylineno << endl;
+        int rhsPointerLevel = $3->pointerLevel;
+        int lhsPointerLevel = $1->pointerLevel;
+        if(rhsPointerLevel != lhsPointerLevel){
+            cerr << "Error: Invalid operands to binary '==' — cannot compare values with mismatched pointer levels "<< "(LHS pointer level: " << lhsPointerLevel << ", RHS pointer level: " << rhsPointerLevel << ") at line " << yylineno << "." << endl;
         }
         else{
             if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "!=")) {
@@ -1057,12 +1080,10 @@ and_expression
         $$ = createNode(NODE_AND_EXPRESSION, $2, $1, $3); 
         $$->isLValue = false;
         if($1->isConstVal && $3->isConstVal) $$->isConstVal = 1;
-        int rhsPointerLevel = $1->pointerLevel;
-        int lhsPointerLevel = $3->pointerLevel;
+        int rhsPointerLevel = $3->pointerLevel;
+        int lhsPointerLevel = $1->pointerLevel;
         if(rhsPointerLevel || lhsPointerLevel){
-                cerr << "Incompatible types: " 
-                     << $1->typeSpecifier << " and " << $3->typeSpecifier 
-                     << " at line " << yylineno << endl;
+            cerr << "Error: Invalid operands to binary '&' — bitwise operations require integral types, but found pointer operand(s) "<< "(LHS pointer level: " << lhsPointerLevel << ", RHS pointer level: " << rhsPointerLevel << ") at line " << yylineno << "." << endl;
         }
         else{
             if (($1->typeSpecifier == 3 || $1->typeSpecifier == 4) &&
@@ -1095,13 +1116,11 @@ and_expression
 exclusive_or_expression
 	: and_expression { $$ = $1; }
 	| exclusive_or_expression BITWISE_XOR_OPERATOR and_expression { 
-        int rhsPointerLevel = $1->pointerLevel;
-        int lhsPointerLevel = $3->pointerLevel;
         if($1->isConstVal && $3->isConstVal) $$->isConstVal = 1;
+        int rhsPointerLevel = $3->pointerLevel;
+        int lhsPointerLevel = $1->pointerLevel;
         if(rhsPointerLevel || lhsPointerLevel){
-                cerr << "Incompatible types: " 
-                     << $1->typeSpecifier << " and " << $3->typeSpecifier 
-                     << " at line " << yylineno << endl;
+            cerr << "Error: Invalid operands to binary '^' — bitwise operations require integral types, but found pointer operand(s) "<< "(LHS pointer level: " << lhsPointerLevel << ", RHS pointer level: " << rhsPointerLevel << ") at line " << yylineno << "." << endl;
         }
         else{
             $$ = createNode(NODE_EXCLUSIVE_OR_EXPRESSION, $2, $1, $3);
@@ -1136,13 +1155,11 @@ exclusive_or_expression
 inclusive_or_expression
 	: exclusive_or_expression { $$ = $1; }
 	| inclusive_or_expression BITWISE_OR_OPERATOR exclusive_or_expression {
-        int rhsPointerLevel = $1->pointerLevel;
-        int lhsPointerLevel = $3->pointerLevel;
         if($1->isConstVal && $3->isConstVal) $$->isConstVal = 1;
+        int rhsPointerLevel = $3->pointerLevel;
+        int lhsPointerLevel = $1->pointerLevel;
         if(rhsPointerLevel || lhsPointerLevel){
-                cerr << "Incompatible types: " 
-                     << $1->typeSpecifier << " and " << $3->typeSpecifier 
-                     << " at line " << yylineno << endl;
+            cerr << "Error: Invalid operands to binary '|' — bitwise operations require integral types, but found pointer operand(s) "<< "(LHS pointer level: " << lhsPointerLevel << ", RHS pointer level: " << rhsPointerLevel << ") at line " << yylineno << "." << endl;
         }
         else{
             $$ = createNode(NODE_INCLUSIVE_OR_EXPRESSION, $2, $1, $3);
@@ -1190,8 +1207,8 @@ logical_and_expression
             codeGen.emit(TACOp::oth, "", nullopt, nullopt, true);
         }
     } LOGICAL_AND_OPERATOR M inclusive_or_expression { 
-        int rhsPointerLevel = $1->pointerLevel;
-        int lhsPointerLevel = $5->pointerLevel;
+        int rhsPointerLevel = $5->pointerLevel;
+        int lhsPointerLevel = $1->pointerLevel;
         if($1->isConstVal && $5->isConstVal) $$->isConstVal = 1;
         $$ = createNode(NODE_LOGICAL_AND_EXPRESSION, $3, $1, $4); 
         $$->isLValue = false;
@@ -1247,8 +1264,8 @@ logical_or_expression
         }
         }
         LOGICAL_OR_OPERATOR M logical_and_expression { 
-        int rhsPointerLevel = $1->pointerLevel;
-        int lhsPointerLevel = $5->pointerLevel;
+        int rhsPointerLevel = $5->pointerLevel;
+        int lhsPointerLevel = $1->pointerLevel;
         if($1->isConstVal && $5->isConstVal) $$->isConstVal = 1;
         $$ = createNode(NODE_LOGICAL_OR_EXPRESSION, $3, $1, $5); 
         $$->isLValue = false;
@@ -1333,13 +1350,10 @@ assignment_expression
     }
     | unary_expression assignment_operator assignment_expression { 
         $$ = createNode(NODE_ASSIGNMENT_EXPRESSION, $2->value, $1, $3);
-        int rhsPointerLevel = $1->pointerLevel;
-        int lhsPointerLevel = $3->pointerLevel;
-        
-        if(rhsPointerLevel!=lhsPointerLevel && !($1->typeSpecifier == 3 && $3->typeCategory == 2)){
-                cerr << "Incompatible types in compound assignment: " 
-                     << $1->typeSpecifier << " and " << $3->typeSpecifier 
-                     << " at line " << yylineno << endl;
+        int rhsPointerLevel = $3->pointerLevel;
+        int lhsPointerLevel = $1->pointerLevel;
+        if(rhsPointerLevel != lhsPointerLevel && !($1->typeSpecifier == 3 && $3->typeCategory == 2)){
+            cerr << "Error: Incompatible types in compound assignment — pointer levels do not match (LHS has level " << lhsPointerLevel << ", RHS has level " << rhsPointerLevel << ")." << endl;
         }
         else{
             if (!$1->isLValue) {
@@ -1593,7 +1607,6 @@ storage_class_specifier
 type_specifier
 	: struct_type_specifier { $$ = $1; }
     | struct_or_union_specifier { $$ = $1; }
-    | class_specifier { $$ = $1;}
 	;
 
 struct_type_specifier
@@ -1608,49 +1621,6 @@ struct_type_specifier
     | KEYWORD_UNSIGNED { $$ = $1; $$->type = NODE_TYPE_SPECIFIER; }
     | TYPE_NAME {$$ = $1; $$->type = NODE_TYPE_SPECIFIER; }
 	;
-
-class_specifier
-    : {if (insideClass) yyerror("Nested classes are not allowed.");} 
-        KEYWORD_CLASS ID LBRACE 
-        {
-            classOrStructOrUnion.insert($3->valueToString());
-            insideClass = true;
-            enterScope();
-        }
-      member_declaration_list RBRACE 
-        {
-            $$ = createNode(NODE_CLASS_SPECIFIER, monostate(), $3, $6);
-            exitScope();
-            insideClass = false;
-        }
-    ;
-
-member_declaration_list
-    : member_declaration
-        { $$ = createNode(NODE_MEMBER_DECLARATION_LIST, monostate(), $1); }
-    | member_declaration_list member_declaration
-        { $$ = $1; $$->children.push_back($2); }
-    ;
-
-member_declaration
-    : access_specifier COLON
-        { $$ = createNode(NODE_ACCESS_SPECIFIER, monostate(), $1); }
-    | declaration
-        { $$ = $1; }
-    | constructor_function
-        { $$ = $1; }
-    | function_definition
-        { $$ = $1; }
-    | destructor_function
-        { $$ = $1; }
-    ;
-
-
-access_specifier
-    : KEYWORD_PUBLIC {accessSpecifier = 1; $$ = $1; }
-    | KEYWORD_PRIVATE {accessSpecifier = 0; $$ = $1; }
-    | KEYWORD_PROTECTED {accessSpecifier = 2;  $$ = $1; }
-    ;
 
 struct_or_union_specifier
     : struct_or_union ID {
@@ -1698,139 +1668,8 @@ struct_declaration_list
 struct_declaration
     : specifier_qualifier_list struct_declarator_list SEMICOLON {
         $$ = createNode(NODE_STRUCT_DECLARATION, monostate(), $1, $2);
-        DeclaratorInfo declInfo = isValidVariableDeclaration($1->children, false);
-        if (declInfo.isValid)
-        {
-    for (auto child : $2->children)
-    {
-        if (child->type != NODE_DECLARATOR) continue;
-
-        TreeNode *firstChild = child->children[0];
-        string varName;
-        TreeNode *identifierNode = firstChild;
-        auto setNodeAttributes = [&](TreeNode *node, int typeCategory, int pointerLevel = 0) {
-            node->typeCategory = typeCategory;
-            node->pointerLevel = pointerLevel;
-            node->storageClass = declInfo.storageClass;
-            node->typeSpecifier = declInfo.typeSpecifier;
-            if(pointerLevel == 1){node->typeSpecifier *= 10;}
-            node->isConst = declInfo.isConst;
-            node->isStatic = declInfo.isStatic;
-            node->isVolatile = declInfo.isVolatile;
-            node->isUnsigned = declInfo.isUnsigned;
-        };
-        auto checkDuplicate = [&](const string &name) {
-            for (const auto &entry : currentTable->symbolTable)
-            {
-                if (entry.first == name)
-                {
-                    cerr << "Error: Duplicate declaration of '" << name << "'\n";
-                    return true;
-                }
-            }
-            return false;
-        };
-
-        if (firstChild->type == ARRAY)
-        {
-            vector<int> dimensions = findArrayDimensions(firstChild);
-            while (identifierNode && identifierNode->type == ARRAY) {
-                if (identifierNode->children.empty()) break;
-                identifierNode = identifierNode->children[0];
-            }
-            varName = identifierNode->valueToString();
-            if (checkDuplicate(varName)) continue;
-
-            int size = child->children.size();
-            if (size == 1 || size == 2) {
-                bool validDims = all_of(dimensions.begin(), dimensions.end(), [](int d) { return d != -1; });
-                if (!validDims) {
-                    cerr << "Invalid declaration dimension cannot be empty\n";
-                    continue;
-                }
-                if (size == 2 && !checkInitializerLevel(child->children[1], declInfo.typeSpecifier, dimensions, 0, varName)) {
-                    cerr << "Error\n";
-                    continue;
-                }
-                setNodeAttributes(identifierNode, 2); 
-                identifierNode->dimensions = dimensions;
-                insertSymbol(varName, identifierNode);
-            }
+            addDeclarators($1, $2);
         }
-        else if (firstChild->type == NODE_POINTER)
-        {
-            int pointerDepth = 0;
-            while (identifierNode && identifierNode->type == NODE_POINTER) {
-                pointerDepth++;
-                if (identifierNode->children.empty()) break;
-                identifierNode = identifierNode->children[0];
-            }
-            varName = identifierNode->valueToString();
-
-            if (identifierNode->type == ARRAY) 
-            {
-                vector<int> dimensions = findArrayDimensions(identifierNode);
-                varName = identifierNode->children[0]->valueToString();
-                if (checkDuplicate(varName)) continue;
-
-                int size = child->children.size();
-                if (size == 1 || size == 2) {
-                    bool validDims = all_of(dimensions.begin(), dimensions.end(), [](int d) { return d != -1; });
-                    if (!validDims) {
-                        cerr << "Invalid declaration dimension cannot be empty\n";
-                        continue;
-                    }
-                    if (size == 2 && !checkInitializerLevel(child->children[1], declInfo.typeSpecifier, dimensions, pointerDepth, varName)) {
-                        cerr << "Error: Invalid initializer for array of pointers '" << varName << "'\n";
-                        continue;
-                    }
-                    setNodeAttributes(identifierNode, 2, pointerDepth);
-                    identifierNode->dimensions = dimensions;
-                    insertSymbol(varName, identifierNode);
-                }
-            }
-            else 
-            {
-                if (checkDuplicate(varName)) continue;
-                int size = child->children.size();
-                if (size == 1 || (size == 2 )) {
-                    setNodeAttributes(identifierNode, 1, pointerDepth);
-                    insertSymbol(varName, identifierNode);
-                }
-                else {
-                    cerr << "Error: Invalid pointer " << (size == 2 ? "initialization" : "declarator syntax") << " for '" << varName << "'\n";
-                }
-            }
-        }
-        else 
-        {
-            varName = firstChild->valueToString();
-            if (checkDuplicate(varName)) continue;
-
-            int size = child->children.size();
-            if (size == 1) {
-                if (declInfo.isConst) {
-                    cerr << "Error: Const variable '" << varName << "' must be initialized\n";
-                    continue;
-                }
-                setNodeAttributes(identifierNode, 0);
-                insertSymbol(varName, identifierNode);
-            }
-            else if (size == 2 && (isTypeCompatible(declInfo.typeSpecifier, child->children[1]->typeSpecifier, "="))) {
-                if(declInfo.typeSpecifier != child->children[1]->typeSpecifier){
-                    string temp = codeGen.newTemp();
-                    codeGen.emit(TACOp::TYPECAST, temp,typeCastInfo(declInfo.typeSpecifier, child->children[1]->typeSpecifier) , child->children[1]->tacResult);
-                    child->children[1]->tacResult = temp;
-                }
-                setNodeAttributes(identifierNode, 0);
-                insertSymbol(varName, identifierNode);
-            }
-            else {
-                cerr << "Error: " << (size == 2 ? "Type mismatch in initialization" : "Invalid declarator syntax") << " for '" << varName << "'\n";
-            }
-        }
-}        }
-    }
     ;
 
 specifier_qualifier_list
@@ -1899,8 +1738,6 @@ direct_declarator
 pointer
 	: MULTIPLY_OPERATOR { $$ = createNode(NODE_POINTER, $1); }
 	| MULTIPLY_OPERATOR type_qualifier_list { $$ = createNode(NODE_POINTER, $1, $2); }
-	/* | MULTIPLY_OPERATOR pointer { $$ = createNode(NODE_POINTER, $1, $2); }
-	| MULTIPLY_OPERATOR type_qualifier_list pointer { $$ = createNode(NODE_POINTER, $1, $2, $3); } */
 	;
 
 type_qualifier_list
@@ -2065,17 +1902,17 @@ io_statement
 
 labeled_statement
 	: ID { 
-        codeGen.emit(TACOp::LABEL, $1->valueToString());
-        if(Label_defn.find($1->valueToString())!=Label_defn.end()){
-            cerr << "Re definition of lables is not allowed\n";
-        }else{
-            Label_defn[$1->valueToString()] = to_string(codeGen.currentInstrIndex + 1);
+        if(labelToBeDefined.top().find($1->valueToString())!=labelToBeDefined.top().end()){
+            Backpatch::backpatch(labelToBeDefined.top()[$1->valueToString()], to_string(codeGen.currentInstrIndex));
+            labelToBeDefined.top().erase($1->valueToString());
         }
-    } COLON statement { 
-        $$ = createNode(NODE_LABELED_STATEMENT, monostate(), $1, $4);
         $1->typeCategory = 7;
         $1->typeSpecifier = 9;
+        $1->tacResult = to_string(codeGen.currentInstrIndex);
         insertSymbol($1->valueToString(), $1);
+        codeGen.emit(TACOp::LABEL, $1->valueToString());
+    } COLON statement { 
+        $$ = createNode(NODE_LABELED_STATEMENT, monostate(), $1, $4);
         }
     | KEYWORD_CASE constant_expression COLON M statement{
         if(inSwitch.size()==0){
@@ -2241,10 +2078,13 @@ for_inc
 jump_statement
 	: KEYWORD_GOTO ID SEMICOLON { 
         $$ = createNode(NODE_JUMP_STATEMENT, monostate(), $1, $2);
-        if(Label_defn.count($2->valueToString()) == 0){
-            cerr << "Not a valid Label\n";
+        TreeNode* labelNode = lookupSymbol($2->valueToString(), true);
+        if(!labelNode){
+            backpatchNode* newList = Backpatch::addToBackpatchList(nullptr, codeGen.currentInstrIndex);
+            labelToBeDefined.top()[$2->valueToString()] = Backpatch::mergeBackpatchLists(labelToBeDefined.top()[$2->valueToString()], newList);
+            codeGen.emit(TACOp::oth, "", nullopt, nullopt, true);
         }else{
-            codeGen.emit(TACOp::GOTO, Label_defn[$2->valueToString()]);
+            codeGen.emit(TACOp::GOTO, labelNode->tacResult);
         }
     }
 	| KEYWORD_CONTINUE SEMICOLON {
@@ -2303,94 +2143,20 @@ translation_unit
 external_declaration
 	: function_definition { $$ = $1;}
 	| declaration { $$ = $1;}
-    | scope_resolution_statements {$$=$1;}
-    ;
-
-scope_resolution_statements
-    : ID SCOPE_RESOLUTION_OPERATOR ID SEMICOLON
-    | ID SCOPE_RESOLUTION_OPERATOR ID assignment_operator expression SEMICOLON
-    | ID SCOPE_RESOLUTION_OPERATOR ID LPAREN RPAREN SEMICOLON
-    | ID SCOPE_RESOLUTION_OPERATOR ID LPAREN argument_expression_list RPAREN SEMICOLON
-    ;
-
-constructor_function
-    : ID LPAREN {enterScope();} parameter_list RPAREN compound_statement {
-        $$ = createNode(NODE_CONSTRUCTOR_FUNCTION, monostate(), $1, $4, $6);
-        exitScope();
-    }
-    | ID LPAREN RPAREN {enterScope();} compound_statement {
-        $$ = createNode(NODE_CONSTRUCTOR_FUNCTION, monostate(), $1, $5); exitScope();
-    }
     ;
 
 function_definition
     : declaration_specifiers declarator {
-        DeclaratorInfo declInfo = isValidVariableDeclaration($1->children, true);
-        if (declInfo.isValid) {
-            string funcName = $2->children[0]->valueToString();
-            codeGen.emit(TACOp::LABEL, funcName, nullopt, nullopt);
-            insertSymbol(funcName, $2->children[0]);
-            enterScope();
-            TreeNode* funcNode = $2->children[0];
-            funcNode->storageClass = declInfo.storageClass;
-            funcNode->typeSpecifier = declInfo.typeSpecifier;
-            expectedReturnType = declInfo.typeSpecifier;
-            funcNode->isConst = declInfo.isConst;
-            funcNode->isStatic = declInfo.isStatic;
-            funcNode->isVolatile = declInfo.isVolatile;
-            funcNode->isUnsigned = declInfo.isUnsigned;
-            funcNode->typeCategory = 3;
-            if($2->children.size() > 1 && $2->children[1]->type == NODE_PARAMETER_LIST) {
-            for (auto param : $2->children[1]->children) {
-                if (param->type == NODE_PARAMETER_DECLARATION) {
-
-                    string varName = param->children[1]->valueToString();
-                    
-                    bool isDuplicate = false;
-                    for (const auto &entry : currentTable->symbolTable)
-                    {
-                        if (entry.first == varName)
-                        {
-                            cerr << "Error: Duplicate declaration of variable '" << varName << "'\n";
-                            isDuplicate = true;
-                            break;
-                        }
-                    }
-                    if (isDuplicate) continue;
-
-                    DeclaratorInfo paramInfo = isValidVariableDeclaration(param->children[0]->children, false);
-                    if (paramInfo.isValid) {
-                        TreeNode* varNode = param->children[1];
-                        varNode->typeCategory = 0;
-                        varNode->storageClass = paramInfo.storageClass;
-                        varNode->typeSpecifier = paramInfo.typeSpecifier;
-                        varNode->isConst = paramInfo.isConst;
-                        varNode->isStatic = paramInfo.isStatic;
-                        varNode->isVolatile = paramInfo.isVolatile;
-                        varNode->isUnsigned = paramInfo.isUnsigned;
-                        funcNode->paramTypes.push_back(varNode->typeSpecifier);
-                        funcNode->paramCount++;
-                        insertSymbol(varName, varNode);
-                    }
-                }
-            }}                    
-        }else {
-            cerr << "Error: Invalid function declaration for '" << $2->children[0]->valueToString() << "'\n";
-        }
+        enterScope();
+        addFunction($1, $2);
         inFunc = true;
     } compound_statement {
         $$ = createNode(NODE_FUNCTION_DEFINITION, monostate(), $1, $2, $4);
-        exitScope();
         inFunc = false;
+        exitScope();
         expectedReturnType = -1;
     }
 
-
-destructor_function
-    : BITWISE_NOT_OPERATOR ID LPAREN RPAREN {enterScope();} compound_statement {
-        $$ = createNode(NODE_DESTRUCTOR_FUNCTION, monostate(),$2, $6); exitScope();
-    }
-    ;
 %%
 
 void yyerror(const char *s) {
@@ -2415,11 +2181,12 @@ int main(int argc, char **argv) {
     currentTable = new Table();
     tableStack.push(currentTable);
     offsetStack.push(0);
+    labelToBeDefined.push({});
     allTables.push_back(currentTable);
 
     int result = yyparse();
     fclose(yyin);
-
+    //printAllTables();
     mkdir("output", 0777); 
 
     string inputPath(argv[1]);

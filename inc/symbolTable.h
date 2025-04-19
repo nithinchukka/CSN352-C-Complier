@@ -130,9 +130,9 @@ struct TACInstruction
         if (isGoto)
         {
             if (op == TACOp::oth)
-                str = "goto " + result;
+                str = "GOTO " + result;
             else
-                str = "goto " + result + " if " + *operand1 + " " + opToStr(op) + " " + *operand2;
+                str = "IF " + *operand1 + " " + opToStr(op) + " " + *operand2 + " GOTO " + result;
             return str;
         }
         switch (op)
@@ -207,22 +207,22 @@ struct TACInstruction
             str = result + ":";
             break;
         case TACOp::GOTO:
-            str = "goto " + result;
+            str = "GOTO " + result;
             break;
         case TACOp::IF_EQ:
-            str = "if " + *operand1 + " == " + *operand2 + " goto " + result;
+            str = "IF " + *operand1 + " == " + *operand2 + " GOTO " + result;
             break;
         case TACOp::IF_NE:
-            str = "if " + *operand1 + " != " + *operand2 + " goto " + result;
+            str = "IF " + *operand1 + " != " + *operand2 + " GOTO " + result;
             break;
         case TACOp::RETURN:
-            str = "return " + result;
+            str = "RETURN " + result;
             break;
         case TACOp::CALL:
-            str = result + " = call " + *operand1 + "(" + (operand2 ? *operand2 : "") + ")";
+            str = result + " = CALL " + *operand1 + "(" + (operand2 ? *operand2 : "") + ")";
             break;
         case TACOp::CALL2:
-            str = "call " + *operand1 + "(" + (operand2 ? *operand2 : "") + ")";
+            str = "CALL " + *operand1 + "(" + (operand2 ? *operand2 : "") + ")";
             break;
         case TACOp::TYPECAST:
             str = result + " = " + *operand1 + "(" + *operand2 + ")";
@@ -244,7 +244,6 @@ struct CodeGenerator
     int tempCounter = 0;
     int labelCounter = 0;
     int currentInstrIndex = 0;
-    
 
     string newTemp()
     {
@@ -328,6 +327,7 @@ stack<Table *> tableStack;
 stack<int> offsetStack;
 Table *currentTable;
 vector<Table *> allTables;
+stack<unordered_map<string, backpatchNode *>> labelToBeDefined;
 
 TreeNode *lookupSymbol(string symbol, bool arg = false)
 {
@@ -351,7 +351,6 @@ TreeNode *lookupSymbol(string symbol, bool arg = false)
     return nullptr;
 }
 
-
 void enterScope()
 {
     Table *newTable = new Table();
@@ -359,6 +358,7 @@ void enterScope()
     currentTable = newTable;
     tableStack.push(newTable);
     offsetStack.push(0);
+    labelToBeDefined.push({});
     allTables.push_back(newTable);
 }
 
@@ -373,6 +373,11 @@ void exitScope()
     currentTable = currentTable->parent;
     currentTable->totalSize = offsetStack.top();
     tableStack.pop();
+    if (labelToBeDefined.top().size())
+    {
+        cerr << "Error: Unresolved labels in scope\n";
+    }
+    labelToBeDefined.pop();
     offsetStack.pop();
 }
 
@@ -395,11 +400,6 @@ void printAllTables()
     for (auto &tbl : allTables)
     {
         cout << "Tbl " << tblId++ << " (Table Size): " << tbl->totalSize << "\n";
-        // cout << "-------------------------------------------------------------------------------------------------------\n";
-        // cout << left << setw(12) << "Id" << setw(12) << "TypeCat" << setw(12) << "TypeSpec"
-        //      << setw(12) << "StorCls" << setw(8) << "Params" << setw(8) << "Const" << setw(8) << "Static"
-        //      << setw(8) << "Volat" << setw(12) << "PtrLvl" << setw(12) << "SymTabSize" << "\n";
-        // cout << "------------------------------------------------------------------------------------------------------\n";
         cout << "-------------------------------------------\n";
         cout << left << setw(12) << "Id" << setw(12) << "TypeCat" << setw(12) << "TypeSpec"
              << setw(12) << "Offset" << "\n";
@@ -418,6 +418,38 @@ void printAllTables()
         cout << "-----------------------------------------\n\n";
     }
 }
+
+// void printAllTables()
+// {
+//     int tblId = 0;
+//     for (auto &tbl : allTables)
+//     {
+//         cout << "Tbl " << tblId++ << " (Scope Lvl):\n";
+//         cout << "-------------------------------------------------------------------------------------------------------\n";
+//         cout << left << setw(12) << "Id" << setw(12) << "TypeCat" << setw(12) << "TypeSpec"
+//              << setw(12) << "StorCls" << setw(8) << "Params" << setw(8) << "Const" << setw(8) << "Static"
+//              << setw(8) << "Volat" << setw(12) << "PtrLvl" << setw(12) << "SymTabSize" << "\n";
+//         cout << "------------------------------------------------------------------------------------------------------\n";
+
+//         for (const auto &entry : tbl->symbolTable)
+//         {
+//             TreeNode *node = entry.second;
+//             cout << left << setw(12) << entry.first
+//                  << setw(12) << node->typeCategory
+//                  << setw(12) << node->typeSpecifier
+//                  << setw(12) << node->storageClass
+//                  << setw(8) << node->paramCount
+//                  << setw(8) << (node->isConst ? "Y" : "N")
+//                  << setw(8) << (node->isStatic ? "Y" : "N")
+//                  << setw(8) << (node->isVolatile ? "Y" : "N")
+//                  << setw(12) << node->pointerLevel
+//                  << setw(12) << node->symbolTable.size()
+//                  << "\n";
+//         }
+
+//         cout << "------------------------------------------------------------------------------------\n\n";
+//     }
+// }
 
 struct DeclaratorInfo
 {
@@ -1012,7 +1044,7 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
                         cerr << "Error\n";
                         continue;
                     }
-                    setNodeAttributes(identifierNode, 2);
+                    setNodeAttributes(identifierNode, 2,1);
                     identifierNode->dimensions = dimensions;
                     insertSymbol(varName, identifierNode);
                 }
@@ -1080,14 +1112,17 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
                             {
                                 setNodeAttributes(identifierNode, 1, pointerDepth);
                                 insertSymbol(varName, identifierNode);
-                                if(child->children[1]->trueList || child->children[1]->falseList){
+                                if (child->children[1]->trueList || child->children[1]->falseList)
+                                {
                                     Backpatch::backpatch(child->children[1]->trueList, to_string(codeGen.currentInstrIndex));
-                                    Backpatch::backpatch(child->children[1]->falseList, to_string(codeGen.currentInstrIndex  + 1));
+                                    Backpatch::backpatch(child->children[1]->falseList, to_string(codeGen.currentInstrIndex + 1));
                                     codeGen.emit(TACOp::ASSIGN, varName, "1", nullopt);
                                     codeGen.emit(TACOp::ASSIGN, varName, "0", nullopt);
-                                }else{
+                                }
+                                else
+                                {
                                     codeGen.emit(TACOp::ASSIGN, varName, child->children[1]->tacResult, nullopt);
-                                }                                    
+                                }
                             }
                             else if (isTypeCompatible(declInfo.typeSpecifier, child->children[1]->typeSpecifier, "="))
                             {
@@ -1099,16 +1134,21 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
                                 }
                                 setNodeAttributes(identifierNode, 1, pointerDepth);
                                 insertSymbol(varName, identifierNode);
-                                if(child->children[1]->trueList || child->children[1]->falseList){
+                                if (child->children[1]->trueList || child->children[1]->falseList)
+                                {
                                     Backpatch::backpatch(child->children[1]->trueList, to_string(codeGen.currentInstrIndex));
-                                    Backpatch::backpatch(child->children[1]->falseList, to_string(codeGen.currentInstrIndex  + 1));
+                                    Backpatch::backpatch(child->children[1]->falseList, to_string(codeGen.currentInstrIndex + 1));
                                     codeGen.emit(TACOp::ASSIGN, varName, "1", nullopt);
                                     codeGen.emit(TACOp::ASSIGN, varName, "0", nullopt);
-                                }else{
+                                }
+                                else
+                                {
                                     codeGen.emit(TACOp::ASSIGN, varName, child->children[1]->tacResult, nullopt);
-                                }                             
-                            }else{
-                                cerr << "Type Incompatible\n"; //TODO
+                                }
+                            }
+                            else
+                            {
+                                cerr << "Type Incompatible\n"; // TODO
                             }
                         }
                     }
@@ -1158,22 +1198,91 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
                             }
                             setNodeAttributes(identifierNode, 0);
                             insertSymbol(varName, identifierNode);
-                            
-                            if(child->children[1]->trueList || child->children[1]->falseList){
+
+                            if (child->children[1]->trueList || child->children[1]->falseList)
+                            {
                                 Backpatch::backpatch(child->children[1]->trueList, to_string(codeGen.currentInstrIndex));
-                                Backpatch::backpatch(child->children[1]->falseList, to_string(codeGen.currentInstrIndex  + 1));
+                                Backpatch::backpatch(child->children[1]->falseList, to_string(codeGen.currentInstrIndex + 1));
                                 codeGen.emit(TACOp::ASSIGN, varName, "1", nullopt);
                                 codeGen.emit(TACOp::ASSIGN, varName, "0", nullopt);
-                            }else{
+                            }
+                            else
+                            {
                                 codeGen.emit(TACOp::ASSIGN, varName, child->children[1]->tacResult, nullopt);
-                            }                        
-                        }else{
-                            cout << "Type Incompatible\n"; //TODO
+                            }
+                        }
+                        else
+                        {
+                            cout << "Type Incompatible\n"; // TODO
                         }
                     }
                 }
             }
         }
+    }
+}
+
+void addFunction(TreeNode *declSpec, TreeNode *decl)
+{
+    DeclaratorInfo declInfo = isValidVariableDeclaration(declSpec->children, true);
+    if (declInfo.isValid)
+    {
+        string funcName = decl->children[0]->valueToString();
+        codeGen.emit(TACOp::LABEL, funcName, nullopt, nullopt);
+        insertSymbol(funcName, decl->children[0]);
+        TreeNode *funcNode = decl->children[0];
+        funcNode->storageClass = declInfo.storageClass;
+        funcNode->typeSpecifier = declInfo.typeSpecifier;
+        expectedReturnType = declInfo.typeSpecifier;
+        funcNode->isConst = declInfo.isConst;
+        funcNode->isStatic = declInfo.isStatic;
+        funcNode->isVolatile = declInfo.isVolatile;
+        funcNode->isUnsigned = declInfo.isUnsigned;
+        funcNode->typeCategory = 3;
+        if (decl->children.size() > 1 && decl->children[1]->type == NODE_PARAMETER_LIST)
+        {
+            for (auto param : decl->children[1]->children)
+            {
+                if (param->type == NODE_PARAMETER_DECLARATION)
+                {
+
+                    string varName = param->children[1]->valueToString();
+
+                    bool isDuplicate = false;
+                    for (const auto &entry : currentTable->symbolTable)
+                    {
+                        if (entry.first == varName)
+                        {
+                            cerr << "Error: Duplicate declaration of variable '" << varName << "'\n";
+                            isDuplicate = true;
+                            break;
+                        }
+                    }
+                    if (isDuplicate)
+                        continue;
+
+                    DeclaratorInfo paramInfo = isValidVariableDeclaration(param->children[0]->children, false);
+                    if (paramInfo.isValid)
+                    {
+                        TreeNode *varNode = param->children[1];
+                        varNode->typeCategory = 0;
+                        varNode->storageClass = paramInfo.storageClass;
+                        varNode->typeSpecifier = paramInfo.typeSpecifier;
+                        varNode->isConst = paramInfo.isConst;
+                        varNode->isStatic = paramInfo.isStatic;
+                        varNode->isVolatile = paramInfo.isVolatile;
+                        varNode->isUnsigned = paramInfo.isUnsigned;
+                        funcNode->paramTypes.push_back(varNode->typeSpecifier);
+                        funcNode->paramCount++;
+                        insertSymbol(varName, varNode);
+                    }
+                }
+            }
+        }
+    }
+    else
+    {
+        cerr << "Error: Invalid function declaration for '" << decl->children[0]->valueToString() << "'\n";
     }
 }
 

@@ -36,7 +36,6 @@ auto        { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KE
 break       { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_BREAK); }
 case        { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_CASE); }
 char        { yylval.node = createNode(NODE_KEYWORD, string(yytext)); yylval.node->offset = 1; return (KEYWORD_CHAR); }
-class       { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_CLASS); }
 const       { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_CONST); }
 continue    { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_CONTINUE); }
 default     { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_DEFAULT); }
@@ -53,9 +52,6 @@ int         { yylval.node = createNode(NODE_KEYWORD, string(yytext)); yylval.nod
 long        { yylval.node = createNode(NODE_KEYWORD, string(yytext)); yylval.node->offset = 8; return (KEYWORD_LONG); }
 new         { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_NEW); }
 nullptr     { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_NULLPTR); }
-private     { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_PRIVATE); }
-protected   { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_PROTECTED); }
-public      { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_PUBLIC); }
 register    { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_REGISTER); }
 return      { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_RETURN); }
 short       { yylval.node = createNode(NODE_KEYWORD, string(yytext)); yylval.node->offset = 2; return (KEYWORD_SHORT); }
