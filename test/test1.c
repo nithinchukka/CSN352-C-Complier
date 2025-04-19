@@ -1,12 +1,15 @@
-struct Test{
-    int x;
-    int y;
-    int arr[10];
-};
+int x;
+int y;
 
-int main(){
-    Test t;
-    t.x = 4;
-    t.x = t.y+5;
-    t.arr[2]++;
+int main(int a){
+    int e;
+    {
+        int a;
+        char c;
+        int d;
+        if(1 > 2){
+            int g;
+        }
+    }
+    int f;
 }

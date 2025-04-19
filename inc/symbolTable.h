@@ -3,6 +3,12 @@
 
 #include <bits/stdc++.h>
 #include "treeNode.h"
+
+void raiseError(const string &message)
+{
+    cerr << "Error: " << message << endl;
+}
+
 enum class TACOp
 {
     ASSIGN,
@@ -36,6 +42,7 @@ enum class TACOp
     CALL,
     TYPECAST,
     CALL2,
+    PARAM,
     oth
 };
 
@@ -84,15 +91,15 @@ inline string opToStr(TACOp op)
     case TACOp::ASSIGN:
         return "=";
     case TACOp::GOTO:
-        return "goto";
+        return "GOTO";
     case TACOp::IF_EQ:
-        return "if ==";
+        return "IF ==";
     case TACOp::IF_NE:
-        return "if !=";
+        return "IF !=";
     case TACOp::TYPECAST:
         return "cast";
     case TACOp::CALL:
-        return "call";
+        return "CALL";
     case TACOp::PRINT:
         return "print";
     case TACOp::INDEX:
@@ -100,9 +107,11 @@ inline string opToStr(TACOp op)
     case TACOp::ARR_INDEX:
         return "arr_index";
     case TACOp::RETURN:
-        return "return";
+        return "RETURN";
     case TACOp::LABEL:
-        return "label";
+        return "LABEL";
+    case TACOp::PARAM:
+        return "PARAM";
     case TACOp::oth:
         return "";
     default:
@@ -230,6 +239,9 @@ struct TACInstruction
         case TACOp::oth:
             str = result + " = " + *operand1 + " " + *operand2;
             break;
+        case TACOp::PARAM:
+            str = "PARAM " + result;
+            break;
         default:
             str = "Unknown";
             break;
@@ -351,6 +363,39 @@ TreeNode *lookupSymbol(string symbol, bool arg = false)
     return nullptr;
 }
 
+int findOffset(int type, string name = "")
+{
+    switch (type)
+    {
+    case 1: // char
+        return 1;
+    case 2: // short
+        return 2;
+    case 3: // int
+        return 4;
+    case 4: // bool
+        return 1;
+    case 5: // long
+        return 8;
+    case 6: // float
+        return 4;
+    case 7: // double
+        return 8;
+    case 20:
+    {
+        TreeNode *node = lookupSymbol(name);
+        if (node == nullptr)
+        {
+            cerr << "Error: No struct definition found for type checking" << endl;
+            return -1;
+        }
+        return node->totalOffset;
+    }
+    default:
+        return -1; // Invalid type
+    }
+}
+
 void enterScope()
 {
     Table *newTable = new Table();
@@ -369,9 +414,8 @@ void exitScope()
         cerr << "Cannot exit global scope" << endl;
         return;
     }
-    Table *temp = currentTable;
-    currentTable = currentTable->parent;
     currentTable->totalSize = offsetStack.top();
+    currentTable = currentTable->parent;
     tableStack.pop();
     if (labelToBeDefined.top().size())
     {
@@ -1000,8 +1044,8 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
                 node->isConst = declInfo.isConst;
                 node->isStatic = declInfo.isStatic;
                 node->isVolatile = declInfo.isVolatile;
-                node->isUnsigned = declInfo.isUnsigned;
                 node->symbolTable = helper->symbolTable;
+                node->totalOffset = helper->totalOffset;
             };
             auto checkDuplicate = [&](const string &name)
             {
@@ -1044,9 +1088,11 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
                         cerr << "Error\n";
                         continue;
                     }
-                    setNodeAttributes(identifierNode, 2,1);
+                    setNodeAttributes(identifierNode, 2, 1);
                     identifierNode->dimensions = dimensions;
                     insertSymbol(varName, identifierNode);
+                    identifierNode->offset = offsetStack.top();
+                    offsetStack.top() += dimensions[0] * findOffset(declInfo.typeSpecifier);
                 }
             }
             else if (firstChild->type == NODE_POINTER)
@@ -1153,6 +1199,8 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
                         }
                     }
                 }
+                identifierNode->offset = offsetStack.top();
+                offsetStack.top() = identifierNode->offset + 4;
             }
             else
             {
@@ -1217,6 +1265,8 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
                         }
                     }
                 }
+                identifierNode->offset = offsetStack.top();
+                offsetStack.top() += findOffset(declInfo.typeSpecifier, varName);
             }
         }
     }
@@ -1237,8 +1287,8 @@ void addFunction(TreeNode *declSpec, TreeNode *decl)
         funcNode->isConst = declInfo.isConst;
         funcNode->isStatic = declInfo.isStatic;
         funcNode->isVolatile = declInfo.isVolatile;
-        funcNode->isUnsigned = declInfo.isUnsigned;
         funcNode->typeCategory = 3;
+        enterScope();
         if (decl->children.size() > 1 && decl->children[1]->type == NODE_PARAMETER_LIST)
         {
             for (auto param : decl->children[1]->children)
@@ -1265,13 +1315,12 @@ void addFunction(TreeNode *declSpec, TreeNode *decl)
                     if (paramInfo.isValid)
                     {
                         TreeNode *varNode = param->children[1];
-                        varNode->typeCategory = 0;
+                        varNode->typeCategory = 9;
                         varNode->storageClass = paramInfo.storageClass;
                         varNode->typeSpecifier = paramInfo.typeSpecifier;
                         varNode->isConst = paramInfo.isConst;
                         varNode->isStatic = paramInfo.isStatic;
                         varNode->isVolatile = paramInfo.isVolatile;
-                        varNode->isUnsigned = paramInfo.isUnsigned;
                         funcNode->paramTypes.push_back(varNode->typeSpecifier);
                         funcNode->paramCount++;
                         insertSymbol(varName, varNode);

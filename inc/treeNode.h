@@ -18,7 +18,7 @@ enum NodeType
     NODE_DIRECT_ABSTRACT_DECLARATOR,
     NODE_TYPE_SPECIFIER,
     NODE_STORAGE_CLASS_SPECIFIER,
-    NODE_STRUCT_OR_UNION_SPECIFIER,
+    NODE_STRUCT_SPECIFIER,
     NODE_STRUCT_DECLARATION_LIST,
     NODE_STRUCT_DECLARATION,
     NODE_SPECIFIER_QUALIFIER_LIST,
@@ -103,24 +103,23 @@ class TreeNode
 public:
     NodeType type;
     NodeValue value;
-    int offset = 0;
+    int offset = -1;
     vector<TreeNode *> children;
-    int typeCategory = -1; // var = 0, pointer = 1, arr = 2,  func = 3, struct = 4, union = 5, class = 6, label = 7, reference = 8
+    int typeCategory = -1; // var = 0, pointer = 1, arr = 2,  func = 3, struct = 4, union = 5, class = 6, label = 7, reference = 8, parameter = 9;
     bool isConst = false;
     bool isStatic = false;
     bool isVolatile = false;
-    bool isUnsigned = false;
     int typeSpecifier = -1; //"void", "char : 1", "short", "int", "long", "float", "double", "string", "nullptr", object ,label
     int storageClass = -1;  // -1: none, 0: extern, 1: static, 2: auto, 3: register
     int paramCount = 0;
     int pointerLevel = 0;
     bool isLValue = false; // true if the node is an lvalue
     bool isLogical = false;
-    int access = 0;
     int isConstVal = 0;
     vector<int> paramTypes;
     vector<int> dimensions;
     vector<pair<string, TreeNode *>> symbolTable;
+    int totalOffset = 0;
     string tacResult;
 
     backpatchNode *nextList = nullptr;
@@ -192,7 +191,7 @@ public:
             return "TYPE_SPECIFIER";
         case NODE_STORAGE_CLASS_SPECIFIER:
             return "STORAGE_CLASS_SPECIFIER";
-        case NODE_STRUCT_OR_UNION_SPECIFIER:
+        case NODE_STRUCT_SPECIFIER:
             return "STRUCT_SPECIFIER";
         case NODE_STRUCT_DECLARATION_LIST:
             return "STRUCT_DECLARATION_LIST";
