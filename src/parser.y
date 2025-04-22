@@ -10,7 +10,7 @@
     #include "../inc/symbolTable.h" 
     #include <sys/stat.h> // for mkdir
 
-    extern CodeGenerator codeGen;
+    extern irGenerator irGen;
     using namespace std;
     void yyerror(const char *s);
 
@@ -22,31 +22,31 @@
     void backTrackExpr(TreeNode* nd){
         if(nd == nullptr) return;
         if(nd->trueList || nd->falseList){
-            Backpatch::backpatch(nd->trueList, to_string(codeGen.currentInstrIndex));
-            Backpatch::backpatch(nd->falseList, to_string(codeGen.currentInstrIndex  + 1));
-            codeGen.emit(TACOp::oth, nd->tacResult, "1", nullopt);
-            codeGen.emit(TACOp::oth, nd->tacResult, "0", nullopt);
+            Backpatch::backpatch(nd->trueList, to_string(irGen.currentInstrIndex));
+            Backpatch::backpatch(nd->falseList, to_string(irGen.currentInstrIndex  + 1));
+            irGen.emit(TACOp::oth, nd->tacResult, "1", nullopt);
+            irGen.emit(TACOp::oth, nd->tacResult, "0", nullopt);
         }
     }
 
     void backTrackRelExpr(TreeNode* nd){
         if(nd == nullptr) return;
         backpatchNode* curr = nd->trueList;
-        backpatchNode* next = Backpatch::addToBackpatchList(curr, codeGen.currentInstrIndex);
+        backpatchNode* next = Backpatch::addToBackpatchList(curr, irGen.currentInstrIndex);
         nd->trueList = next;
         curr = nd->falseList;
-        next = Backpatch::addToBackpatchList(curr, codeGen.currentInstrIndex + 1);
+        next = Backpatch::addToBackpatchList(curr, irGen.currentInstrIndex + 1);
         nd->falseList = next;
     }
 
     void typeCastFunction(TreeNode *a, TreeNode *b, bool isRel = false){
         if (a->typeSpecifier < b->typeSpecifier) {
-            string temp = codeGen.newTemp();
-            codeGen.emit(TACOp::TYPECAST, temp, typeCastInfo(b->typeSpecifier, a->typeSpecifier), a->tacResult);
+            string temp = irGen.newTemp();
+            irGen.emit(TACOp::TYPECAST, temp, typeCastInfo(b->typeSpecifier, a->typeSpecifier), a->tacResult);
             a->tacResult = temp;
         } else if (a->typeSpecifier > b->typeSpecifier) {
-            string temp = codeGen.newTemp();
-            codeGen.emit(TACOp::TYPECAST, temp, typeCastInfo(a->typeSpecifier, b->typeSpecifier), b->tacResult);
+            string temp = irGen.newTemp();
+            irGen.emit(TACOp::TYPECAST, temp, typeCastInfo(a->typeSpecifier, b->typeSpecifier), b->tacResult);
             b->tacResult = temp;
         }
         if(!isRel){
@@ -133,9 +133,9 @@ N
 : {
       $$ = new TreeNode(OTHERS);
       backpatchNode* curr = $$->nextList;
-      backpatchNode* next = Backpatch::addToBackpatchList(curr, codeGen.currentInstrIndex);
+      backpatchNode* next = Backpatch::addToBackpatchList(curr, irGen.currentInstrIndex);
       $$->nextList = next;
-      codeGen.emit(TACOp::oth, "", nullopt, nullopt, true);
+      irGen.emit(TACOp::oth, "", nullopt, nullopt, true);
   }
 ;
 
@@ -144,7 +144,7 @@ primary_expression
           $$ = $1;
           $$ = lookupSymbol($$->value, true);
           if (!$$) {
-              raiseError("Undeclared identifier at line " + to_string(yylineno) + ": " + $1->value);
+              raiseError("Undeclared identifier : " + $1->value, yylineno);
           }
           $$->tacResult = $1->value;
           $$->isLValue = true;
@@ -203,27 +203,27 @@ postfix_expression
     | postfix_expression LBRACKET expression RBRACKET { 
         $$ = createNode(NODE_POSTFIX_EXPRESSION, "", $1, $3);
         if ($3->typeSpecifier != 3) {
-            raiseError("array index must be an integer at line " + to_string(yylineno));
+            raiseError("Array index must be an integer", yylineno);
         } else if (($1->typeCategory == 2 || $1->typeCategory == 1) && $1->type != NODE_POSTFIX_EXPRESSION) {
             if ($1->typeSpecifier != 1 && $1->typeSpecifier != 3) {
-                raiseError("can only index a char or int pointer at line " + to_string(yylineno));
+                raiseError("can only index a char or int pointer at line", yylineno);
             } else {
                 $$->typeSpecifier = $1->typeSpecifier;
                 $$->typeCategory = 2;
                 $$->isLValue = true; 
-                string temp = codeGen.newTemp();
+                string temp = irGen.newTemp();
                 if ($1->typeSpecifier == 1) {
-                    codeGen.emit(TACOp::MUL, temp, "1", $3->tacResult);
+                    irGen.emit(TACOp::MUL, temp, "1", $3->tacResult);
                 } else {
-                    codeGen.emit(TACOp::MUL, temp, "4", $3->tacResult);
+                    irGen.emit(TACOp::MUL, temp, "4", $3->tacResult);
                 }
-                string temp1 = codeGen.newTemp();
-                codeGen.emit(TACOp::ADD, temp1, $1->tacResult, temp);
+                string temp1 = irGen.newTemp();
+                irGen.emit(TACOp::ADD, temp1, $1->tacResult, temp);
                 $$->tacResult = "*" + temp1;
             }
         } else if ($1->type == NODE_POSTFIX_EXPRESSION && ($1->typeCategory == 2 || $1->typeCategory == 1)) {
             if ($1->typeSpecifier != 1 && $1->typeSpecifier != 3) {
-                raiseError("can only index a char or int pointer at line " + to_string(yylineno));
+                raiseError("can only index a char or int pointer at line", yylineno);
             }
             if ($1->children[0]->typeSpecifier == 20) {
                 TreeNode* member = lookupSymbol($1->children[0]->value);
@@ -244,8 +244,8 @@ postfix_expression
                             } else {
                                 offset += (4 * stoi($3->value));
                             }
-                            string temp = codeGen.newTemp();
-                            codeGen.emit(TACOp::ADD, temp, $1->children[0]->tacResult, to_string(offset));
+                            string temp = irGen.newTemp();
+                            irGen.emit(TACOp::ADD, temp, $1->children[0]->tacResult, to_string(offset));
                             $$->tacResult = "*" + temp;
                         } else {
                             if (entry.second->typeCategory == 1) {
@@ -256,15 +256,15 @@ postfix_expression
                         }
                     }
                     if (!found) {
-                        raiseError("member " + $3->value + " not found in object " + $1->value + " at line " + to_string(yylineno));
+                        raiseError("member " + $3->value + " not found in object " + $1->value, yylineno);
                     }
                 }
             }
         } else {
             if ($1->type != NODE_POSTFIX_EXPRESSION) {
-                raiseError($1->value + " is not an array at line " + to_string(yylineno));
+                raiseError($1->value + " is not an array at line", yylineno);
             } else {
-                raiseError($1->children[1]->value + " is not an array at line " + to_string(yylineno));
+                raiseError($1->children[1]->value + " is not an array", yylineno);
             }
         }
         $$->pointerLevel = $1->pointerLevel;
@@ -273,13 +273,13 @@ postfix_expression
     | postfix_expression LPAREN RPAREN { 
         $$ = $1;
         if ($$->paramCount > 0) {
-            raiseError("function call with no params, expected " + to_string($$->paramCount)+" at line " + to_string(yylineno));
+            raiseError("function call with no params, expected " + to_string($$->paramCount), yylineno);
         } else {
             if ($1->typeSpecifier == 0) {
-                codeGen.emit(TACOp::CALL2, "", $1->tacResult, "0");
+                irGen.emit(TACOp::CALL2, "", $1->tacResult, "0");
             } else {
-                string temp = codeGen.newTemp();
-                codeGen.emit(TACOp::CALL, temp, $1->tacResult, "0");
+                string temp = irGen.newTemp();
+                irGen.emit(TACOp::CALL, temp, $1->tacResult, "0");
                 $$->tacResult = temp;
             }
             $$->isLValue = false;
@@ -295,28 +295,28 @@ postfix_expression
                     int lhs = $1->paramTypes[i];
                     int rhs = $3->children[i]->typeSpecifier;
                     if (!isTypeCompatible(lhs, rhs, "=")) {
-                        raiseError("Expected: " + to_string($1->paramTypes[i]) + ", Got: " + to_string($3->children[i]->typeSpecifier)+" at line " + to_string(yylineno));
+                        raiseError("Expected: " + to_string($1->paramTypes[i]) + ", Got: " + to_string($3->children[i]->typeSpecifier), yylineno);
                         break;
                     } else {
                         if (lhs != rhs) {
-                            string temp = codeGen.newTemp();
-                            codeGen.emit(TACOp::TYPECAST, temp, typeCastInfo(lhs, rhs), $3->children[i]->tacResult);
+                            string temp = irGen.newTemp();
+                            irGen.emit(TACOp::TYPECAST, temp, typeCastInfo(lhs, rhs), $3->children[i]->tacResult);
                             $3->children[i]->tacResult = temp;
                         }
                     }
                 }
             } else {
-                raiseError("function call with " + to_string($3->children.size()) + " params, expected " + to_string($1->paramCount)+" at line " + to_string(yylineno));
+                raiseError("function call with " + to_string($3->children.size()) + " params, expected " + to_string($1->paramCount), yylineno);
             }
         }
         for (auto* arg : $3->children) {
-            codeGen.emit(TACOp::ASSIGN, "param", arg->tacResult, nullopt);
+            irGen.emit(TACOp::ASSIGN, "param", arg->tacResult, nullopt);
         }
         if ($1->typeSpecifier == 0) {
-            codeGen.emit(TACOp::CALL2, "", $1->value, to_string($3->children.size()));
+            irGen.emit(TACOp::CALL2, "", $1->value, to_string($3->children.size()));
         } else {
-            string temp = codeGen.newTemp();
-            codeGen.emit(TACOp::CALL, temp, $1->tacResult, to_string($3->children.size()));
+            string temp = irGen.newTemp();
+            irGen.emit(TACOp::CALL, temp, $1->tacResult, to_string($3->children.size()));
             $$->tacResult = temp; 
         }
     }
@@ -339,8 +339,8 @@ postfix_expression
                         if (entry.second->typeCategory == 2) {
                             break;
                         } else {
-                            string temp = codeGen.newTemp();
-                            codeGen.emit(TACOp::ADD, temp, $1->tacResult, to_string(offset));
+                            string temp = irGen.newTemp();
+                            irGen.emit(TACOp::ADD, temp, $1->tacResult, to_string(offset));
                             $$->tacResult = "*" + temp;
                         }
                     } else {
@@ -352,11 +352,11 @@ postfix_expression
                     }
                 }
                 if (!found) {
-                    raiseError("member " + $3->value + " not found in object " + $1->valueToString()+" at line " + to_string(yylineno));
+                    raiseError("member " + $3->value + " not found in object " + $1->value, yylineno);
                 }
             }
         } else {
-            raiseError("We can use member access only for classes, structs, and unions at line " + to_string(yylineno));
+            raiseError("We can use member access only for classes, structs, and unions", yylineno);
         }
     }
     | postfix_expression POINTER_TO_MEMBER_ARROW_OPERATOR ID { 
@@ -378,8 +378,8 @@ postfix_expression
                         if (entry.second->typeCategory == 2) {
                             break;
                         } else {
-                            string temp = codeGen.newTemp();
-                            codeGen.emit(TACOp::ADD, temp, $1->tacResult, to_string(offset));
+                            string temp = irGen.newTemp();
+                            irGen.emit(TACOp::ADD, temp, $1->tacResult, to_string(offset));
                             $$->tacResult = "*" + temp;
                         }
                     } else {
@@ -391,47 +391,47 @@ postfix_expression
                     }
                 }
                 if (!found) {
-                    raiseError("member " + $3->value + " not found in object " + $1->valueToString());
+                    raiseError("member " + $3->value + " not found in object " + $1->value, yylineno);
                 }
             }
         } else {
-            raiseError("We can use member access only for classes, structs, and unions at line " + to_string(yylineno));
+            raiseError("We can use member access only for classes, structs, and unions", yylineno);
         }
     }
     | postfix_expression INCREMENT_OPERATOR { 
         if (!$1->isLValue) {  
-            raiseError("Cannot post-increment an R-value at line " + to_string(yylineno));
+            raiseError("Cannot post-increment an R-value", yylineno);
         }
         $$ = $1;
         $$->type = NODE_POSTFIX_EXPRESSION;
         int typeSpec = $1->typeSpecifier;
         if (typeSpec > 7) {
-            raiseError("invalid type for increment operator at line " + to_string(yylineno));
+            raiseError("invalid type for increment operator", yylineno);
         }
         $$->isLValue = false; 
-        string temp = codeGen.newTemp();
-        codeGen.emit(TACOp::ASSIGN, temp, $1->tacResult, nullopt);
-        string temp2 = codeGen.newTemp();
-        codeGen.emit(TACOp::ADD, temp2, temp, "1");
-        codeGen.emit(TACOp::ASSIGN, $1->tacResult, temp2, nullopt);
+        string temp = irGen.newTemp();
+        irGen.emit(TACOp::ASSIGN, temp, $1->tacResult, nullopt);
+        string temp2 = irGen.newTemp();
+        irGen.emit(TACOp::ADD, temp2, temp, "1");
+        irGen.emit(TACOp::ASSIGN, $1->tacResult, temp2, nullopt);
         $$->tacResult = temp;
     }
     | postfix_expression DECREMENT_OPERATOR {
         if (!$1->isLValue) {
-            raiseError("Cannot post-decrement an R-value at line " + to_string(yylineno));
+            raiseError("Cannot post-decrement an R-value", yylineno);
         } 
         $$ = $1;
         $$->type = NODE_POSTFIX_EXPRESSION;
         int typeSpec = $1->typeSpecifier;
         if (typeSpec > 7) {
-            raiseError("invalid type for decrement operator at line " + to_string(yylineno));
+            raiseError("invalid type for decrement operator", yylineno);
         }
         $$->isLValue = false;
-        string temp = codeGen.newTemp();
-        codeGen.emit(TACOp::ASSIGN, temp, $1->tacResult, nullopt);
-        string temp2 = codeGen.newTemp();
-        codeGen.emit(TACOp::SUB, temp2, temp, "1");
-        codeGen.emit(TACOp::ASSIGN, $1->tacResult, temp2, nullopt);
+        string temp = irGen.newTemp();
+        irGen.emit(TACOp::ASSIGN, temp, $1->tacResult, nullopt);
+        string temp2 = irGen.newTemp();
+        irGen.emit(TACOp::SUB, temp2, temp, "1");
+        irGen.emit(TACOp::ASSIGN, $1->tacResult, temp2, nullopt);
         $$->tacResult = temp;
     }
     ;
@@ -455,35 +455,35 @@ unary_expression
     }
     | INCREMENT_OPERATOR unary_expression {
         if (!$2->isLValue) {  
-            raiseError("Cannot pre-increment an R-value at line " + to_string(yylineno));
+            raiseError("Cannot pre-increment an R-value", yylineno);
         } 
         $$ = $2;
-        string temp = codeGen.newTemp();
-        codeGen.emit(TACOp::ASSIGN, temp, $2->tacResult, nullopt);
-        string temp2 = codeGen.newTemp();
-        codeGen.emit(TACOp::ADD, temp2, temp, "1");
-        codeGen.emit(TACOp::ASSIGN, $2->tacResult, temp2, nullopt);
+        string temp = irGen.newTemp();
+        irGen.emit(TACOp::ASSIGN, temp, $2->tacResult, nullopt);
+        string temp2 = irGen.newTemp();
+        irGen.emit(TACOp::ADD, temp2, temp, "1");
+        irGen.emit(TACOp::ASSIGN, $2->tacResult, temp2, nullopt);
         $$->tacResult = temp2; 
         int typeSpec = $2->typeSpecifier;
         if (typeSpec > 7) {
-            raiseError("invalid type for increment operator at line " + to_string(yylineno));
+            raiseError("invalid type for increment operator", yylineno);
         }
         $$->isLValue = false; 
     }
     | DECREMENT_OPERATOR unary_expression {
         if (!$2->isLValue) {
-            raiseError("Cannot pre-decrement an R-value at line " + to_string(yylineno));
+            raiseError("Cannot pre-decrement an R-value", yylineno);
         }
         $$ = $2;
-        string temp = codeGen.newTemp();
-        codeGen.emit(TACOp::ASSIGN, temp, $2->tacResult, nullopt);
-        string temp2 = codeGen.newTemp();
-        codeGen.emit(TACOp::SUB, temp2, temp, "1");
-        codeGen.emit(TACOp::ASSIGN, $2->tacResult, temp2, nullopt);
+        string temp = irGen.newTemp();
+        irGen.emit(TACOp::ASSIGN, temp, $2->tacResult, nullopt);
+        string temp2 = irGen.newTemp();
+        irGen.emit(TACOp::SUB, temp2, temp, "1");
+        irGen.emit(TACOp::ASSIGN, $2->tacResult, temp2, nullopt);
         $$->tacResult = temp2;        
         int typeSpec = $2->typeSpecifier;
         if (typeSpec > 7) {
-            raiseError("invalid type for decrement operator at line " + to_string(yylineno));
+            raiseError("invalid type for decrement operator", yylineno);
         }
         $$->isLValue = false; 
     }
@@ -491,41 +491,41 @@ unary_expression
         $$ = createNode(NODE_UNARY_EXPRESSION, "", $1, $2);
         if ($1->isConstVal) $$->isConstVal = 1;
         $$->typeSpecifier = $2->typeSpecifier;
-        string temp = codeGen.newTemp();
+        string temp = irGen.newTemp();
         string op = $1->value;
         if (op == "&") {
-            codeGen.emit(TACOp::ASSIGN, temp, "&" + $2->tacResult, nullopt);
+            irGen.emit(TACOp::ASSIGN, temp, "&" + $2->tacResult, nullopt);
             $$->isLValue = false;
             $$->pointerLevel = 1;
         } else if (op == "*") {
-            codeGen.emit(TACOp::ASSIGN, temp, "*" + $2->tacResult, nullopt);
+            irGen.emit(TACOp::ASSIGN, temp, "*" + $2->tacResult, nullopt);
             $$->isLValue = true;
             $$->pointerLevel = 0;
         } else if (op == "+") {
             $$->isConstVal = 1;
-            codeGen.emit(TACOp::ASSIGN, temp, $2->tacResult, nullopt);
+            irGen.emit(TACOp::ASSIGN, temp, $2->tacResult, nullopt);
             $$->isLValue = false;
         } else if (op == "-") {
             $$->isConstVal = 1;
-            codeGen.emit(TACOp::SUB, temp, "0", $2->tacResult);
+            irGen.emit(TACOp::SUB, temp, "0", $2->tacResult);
             $$->isLValue = false;
         } else if (op == "~") {
             $$->isConstVal = 1;
-            codeGen.emit(TACOp::BIT_XOR, temp, $2->tacResult, "-1");
+            irGen.emit(TACOp::BIT_XOR, temp, $2->tacResult, "-1");
             $$->isLogical = true;
             $$->falseList = $2->falseList;
             $$->trueList = $2->trueList;
             $$->isLValue = false;
         } else if (op == "!") {
             $$->isConstVal = 1;
-            codeGen.emit(TACOp::EQ, temp, $2->tacResult, "0");
+            irGen.emit(TACOp::EQ, temp, $2->tacResult, "0");
             $$->isLValue = false;
         }
         $$->tacResult = temp;         
         if (op == "&" && !$2->isLValue) {
-            raiseError("Cannot apply '&' to an R-value at line " + to_string(yylineno));
+            raiseError("Cannot apply '&' to an R-value", yylineno);
         } else if (op == "*" && $2->pointerLevel == 0) {
-            raiseError("Cannot dereference a non-pointer type at line " + to_string(yylineno));
+            raiseError("Cannot dereference a non-pointer type", yylineno);
         }
     }
     ;
@@ -553,9 +553,9 @@ cast_expression
             $$ = createNode(NODE_CAST_EXPRESSION, "", $2, $4);
             $$->typeSpecifier = toType;
             $$->isLValue = false;
-            string temp = codeGen.newTemp();
+            string temp = irGen.newTemp();
             string castExpr = "(" + $2->value + ")" + $4->tacResult;
-            codeGen.emit(TACOp::ASSIGN, temp, castExpr, nullopt);
+            irGen.emit(TACOp::ASSIGN, temp, castExpr, nullopt);
             $$->tacResult = temp;
         } */
     ;
@@ -571,16 +571,16 @@ multiplicative_expression
         int rhsPointerLevel = $3->pointerLevel;
         int lhsPointerLevel = $1->pointerLevel;
         if (rhsPointerLevel || lhsPointerLevel) {
-            raiseError("Invalid operands to binary '*' — multiplication involving pointer types is not allowed at line " + to_string(yylineno));
+            raiseError("Invalid operands to binary '*' — multiplication involving pointer types is not allowed", yylineno);
         } else {
             if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "*")) {
                 $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
                 typeCastFunction($1, $3);
-                string temp = codeGen.newTemp();
-                codeGen.emit(TACOp::MUL, temp, $1->tacResult, $3->tacResult);
+                string temp = irGen.newTemp();
+                irGen.emit(TACOp::MUL, temp, $1->tacResult, $3->tacResult);
                 $$->tacResult = temp;
             } else {
-                raiseError("Incompatible Type: " + to_string($1->typeSpecifier) + " and " + to_string($3->typeSpecifier) + " at line " + to_string(yylineno));
+                raiseError("Incompatible Type: " + to_string($1->typeSpecifier) + " and " + to_string($3->typeSpecifier), yylineno);
             }
         }
     }
@@ -591,16 +591,16 @@ multiplicative_expression
         int rhsPointerLevel = $3->pointerLevel;
         int lhsPointerLevel = $1->pointerLevel;
         if (rhsPointerLevel || lhsPointerLevel) {
-            raiseError("Invalid operands to binary '/' — multiplication involving pointer types is not allowed at line " + to_string(yylineno));
+            raiseError("Invalid operands to binary '/' — multiplication involving pointer types is not allowed", yylineno);
         } else {
             if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "/")) {
                 typeCastFunction($1, $3);
                 $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
-                string temp = codeGen.newTemp();
-                codeGen.emit(TACOp::DIV, temp, $1->tacResult, $3->tacResult);
+                string temp = irGen.newTemp();
+                irGen.emit(TACOp::DIV, temp, $1->tacResult, $3->tacResult);
                 $$->tacResult = temp;
             } else {
-                raiseError("Incompatible Type: " + to_string($1->typeSpecifier) + " and " + to_string($3->typeSpecifier) + " at line " + to_string(yylineno));
+                raiseError("Incompatible Type: " + to_string($1->typeSpecifier) + " and " + to_string($3->typeSpecifier), yylineno);
             }
         }
     }
@@ -610,7 +610,7 @@ multiplicative_expression
         int rhsPointerLevel = $3->pointerLevel;
         int lhsPointerLevel = $1->pointerLevel;
         if (rhsPointerLevel || lhsPointerLevel) {
-            raiseError("Invalid operands to binary '%' — multiplication involving pointer types is not allowed at line " + to_string(yylineno));
+            raiseError("Invalid operands to binary '%' — multiplication involving pointer types is not allowed", yylineno);
         } else {
             $$->isLValue = false; 
             if (($1->typeSpecifier == 3 || $1->typeSpecifier == 4) && 
@@ -618,11 +618,11 @@ multiplicative_expression
                 isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "%")) {
                 typeCastFunction($1, $3);
                 $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
-                string temp = codeGen.newTemp();
-                codeGen.emit(TACOp::MOD, temp, $1->tacResult, $3->tacResult);
+                string temp = irGen.newTemp();
+                irGen.emit(TACOp::MOD, temp, $1->tacResult, $3->tacResult);
                 $$->tacResult = temp;
             } else {
-                raiseError("Incompatible Type: " + to_string($1->typeSpecifier) + " and " + to_string($3->typeSpecifier) + " at line " + to_string(yylineno));
+                raiseError("Incompatible Type: " + to_string($1->typeSpecifier) + " and " + to_string($3->typeSpecifier), yylineno);
             }
         }
     }
@@ -639,24 +639,24 @@ additive_expression
         int lhsPointerLevel = $1->pointerLevel;
         if (rhsPointerLevel && lhsPointerLevel) {
             raiseError("Invalid operands to binary '+' — cannot add two pointers (LHS pointer level: " + 
-                       to_string(lhsPointerLevel) + ", RHS pointer level: " + to_string(rhsPointerLevel) + ") at line "+ to_string(yylineno));
+                       to_string(lhsPointerLevel) + ", RHS pointer level: " + to_string(rhsPointerLevel) + ")", yylineno);
         } else {
             $$->isLValue = false; 
             $$->pointerLevel = lhsPointerLevel + rhsPointerLevel;
             if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "+")) {
                 $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
                 typeCastFunction($1, $3);
-                string temp = codeGen.newTemp(); 
+                string temp = irGen.newTemp(); 
                 if ($1->typeCategory == 2 || $3->typeCategory == 2) {
                     $$->typeCategory = 2;
                 } else {
                     $$->typeCategory = 0;
                 }
-                codeGen.emit(TACOp::ADD, temp, $1->tacResult, $3->tacResult);
+                irGen.emit(TACOp::ADD, temp, $1->tacResult, $3->tacResult);
                 $$->tacResult = temp;
             } else {
                 raiseError("Incompatible Type: " + to_string($1->typeSpecifier) + " and " + 
-                           to_string($3->typeSpecifier) + " at line " + to_string(yylineno));
+                           to_string($3->typeSpecifier), yylineno);
             }
         }
     }
@@ -668,7 +668,7 @@ additive_expression
         int lhsPointerLevel = $1->pointerLevel;
         if (rhsPointerLevel && lhsPointerLevel) {
             raiseError("Invalid operands to binary '-' — cannot subtract two pointers (LHS pointer level: " + 
-                       to_string(lhsPointerLevel) + ", RHS pointer level: " + to_string(rhsPointerLevel) + ") at line " + to_string(yylineno));
+                       to_string(lhsPointerLevel) + ", RHS pointer level: " + to_string(rhsPointerLevel) + ")", yylineno);
         } else {
             $$->pointerLevel = lhsPointerLevel + rhsPointerLevel;
             if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "-")) {
@@ -677,12 +677,12 @@ additive_expression
                 if ($1->typeCategory == 2 || $3->typeCategory == 2) {
                     $$->typeCategory = 2;
                 }
-                string temp = codeGen.newTemp();
-                codeGen.emit(TACOp::SUB, temp, $1->tacResult, $3->tacResult);
+                string temp = irGen.newTemp();
+                irGen.emit(TACOp::SUB, temp, $1->tacResult, $3->tacResult);
                 $$->tacResult = temp; 
             } else {
                 raiseError("Incompatible Type: " + to_string($1->typeSpecifier) + " and " + 
-                           to_string($3->typeSpecifier) + " at line " + to_string(yylineno));
+                           to_string($3->typeSpecifier), yylineno);
             }
         }
     }
@@ -699,7 +699,7 @@ shift_expression
         int lhsPointerLevel = $1->pointerLevel;
         if (rhsPointerLevel || lhsPointerLevel) {
             raiseError("Invalid operands to binary '<<' — shift operations require integral types, but got pointer types (LHS pointer level: " + 
-                       to_string(lhsPointerLevel) + ", RHS pointer level: " + to_string(rhsPointerLevel) + ") at line " + to_string(yylineno));
+                       to_string(lhsPointerLevel) + ", RHS pointer level: " + to_string(rhsPointerLevel) + ")", yylineno);
         } else {
             $$->isLValue = false; 
             if (($1->typeSpecifier == 3 || $1->typeSpecifier == 4) && 
@@ -707,12 +707,12 @@ shift_expression
                 (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "<<"))) {
                 typeCastFunction($1, $3);
                 $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
-                string temp = codeGen.newTemp();
-                codeGen.emit(TACOp::LSHFT, temp, $1->tacResult, $3->tacResult);
+                string temp = irGen.newTemp();
+                irGen.emit(TACOp::LSHFT, temp, $1->tacResult, $3->tacResult);
                 $$->tacResult = temp;
             } else {
                 raiseError("Incompatible Type: " + to_string($1->typeSpecifier) + " and " + 
-                           to_string($3->typeSpecifier) + " at line " + to_string(yylineno));
+                           to_string($3->typeSpecifier), yylineno);
             }
         }
     }
@@ -724,19 +724,19 @@ shift_expression
         int lhsPointerLevel = $1->pointerLevel;
         if (rhsPointerLevel || lhsPointerLevel) {
             raiseError("Invalid operands to binary '>>' — shift operations require integral types, but got pointer types (LHS pointer level: " + 
-                       to_string(lhsPointerLevel) + ", RHS pointer level: " + to_string(rhsPointerLevel) + ") at line " + to_string(yylineno));
+                       to_string(lhsPointerLevel) + ", RHS pointer level: " + to_string(rhsPointerLevel) + ")", yylineno);
         } else {
             if (($1->typeSpecifier == 3 || $1->typeSpecifier == 4) && 
                 ($3->typeSpecifier == 3 || $3->typeSpecifier == 4) && 
                 (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, ">>"))) {
                 $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
                 typeCastFunction($1, $3);
-                string temp = codeGen.newTemp();
-                codeGen.emit(TACOp::RSHFT, temp, $1->tacResult, $3->tacResult);
+                string temp = irGen.newTemp();
+                irGen.emit(TACOp::RSHFT, temp, $1->tacResult, $3->tacResult);
                 $$->tacResult = temp; 
             } else {
                 raiseError("Incompatible Type: " + to_string($1->typeSpecifier) + " and " + 
-                           to_string($3->typeSpecifier) + " at line " + to_string(yylineno));
+                           to_string($3->typeSpecifier), yylineno);
             }
         }
     }
@@ -752,19 +752,19 @@ relational_expression
         int lhsPointerLevel = $1->pointerLevel;
         if (rhsPointerLevel != lhsPointerLevel) {
             raiseError("Invalid operands to binary '<' — relational comparison requires arithmetic types, but one or both operands are pointers (LHS pointer level: " + 
-                       to_string(lhsPointerLevel) + ", RHS pointer level: " + to_string(rhsPointerLevel) + ") at line " + to_string(yylineno));
+                       to_string(lhsPointerLevel) + ", RHS pointer level: " + to_string(rhsPointerLevel) + ")", yylineno);
         } else {
             $$->isLValue = false; 
             if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "<")) {
                 $$->typeSpecifier = 3;
                 typeCastFunction($1, $3, true);
                 backTrackRelExpr($$);
-                $$->tacResult = codeGen.newTemp();
-                codeGen.emit(TACOp::LT, "", $1->tacResult, $3->tacResult, true);
-                codeGen.emit(TACOp::oth, "", nullopt, nullopt, true);
+                $$->tacResult = irGen.newTemp();
+                irGen.emit(TACOp::LT, "", $1->tacResult, $3->tacResult, true);
+                irGen.emit(TACOp::oth, "", nullopt, nullopt, true);
             } else {
                 raiseError("Incompatible Type: " + to_string($1->typeSpecifier) + " and " + 
-                           to_string($3->typeSpecifier) + " at line " + to_string(yylineno));
+                           to_string($3->typeSpecifier), yylineno);
             } 
         }
     }
@@ -777,18 +777,18 @@ relational_expression
         int lhsPointerLevel = $1->pointerLevel;
         if (rhsPointerLevel != lhsPointerLevel) {
             raiseError("Invalid operands to binary '>' — relational comparison requires arithmetic types, but one or both operands are pointers (LHS pointer level: " + 
-                       to_string(lhsPointerLevel) + ", RHS pointer level: " + to_string(rhsPointerLevel) + ") at line " + to_string(yylineno));
+                       to_string(lhsPointerLevel) + ", RHS pointer level: " + to_string(rhsPointerLevel) + ")", yylineno);
         } else {
             if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, ">")) {
                 $$->typeSpecifier = 3;
                 typeCastFunction($1, $3, true);
                 backTrackRelExpr($$);
-                codeGen.emit(TACOp::GT, "", $1->tacResult, $3->tacResult, true);
-                codeGen.emit(TACOp::oth, "", nullopt, nullopt, true);
-                $$->tacResult = codeGen.newTemp();
+                irGen.emit(TACOp::GT, "", $1->tacResult, $3->tacResult, true);
+                irGen.emit(TACOp::oth, "", nullopt, nullopt, true);
+                $$->tacResult = irGen.newTemp();
             } else {
                 raiseError("Incompatible Type: " + to_string($1->typeSpecifier) + " and " + 
-                           to_string($3->typeSpecifier) + " at line " + to_string(yylineno));
+                           to_string($3->typeSpecifier), yylineno);
             } 
         }
     }
@@ -801,18 +801,18 @@ relational_expression
         int lhsPointerLevel = $1->pointerLevel;
         if (rhsPointerLevel != lhsPointerLevel) {
             raiseError("Invalid operands to binary '<=' — relational comparison requires arithmetic types, but one or both operands are pointers (LHS pointer level: " + 
-                       to_string(lhsPointerLevel) + ", RHS pointer level: " + to_string(rhsPointerLevel) + ") at line " + to_string(yylineno));
+                       to_string(lhsPointerLevel) + ", RHS pointer level: " + to_string(rhsPointerLevel) + ")", yylineno);
         } else {
             if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "<=")) {
                 $$->typeSpecifier = 3;
                 typeCastFunction($1, $3, true);
                 backTrackRelExpr($$);
-                codeGen.emit(TACOp::LE, "", $1->tacResult, $3->tacResult, true);
-                codeGen.emit(TACOp::oth, "", nullopt, nullopt, true);
-                $$->tacResult = codeGen.newTemp();
+                irGen.emit(TACOp::LE, "", $1->tacResult, $3->tacResult, true);
+                irGen.emit(TACOp::oth, "", nullopt, nullopt, true);
+                $$->tacResult = irGen.newTemp();
             } else {
                 raiseError("Incompatible Type: " + to_string($1->typeSpecifier) + " and " + 
-                           to_string($3->typeSpecifier) + " at line " + to_string(yylineno));
+                           to_string($3->typeSpecifier), yylineno);
             }
         }
     }
@@ -825,18 +825,18 @@ relational_expression
         int lhsPointerLevel = $1->pointerLevel;
         if (rhsPointerLevel != lhsPointerLevel ) {
             raiseError("Invalid operands to binary '>=' — relational comparison requires arithmetic types, but one or both operands are pointers (LHS pointer level: " + 
-                       to_string(lhsPointerLevel) + ", RHS pointer level: " + to_string(rhsPointerLevel) + ") at line " + to_string(yylineno));
+                       to_string(lhsPointerLevel) + ", RHS pointer level: " + to_string(rhsPointerLevel) + ")", yylineno);
         } else {
             if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, ">=")) {
                 $$->typeSpecifier = 3;
                 typeCastFunction($1, $3, true);
                 backTrackRelExpr($$);
-                codeGen.emit(TACOp::GE, "", $1->tacResult, $3->tacResult, true);
-                codeGen.emit(TACOp::oth, "", nullopt, nullopt, true);
-                $$->tacResult = codeGen.newTemp();
+                irGen.emit(TACOp::GE, "", $1->tacResult, $3->tacResult, true);
+                irGen.emit(TACOp::oth, "", nullopt, nullopt, true);
+                $$->tacResult = irGen.newTemp();
             } else {
                 raiseError("Incompatible Type: " + to_string($1->typeSpecifier) + " and " + 
-                           to_string($3->typeSpecifier) + " at line " + to_string(yylineno));
+                           to_string($3->typeSpecifier), yylineno);
             } 
         }
     }
@@ -853,18 +853,18 @@ equality_expression
         int lhsPointerLevel = $1->pointerLevel;
         if ((rhsPointerLevel != lhsPointerLevel)) {
             raiseError("Invalid operands to binary '==' — cannot compare values with mismatched pointer levels (LHS pointer level: " + 
-                       to_string(lhsPointerLevel) + ", RHS pointer level: " + to_string(rhsPointerLevel) + ") at line " + to_string(yylineno));
+                       to_string(lhsPointerLevel) + ", RHS pointer level: " + to_string(rhsPointerLevel) + ")", yylineno);
         } else {
             if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "==")) {
                 typeCastFunction($1, $3, true);
                 $$->typeSpecifier = 3;
                 backTrackRelExpr($$);
-                codeGen.emit(TACOp::EQ, "", $1->tacResult, $3->tacResult, true);
-                codeGen.emit(TACOp::oth, "", nullopt, nullopt, true);
-                $$->tacResult = codeGen.newTemp();
+                irGen.emit(TACOp::EQ, "", $1->tacResult, $3->tacResult, true);
+                irGen.emit(TACOp::oth, "", nullopt, nullopt, true);
+                $$->tacResult = irGen.newTemp();
             } else {
                 raiseError("Incompatible Type: " + to_string($1->typeSpecifier) + " and " + 
-                           to_string($3->typeSpecifier) + " at line " + to_string(yylineno));
+                           to_string($3->typeSpecifier), yylineno);
             } 
         }
     }
@@ -877,18 +877,18 @@ equality_expression
         int lhsPointerLevel = $1->pointerLevel;
         if (rhsPointerLevel != lhsPointerLevel) {
             raiseError("Invalid operands to binary '!=' — cannot compare values with mismatched pointer levels (LHS pointer level: " + 
-                       to_string(lhsPointerLevel) + ", RHS pointer level: " + to_string(rhsPointerLevel) + ") at line " + to_string(yylineno));
+                       to_string(lhsPointerLevel) + ", RHS pointer level: " + to_string(rhsPointerLevel) + ")", yylineno);
         } else {
             if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "!=")) {
                 $$->typeSpecifier = 3;
                 typeCastFunction($1, $3, true);
                 backTrackRelExpr($$);
-                codeGen.emit(TACOp::NE, "", $1->tacResult, $3->tacResult, true);
-                codeGen.emit(TACOp::oth, "", nullopt, nullopt, true);
-                $$->tacResult = codeGen.newTemp();
+                irGen.emit(TACOp::NE, "", $1->tacResult, $3->tacResult, true);
+                irGen.emit(TACOp::oth, "", nullopt, nullopt, true);
+                $$->tacResult = irGen.newTemp();
             } else {
                 raiseError("Incompatible Type: " + to_string($1->typeSpecifier) + " and " + 
-                           to_string($3->typeSpecifier) + " at line " + to_string(yylineno));
+                           to_string($3->typeSpecifier), yylineno);
             }
         }
     }
@@ -904,19 +904,19 @@ and_expression
         int lhsPointerLevel = $1->pointerLevel;
         if (rhsPointerLevel || lhsPointerLevel) {
             raiseError("Invalid operands to binary '&' — bitwise operations require integral types, but found pointer operand(s) (LHS pointer level: " + 
-                       to_string(lhsPointerLevel) + ", RHS pointer level: " + to_string(rhsPointerLevel) + ") at line " + to_string(yylineno));
+                       to_string(lhsPointerLevel) + ", RHS pointer level: " + to_string(rhsPointerLevel) + ")", yylineno);
         } else {
             if (($1->typeSpecifier == 3 || $1->typeSpecifier == 4) &&
                 ($3->typeSpecifier == 3 || $3->typeSpecifier == 4) &&
                 (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "&"))) {
                 $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
                 typeCastFunction($1, $3);
-                string temp = codeGen.newTemp();
-                codeGen.emit(TACOp::BIT_AND, temp, $1->tacResult, $3->tacResult);
+                string temp = irGen.newTemp();
+                irGen.emit(TACOp::BIT_AND, temp, $1->tacResult, $3->tacResult);
                 $$->tacResult = temp;
             } else {
                 raiseError("Incompatible Type: " + to_string($1->typeSpecifier) + " and " + 
-                           to_string($3->typeSpecifier) + " at line " + to_string(yylineno));
+                           to_string($3->typeSpecifier), yylineno);
             }
         }
     }
@@ -930,7 +930,7 @@ exclusive_or_expression
         int lhsPointerLevel = $1->pointerLevel;
         if (rhsPointerLevel || lhsPointerLevel) {
             raiseError("Invalid operands to binary '^' — bitwise operations require integral types, but found pointer operand(s) (LHS pointer level: " + 
-                       to_string(lhsPointerLevel) + ", RHS pointer level: " + to_string(rhsPointerLevel) + ") at line " + to_string(yylineno));
+                       to_string(lhsPointerLevel) + ", RHS pointer level: " + to_string(rhsPointerLevel) + ")", yylineno);
         } else {
             $$ = createNode(NODE_EXCLUSIVE_OR_EXPRESSION, $2, $1, $3);
             $$->isLValue = false;
@@ -939,12 +939,12 @@ exclusive_or_expression
                 (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "^"))) {
                 $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
                 typeCastFunction($1, $3);
-                string temp = codeGen.newTemp();
-                codeGen.emit(TACOp::BIT_XOR, temp, $1->tacResult, $3->tacResult);
+                string temp = irGen.newTemp();
+                irGen.emit(TACOp::BIT_XOR, temp, $1->tacResult, $3->tacResult);
                 $$->tacResult = temp;
             } else {
                 raiseError("Incompatible Type: " + to_string($1->typeSpecifier) + " and " + 
-                           to_string($3->typeSpecifier) + " at line " + to_string(yylineno));
+                           to_string($3->typeSpecifier), yylineno);
             }
         }
     }
@@ -958,7 +958,7 @@ inclusive_or_expression
         int lhsPointerLevel = $1->pointerLevel;
         if (rhsPointerLevel || lhsPointerLevel) {
             raiseError("Invalid operands to binary '|' — bitwise operations require integral types, but found pointer operand(s) (LHS pointer level: " + 
-                       to_string(lhsPointerLevel) + ", RHS pointer level: " + to_string(rhsPointerLevel) + ") at line " + to_string(yylineno));
+                       to_string(lhsPointerLevel) + ", RHS pointer level: " + to_string(rhsPointerLevel) + ")", yylineno);
         } else {
             $$ = createNode(NODE_INCLUSIVE_OR_EXPRESSION, $2 , $1, $3);
             $$->isLValue = false;
@@ -967,12 +967,12 @@ inclusive_or_expression
                 (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "|"))) {
                 $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
                 typeCastFunction($1, $3, false);
-                string temp = codeGen.newTemp();
-                codeGen.emit(TACOp::BIT_OR, temp, $1->tacResult, $3->tacResult);
+                string temp = irGen.newTemp();
+                irGen.emit(TACOp::BIT_OR, temp, $1->tacResult, $3->tacResult);
                 $$->tacResult = temp;
             } else {
                 raiseError("Incompatible Type: " + to_string($1->typeSpecifier) + " and " + 
-                           to_string($3->typeSpecifier) + " at line " + to_string(yylineno));
+                           to_string($3->typeSpecifier), yylineno);
             }
         }
     }
@@ -985,13 +985,13 @@ logical_and_expression
     | logical_and_expression {
         if (!$1->isLogical) {
             backpatchNode* curr = $1->trueList;
-            backpatchNode* next = Backpatch::addToBackpatchList(curr, codeGen.currentInstrIndex);
+            backpatchNode* next = Backpatch::addToBackpatchList(curr, irGen.currentInstrIndex);
             $1->trueList = next;
             curr = $1->falseList;
-            next = Backpatch::addToBackpatchList(curr, codeGen.currentInstrIndex + 1);
+            next = Backpatch::addToBackpatchList(curr, irGen.currentInstrIndex + 1);
             $1->falseList = next;
-            codeGen.emit(TACOp::NE, "", $1->tacResult, "0", true);
-            codeGen.emit(TACOp::oth, "", nullopt, nullopt, true);
+            irGen.emit(TACOp::NE, "", $1->tacResult, "0", true);
+            irGen.emit(TACOp::oth, "", nullopt, nullopt, true);
         }
     } LOGICAL_AND_OPERATOR M inclusive_or_expression { 
         int rhsPointerLevel = $5->pointerLevel;
@@ -1005,22 +1005,22 @@ logical_and_expression
             typeCastFunction($1, $5, true);
             if (!$5->isLogical) {
                 backpatchNode* curr = $5->trueList;
-                backpatchNode* next = Backpatch::addToBackpatchList(curr, codeGen.currentInstrIndex);
+                backpatchNode* next = Backpatch::addToBackpatchList(curr, irGen.currentInstrIndex);
                 $5->trueList = next;
                 curr = $5->falseList;
-                next = Backpatch::addToBackpatchList(curr, codeGen.currentInstrIndex + 1);
+                next = Backpatch::addToBackpatchList(curr, irGen.currentInstrIndex + 1);
                 $5->falseList = next;
-                codeGen.emit(TACOp::NE, "", $5->tacResult, "0", true);
-                codeGen.emit(TACOp::oth, "", nullopt, nullopt, true);
+                irGen.emit(TACOp::NE, "", $5->tacResult, "0", true);
+                irGen.emit(TACOp::oth, "", nullopt, nullopt, true);
             }
-            string temp = codeGen.newTemp();
+            string temp = irGen.newTemp();
             $$->tacResult = temp; 
             Backpatch::backpatch($1->trueList, $4->tacResult);
             $$->trueList = $5->trueList;
             $$->falseList = Backpatch::mergeBackpatchLists($1->falseList, $5->falseList);
         } else {
             raiseError("Incompatible Type: " + to_string($1->typeSpecifier) + " and " + 
-                       to_string($5->typeSpecifier) + " at line " + to_string(yylineno));
+                       to_string($5->typeSpecifier), yylineno);
         }
     }
     ;
@@ -1030,13 +1030,13 @@ logical_or_expression
     | logical_or_expression {
         if (!$1->isLogical) {
             backpatchNode* curr = $1->trueList;
-            backpatchNode* next = Backpatch::addToBackpatchList(curr, codeGen.currentInstrIndex);
+            backpatchNode* next = Backpatch::addToBackpatchList(curr, irGen.currentInstrIndex);
             $1->trueList = next;
             curr = $1->falseList;
-            next = Backpatch::addToBackpatchList(curr, codeGen.currentInstrIndex + 1);
+            next = Backpatch::addToBackpatchList(curr, irGen.currentInstrIndex + 1);
             $1->falseList = next;
-            codeGen.emit(TACOp::NE, "", $1->tacResult, "0", true);
-            codeGen.emit(TACOp::oth, "", nullopt, nullopt, true);
+            irGen.emit(TACOp::NE, "", $1->tacResult, "0", true);
+            irGen.emit(TACOp::oth, "", nullopt, nullopt, true);
         }
     } LOGICAL_OR_OPERATOR M logical_and_expression { 
         int rhsPointerLevel = $5->pointerLevel;
@@ -1050,22 +1050,22 @@ logical_or_expression
             typeCastFunction($1, $5, true);
             if (!$5->isLogical) {
                 backpatchNode* curr = $5->trueList;
-                backpatchNode* next = Backpatch::addToBackpatchList(curr, codeGen.currentInstrIndex);
+                backpatchNode* next = Backpatch::addToBackpatchList(curr, irGen.currentInstrIndex);
                 $5->trueList = next;
                 curr = $5->falseList;
-                next = Backpatch::addToBackpatchList(curr, codeGen.currentInstrIndex + 1);
+                next = Backpatch::addToBackpatchList(curr, irGen.currentInstrIndex + 1);
                 $5->falseList = next;
-                codeGen.emit(TACOp::NE, "", $5->tacResult, "0", true);
-                codeGen.emit(TACOp::oth, "", nullopt, nullopt, true);
+                irGen.emit(TACOp::NE, "", $5->tacResult, "0", true);
+                irGen.emit(TACOp::oth, "", nullopt, nullopt, true);
             }
-            string temp = codeGen.newTemp();
+            string temp = irGen.newTemp();
             $$->tacResult = temp; 
             Backpatch::backpatch($1->falseList, $4->tacResult);
             $$->falseList = $5->falseList;
             $$->trueList = Backpatch::mergeBackpatchLists($1->trueList, $5->trueList);
         } else {
             raiseError("Incompatible Type: " + to_string($1->typeSpecifier) + " and " + 
-                       to_string($5->typeSpecifier) + " at line " + to_string(yylineno));
+                       to_string($5->typeSpecifier), yylineno);
         }
     }
     ;
@@ -1073,7 +1073,7 @@ logical_or_expression
 M
     : {
         $$ = new TreeNode(OTHERS);
-        $$->tacResult = to_string(codeGen.currentInstrIndex);
+        $$->tacResult = to_string(irGen.currentInstrIndex);
     }
     ;
 
@@ -1086,72 +1086,72 @@ assignment_expression
         int rhsPointerLevel = $3->pointerLevel;
         int lhsPointerLevel = $1->pointerLevel;
         if(((lhsPointerLevel == 1 && rhsPointerLevel == 1)&&($1->typeSpecifier != $3->typeSpecifier)) && ($3->typeSpecifier != 9)){
-        raiseError("Incompatible pointer types in assignment — LHS is of type '" + typeName($1->typeSpecifier) + "*', RHS is of type '" + typeName($3->typeSpecifier) + "*' at line " + to_string(yylineno)); 
+        raiseError("Incompatible pointer types in assignment — LHS is of type '" + typeName($1->typeSpecifier) + "*', RHS is of type '" + typeName($3->typeSpecifier) + "*'", yylineno); 
         }
         else if ((rhsPointerLevel != lhsPointerLevel)) {
             raiseError("Incompatible types in compound assignment — pointer levels do not match (LHS has level " + 
-                       to_string(lhsPointerLevel) + ", RHS has level " + to_string(rhsPointerLevel) + ") at line " + to_string(yylineno));
+                       to_string(lhsPointerLevel) + ", RHS has level " + to_string(rhsPointerLevel) + ")", yylineno);
         } else {
             if (!$1->isLValue) {
-                raiseError("Left operand of assignment must be an L-value at line " + to_string(yylineno));
+                raiseError("Left operand of assignment must be an L-value", yylineno);
             }
             if ($1->isConst) {
-                raiseError("Left operand of assignment is constant at line " + to_string(yylineno));
+                raiseError("Left operand of assignment is constant", yylineno);
             }
             string op = $2->value;
             if (op == "=") {
                 if($3->typeSpecifier == 9 && $1->pointerLevel == 1){
                 }
                 else if($3->typeSpecifier == 9 && $1->pointerLevel == 0){
-                    raiseError("Null pointer should be assigned to pointer but LHS in non-pointerType at line " + to_string(yylineno));
+                    raiseError("Null pointer should be assigned to pointer but LHS in non-pointerType", yylineno);
                 }
                 else if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, op)) {
                     $$->typeSpecifier = $1->typeSpecifier;
                     if ($1->typeSpecifier != $3->typeSpecifier) {
-                        string temp = codeGen.newTemp();
-                        codeGen.emit(TACOp::TYPECAST, temp, typeCastInfo($1->typeSpecifier, $3->typeSpecifier), $3->tacResult);
+                        string temp = irGen.newTemp();
+                        irGen.emit(TACOp::TYPECAST, temp, typeCastInfo($1->typeSpecifier, $3->typeSpecifier), $3->tacResult);
                         $3->tacResult = temp;
                     }
                 } else {
                     raiseError("Incompatible types in assignment: " + to_string($1->typeSpecifier) + " and " + 
-                               to_string($3->typeSpecifier) + " at line " + to_string(yylineno));
+                               to_string($3->typeSpecifier), yylineno);
                 }
             } else {
                 if ($1->typeSpecifier < 0 || $1->typeSpecifier > 6) { 
                     raiseError("Compound assignment requires numeric type, got " + 
-                               to_string($1->typeSpecifier) + " at line " + to_string(yylineno));
+                               to_string($1->typeSpecifier), yylineno);
                 }
                 if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, op)) {
                     $$->typeSpecifier = $1->typeSpecifier;
                     if ($1->typeSpecifier != $3->typeSpecifier) {
-                        string temp = codeGen.newTemp();
-                        codeGen.emit(TACOp::TYPECAST, temp, typeCastInfo($1->typeSpecifier, $3->typeSpecifier), $3->tacResult);
+                        string temp = irGen.newTemp();
+                        irGen.emit(TACOp::TYPECAST, temp, typeCastInfo($1->typeSpecifier, $3->typeSpecifier), $3->tacResult);
                         $3->tacResult = temp;
                     }
                 } else {
                     raiseError("Incompatible types in compound assignment: " + to_string($1->typeSpecifier) + " and " + 
-                               to_string($3->typeSpecifier) + " at line " + to_string(yylineno));
+                               to_string($3->typeSpecifier), yylineno);
                 }
             }
             string opr = $2->value;
             if ($3->trueList || $3->falseList) {
-                Backpatch::backpatch($3->trueList, to_string(codeGen.currentInstrIndex));
-                Backpatch::backpatch($3->falseList, to_string(codeGen.currentInstrIndex + 1));
+                Backpatch::backpatch($3->trueList, to_string(irGen.currentInstrIndex));
+                Backpatch::backpatch($3->falseList, to_string(irGen.currentInstrIndex + 1));
                 if ($2->value == "=") {
-                    codeGen.emit(TACOp::oth, $1->tacResult, "1", nullopt);
+                    irGen.emit(TACOp::oth, $1->tacResult, "1", nullopt);
                 } else {
-                    codeGen.emit(assignToOp(opr[0]), $1->tacResult, $1->tacResult, "1");
+                    irGen.emit(assignToOp(opr[0]), $1->tacResult, $1->tacResult, "1");
                 }
                 if ($2->value == "=") {
-                    codeGen.emit(TACOp::oth, $1->tacResult, "0", nullopt);
+                    irGen.emit(TACOp::oth, $1->tacResult, "0", nullopt);
                 } else {
-                    codeGen.emit(assignToOp(opr[0]), $1->tacResult, $1->tacResult, "0");
+                    irGen.emit(assignToOp(opr[0]), $1->tacResult, $1->tacResult, "0");
                 }
             } else {
                 if ($2->value == "=") {
-                    codeGen.emit(TACOp::ASSIGN, $1->tacResult, $3->tacResult, nullopt);
+                    irGen.emit(TACOp::ASSIGN, $1->tacResult, $3->tacResult, nullopt);
                 } else {
-                    codeGen.emit(assignToOp(opr[0]), $1->tacResult, $3->tacResult, $3->tacResult);
+                    irGen.emit(assignToOp(opr[0]), $1->tacResult, $3->tacResult, $3->tacResult);
                 }
             }
             $$->tacResult = $1->tacResult;
@@ -1187,13 +1187,13 @@ single_expression
         $$ = $1;
         if (!$1->isLogical) {
             backpatchNode* curr = $1->trueList;
-            backpatchNode* next = Backpatch::addToBackpatchList(curr, codeGen.currentInstrIndex);
+            backpatchNode* next = Backpatch::addToBackpatchList(curr, irGen.currentInstrIndex);
             $$->trueList = next;
             curr = $1->falseList;
-            next = Backpatch::addToBackpatchList(curr, codeGen.currentInstrIndex + 1);
+            next = Backpatch::addToBackpatchList(curr, irGen.currentInstrIndex + 1);
             $$->falseList = next;
-            codeGen.emit(TACOp::NE, "", $1->tacResult, "0", true);
-            codeGen.emit(TACOp::oth, "", nullopt, nullopt, true);
+            irGen.emit(TACOp::NE, "", $1->tacResult, "0", true);
+            irGen.emit(TACOp::oth, "", nullopt, nullopt, true);
         }
     }
     ;
@@ -1213,7 +1213,7 @@ declaration
         }
         if (isCustom) {
             if ($1->children.size() > 1) {
-                raiseError("Type Qualifier or Storage Class Specifier is not allowed to be used with struct or union at line " + to_string(yylineno));
+                raiseError("Type Qualifier or Storage Class Specifier is not allowed to be used with struct or union", yylineno);
                 isCustom = false;
                 break;
             }
@@ -1331,7 +1331,7 @@ struct_specifier
         auto checkDuplicate = [&](const string &name) {
             for (const auto &entry : currentTable->symbolTable) {
                 if (entry.first == name) {
-                    raiseError("Duplicate declaration of '" + name + "' at line " + to_string(yylineno));
+                    raiseError("Duplicate declaration of '" + name + "'", yylineno);
                     return true;
                 }
             }
@@ -1513,11 +1513,11 @@ statement
     }
     | selection_statement { 
         $$ = $1;
-        Backpatch::backpatch($1->nextList, to_string(codeGen.currentInstrIndex)); 
+        Backpatch::backpatch($1->nextList, to_string(irGen.currentInstrIndex)); 
     }
     | iteration_statement { 
         $$ = $1;
-        Backpatch::backpatch($1->nextList, to_string(codeGen.currentInstrIndex)); 
+        Backpatch::backpatch($1->nextList, to_string(irGen.currentInstrIndex)); 
     }
     | jump_statement { 
         $$ = $1; 
@@ -1532,12 +1532,12 @@ io_statement
         $3->tacResult = $3->value;
         $$ = createNode(NODE_IO_STATEMENT, "", $1, $3);  
         if (!checkFormatSpecifiers($3->value, {})) {
-            raiseError("Format string in printf has specifiers but no arguments provided at line " + to_string(yylineno));
+            raiseError("Format string in printf has specifiers but no arguments provided", yylineno);
             $$ = nullptr;
         } else {
-            string temp = codeGen.newTemp();
-            codeGen.emit(TACOp::PARAM, $3->tacResult);
-            codeGen.emit(TACOp::CALL, temp, "printf", "1");   
+            string temp = irGen.newTemp();
+            irGen.emit(TACOp::PARAM, $3->tacResult);
+            irGen.emit(TACOp::CALL, temp, "printf", "1");   
             $$->tacResult = temp;
         }
     }
@@ -1546,23 +1546,23 @@ io_statement
         $$ = createNode(NODE_IO_STATEMENT, "", $1, $3, $5);          
         vector<int> types = typeExtract($5);
         if (!checkFormatSpecifiers($3->value, types)) {
-            raiseError("Type mismatch between format specifiers and arguments in printf at line " + to_string(yylineno));
+            raiseError("Type mismatch between format specifiers and arguments in printf", yylineno);
             $$ = nullptr;
         } else {
-            codeGen.emit(TACOp::PARAM, $3->tacResult);
+            irGen.emit(TACOp::PARAM, $3->tacResult);
             int paramCount = 1;
             for (auto* arg : $5->children) {
                 if (arg->trueList || arg->falseList) {
-                    Backpatch::backpatch(arg->trueList, to_string(codeGen.currentInstrIndex));
-                    Backpatch::backpatch(arg->falseList, to_string(codeGen.currentInstrIndex + 1));
-                    codeGen.emit(TACOp::NE, "", arg->tacResult, "0", true);
-                    codeGen.emit(TACOp::oth, "", nullopt, nullopt, true);
+                    Backpatch::backpatch(arg->trueList, to_string(irGen.currentInstrIndex));
+                    Backpatch::backpatch(arg->falseList, to_string(irGen.currentInstrIndex + 1));
+                    irGen.emit(TACOp::NE, "", arg->tacResult, "0", true);
+                    irGen.emit(TACOp::oth, "", nullopt, nullopt, true);
                 }
-                codeGen.emit(TACOp::PARAM, arg->tacResult);
+                irGen.emit(TACOp::PARAM, arg->tacResult);
                 paramCount++;
             }
-            string temp = codeGen.newTemp();
-            codeGen.emit(TACOp::CALL, temp, "printf", to_string(paramCount));
+            string temp = irGen.newTemp();
+            irGen.emit(TACOp::CALL, temp, "printf", to_string(paramCount));
             $$->tacResult = temp;   
         }
     }
@@ -1571,32 +1571,32 @@ io_statement
         $$ = createNode(NODE_IO_STATEMENT, "", $1, $3, $5); 
         vector<int> types = typeExtract($5);
         if (!checkFormatSpecifiers($3->value, types)) {
-            raiseError("Type mismatch between format specifiers and arguments in scanf at line " + to_string(yylineno));
+            raiseError("Type mismatch between format specifiers and arguments in scanf", yylineno);
             $$ = nullptr;
         } else {
             bool check = true;
             for (auto* arg : $5->children) {
                 if (!arg->isLValue || arg->pointerLevel < 1) {
-                    raiseError("scanf argument must be an l-value pointer at line " + to_string(yylineno));
+                    raiseError("scanf argument must be an l-value pointer", yylineno);
                     check = false;
                     break;
                 }
             }
             if (check) {
-                codeGen.emit(TACOp::PARAM, $3->tacResult);
+                irGen.emit(TACOp::PARAM, $3->tacResult);
                 int paramCount = 1;
                 for (auto* arg : $5->children) {
                     if (arg->trueList || arg->falseList) {
-                        Backpatch::backpatch(arg->trueList, to_string(codeGen.currentInstrIndex));
-                        Backpatch::backpatch(arg->falseList, to_string(codeGen.currentInstrIndex + 1));
-                        codeGen.emit(TACOp::NE, "", arg->tacResult, "0", true);
-                        codeGen.emit(TACOp::oth, "", nullopt, nullopt, true);
+                        Backpatch::backpatch(arg->trueList, to_string(irGen.currentInstrIndex));
+                        Backpatch::backpatch(arg->falseList, to_string(irGen.currentInstrIndex + 1));
+                        irGen.emit(TACOp::NE, "", arg->tacResult, "0", true);
+                        irGen.emit(TACOp::oth, "", nullopt, nullopt, true);
                     }
-                    codeGen.emit(TACOp::PARAM, arg->tacResult);
+                    irGen.emit(TACOp::PARAM, arg->tacResult);
                     paramCount++;
                 }
-                string temp = codeGen.newTemp();
-                codeGen.emit(TACOp::CALL, temp, "scanf", to_string(paramCount));
+                string temp = irGen.newTemp();
+                irGen.emit(TACOp::CALL, temp, "scanf", to_string(paramCount));
                 $$->tacResult = temp;   
             }
         }
@@ -1606,34 +1606,34 @@ io_statement
 labeled_statement
     : ID {
         if (labelToBeDefined.top().find($1->value) != labelToBeDefined.top().end()) {
-            Backpatch::backpatch(labelToBeDefined.top()[$1->value], to_string(codeGen.currentInstrIndex));
+            Backpatch::backpatch(labelToBeDefined.top()[$1->value], to_string(irGen.currentInstrIndex));
             labelToBeDefined.top().erase($1->value);
         }
         $1->typeCategory = 7;
         $1->typeSpecifier = 9;
-        $1->tacResult = to_string(codeGen.currentInstrIndex);
+        $1->tacResult = to_string(irGen.currentInstrIndex);
         insertSymbol($1->value, $1);
-        codeGen.emit(TACOp::LABEL, $1->value);
+        irGen.emit(TACOp::LABEL, $1->value);
     } COLON statement {
         $$ = createNode(NODE_LABELED_STATEMENT, "", $1, $4);
     }
     | KEYWORD_CASE constant_expression COLON M statement {
         if (inSwitch.empty()) {
-            raiseError("case statement must be inside a switch statement at line " + to_string(yylineno));
+            raiseError("case statement must be inside a switch statement", yylineno);
         }
         if (case_id.top().find($2->value) != case_id.top().end()) {
-            raiseError("Duplicate case label '" + $2->value + "' detected in switch statement at line " + to_string(yylineno));
+            raiseError("Duplicate case label '" + $2->value + "' detected in switch statement", yylineno);
         }
         if ($2->typeSpecifier != 1 && $2->typeSpecifier != 2 && $2->typeSpecifier != 3 && $2->typeSpecifier != 4) {
-            raiseError("Case expression must be of an integral or char type, found type " + to_string($2->typeSpecifier) + " at line " + to_string(yylineno));
+            raiseError("Case expression must be of an integral or char type, found type " + to_string($2->typeSpecifier), yylineno);
         }
         if (switch_type != $2->typeSpecifier) {
-            string temp = codeGen.newTemp();
-            codeGen.emit(TACOp::TYPECAST, temp, typeCastInfo(switch_type, $2->typeSpecifier), $2->tacResult); 
+            string temp = irGen.newTemp();
+            irGen.emit(TACOp::TYPECAST, temp, typeCastInfo(switch_type, $2->typeSpecifier), $2->tacResult); 
             $2->tacResult = temp;
         }
         if ($2->isConstVal == 0) {
-            raiseError("Case value '" + $2->value + "' is not a constant expression at line " + to_string(yylineno));
+            raiseError("Case value '" + $2->value + "' is not a constant expression", yylineno);
         }
         case_id.top().insert($2->value);
         $$ = $5;
@@ -1641,9 +1641,9 @@ labeled_statement
     }
     | KEYWORD_DEFAULT COLON M statement {
         if (inSwitch.empty()) {
-            raiseError("default case must be inside a switch statement at line " + to_string(yylineno));
+            raiseError("default case must be inside a switch statement", yylineno);
         } else if (inSwitch.top()) {
-            raiseError("Multiple default cases in switch statement at line " + to_string(yylineno));
+            raiseError("Multiple default cases in switch statement", yylineno);
         } else {
             inSwitch.pop();
             inSwitch.push(true);
@@ -1719,8 +1719,8 @@ selection_statement
         $$->continueList = Backpatch::mergeBackpatchLists($6->continueList, $10->continueList);
     }
     | KEYWORD_SWITCH {
-        switchStack.push(codeGen.currentInstrIndex);
-        codeGen.emit(TACOp::oth, "", nullopt, nullopt, true);
+        switchStack.push(irGen.currentInstrIndex);
+        irGen.emit(TACOp::oth, "", nullopt, nullopt, true);
     } LPAREN expression RPAREN {
         enterScope(); 
         inLoop++; 
@@ -1729,26 +1729,26 @@ selection_statement
         switch_type = $4->typeSpecifier;
     } statement {
         if ($4->typeSpecifier == 1 || $4->typeSpecifier == 2 || $4->typeSpecifier == 3 || $4->typeSpecifier == 4) {
-            $$->nextList = Backpatch::addToBackpatchList($$->nextList, codeGen.currentInstrIndex);
-            codeGen.emit(TACOp::oth, "", nullopt, nullopt, true);
-            codeGen.tacCode[switchStack.top()].result = to_string(codeGen.currentInstrIndex);
+            $$->nextList = Backpatch::addToBackpatchList($$->nextList, irGen.currentInstrIndex);
+            irGen.emit(TACOp::oth, "", nullopt, nullopt, true);
+            irGen.tacCode[switchStack.top()].result = to_string(irGen.currentInstrIndex);
             switchStack.pop();
             backpatchNode* curr = $7->switchList;
             $$->nextList = Backpatch::mergeBackpatchLists($$->nextList, $7->breakList);
             $$->goToList = $7->goToList;
             while (curr) {
-                codeGen.emit(TACOp::EQ, to_string(curr->index), $4->tacResult, curr->exp, true);
+                irGen.emit(TACOp::EQ, to_string(curr->index), $4->tacResult, curr->exp, true);
                 curr = curr->next;
             }
             if ($7->continueList) {
-                codeGen.emit(TACOp::oth, to_string($7->continueList->index), nullopt, nullopt, true);
+                irGen.emit(TACOp::oth, to_string($7->continueList->index), nullopt, nullopt, true);
             }
             exitScope();
             inLoop--;
             inSwitch.pop();
             case_id.pop();
         } else {
-            raiseError("Switch expression must be of an integral or char type, found type " + to_string($4->typeSpecifier) + " at line " + to_string(yylineno));
+            raiseError("Switch expression must be of an integral or char type, found type " + to_string($4->typeSpecifier), yylineno);
             $$ = nullptr;
         }
     }
@@ -1761,7 +1761,7 @@ iteration_statement
     } M statement {
         Backpatch::backpatch($4->trueList, $7->tacResult);
         Backpatch::backpatch($8->nextList, $1->tacResult);
-        codeGen.emit(TACOp::oth, $1->tacResult, nullopt, nullopt, true);
+        irGen.emit(TACOp::oth, $1->tacResult, nullopt, nullopt, true);
         Backpatch::backpatch($8->continueList, $1->tacResult);
         $$->nextList = Backpatch::mergeBackpatchLists($8->breakList, $4->falseList);
         $$->goToList = $8->goToList;
@@ -1784,14 +1784,14 @@ iteration_statement
         enterScope();
     } for_init M for_cond M for_inc RPAREN {
         inLoop++;
-        codeGen.emit(TACOp::oth, $5->tacResult, nullopt, nullopt, true);
+        irGen.emit(TACOp::oth, $5->tacResult, nullopt, nullopt, true);
     } M statement {
         Backpatch::backpatch($6->trueList, $11->tacResult);            
         Backpatch::backpatch($12->nextList, $7->tacResult);
         Backpatch::backpatch($12->continueList, $7->tacResult);
         $$->nextList = Backpatch::mergeBackpatchLists($12->breakList, $6->falseList);
         $$->goToList = $12->goToList;
-        codeGen.emit(TACOp::oth, $7->tacResult, nullopt, nullopt, true);
+        irGen.emit(TACOp::oth, $7->tacResult, nullopt, nullopt, true);
         exitScope();
         inLoop--; 
     }
@@ -1826,58 +1826,58 @@ jump_statement
         $$ = createNode(NODE_JUMP_STATEMENT, "", $1, $2);
         TreeNode* labelNode = lookupSymbol($2->value, true);
         if (!labelNode) {
-            backpatchNode* newList = Backpatch::addToBackpatchList(nullptr, codeGen.currentInstrIndex);
+            backpatchNode* newList = Backpatch::addToBackpatchList(nullptr, irGen.currentInstrIndex);
             labelToBeDefined.top()[$2->value] = Backpatch::mergeBackpatchLists(labelToBeDefined.top()[$2->value], newList);
-            codeGen.emit(TACOp::oth, "", nullopt, nullopt, true);
+            irGen.emit(TACOp::oth, "", nullopt, nullopt, true);
         } else {
-            codeGen.emit(TACOp::GOTO, labelNode->tacResult);
+            irGen.emit(TACOp::GOTO, labelNode->tacResult);
         }
     }
     | KEYWORD_CONTINUE SEMICOLON {
         if (inLoop <= 0) {
-            raiseError("continue statement must be inside a loop at line " + to_string(yylineno));
+            raiseError("continue statement must be inside a loop", yylineno);
         } else if (!inSwitch.empty()) {
-            raiseError("continue statement cannot be used inside a switch statement at line " + to_string(yylineno));
+            raiseError("continue statement cannot be used inside a switch statement", yylineno);
         } else {
             $$ = createNode(NODE_JUMP_STATEMENT, "", $1);
-            $$->continueList = Backpatch::addToBackpatchList(nullptr, codeGen.currentInstrIndex);
-            codeGen.emit(TACOp::oth, "", nullopt, nullopt, true);
+            $$->continueList = Backpatch::addToBackpatchList(nullptr, irGen.currentInstrIndex);
+            irGen.emit(TACOp::oth, "", nullopt, nullopt, true);
         }
     }
     | KEYWORD_BREAK SEMICOLON {
         if (inLoop <= 0) {
-            raiseError("break statement must be inside a loop or switch at line " + to_string(yylineno));
+            raiseError("break statement must be inside a loop or switch", yylineno);
         } else {
             $$ = createNode(NODE_JUMP_STATEMENT, "", $1);
-            $$->breakList = Backpatch::addToBackpatchList(nullptr, codeGen.currentInstrIndex);
-            codeGen.emit(TACOp::oth, "", nullopt, nullopt, true);
+            $$->breakList = Backpatch::addToBackpatchList(nullptr, irGen.currentInstrIndex);
+            irGen.emit(TACOp::oth, "", nullopt, nullopt, true);
         }
     }
     | KEYWORD_RETURN SEMICOLON {
         if (!inFunc) {
-            raiseError("return statement must be inside a function at line " + to_string(yylineno));
+            raiseError("return statement must be inside a function", yylineno);
         } else if (expectedReturnType != -1) {
-            raiseError("Expected return expression in non-void function at line " + to_string(yylineno));
+            raiseError("Expected return expression in non-void function", yylineno);
         } else {
             $$ = createNode(NODE_JUMP_STATEMENT, "", $1);
-            codeGen.emit(TACOp::RETURN, "");
+            irGen.emit(TACOp::RETURN, "");
         }
     }
     | KEYWORD_RETURN expression SEMICOLON {
         if (!inFunc) {
-            raiseError("return statement must be inside a function at line " + to_string(yylineno));
+            raiseError("return statement must be inside a function", yylineno);
         } else if (expectedReturnType == -1) {
-            raiseError("Return statement with value in void function at line " + to_string(yylineno));
+            raiseError("Return statement with value in void function", yylineno);
         } else if (!isTypeCompatible(expectedReturnType, $2->typeSpecifier, "=")) {
-            raiseError("Type mismatch in return statement: expected type " + to_string(expectedReturnType) + ", got type " + to_string($2->typeSpecifier) + " at line " + to_string(yylineno));
+            raiseError("Type mismatch in return statement: expected type " + to_string(expectedReturnType) + ", got type " + to_string($2->typeSpecifier), yylineno);
         } else {
             $$ = createNode(NODE_JUMP_STATEMENT, "", $1, $2);
             if (expectedReturnType != $2->typeSpecifier) {
-                string temp = codeGen.newTemp();
-                codeGen.emit(TACOp::TYPECAST, temp, typeCastInfo(expectedReturnType, $2->typeSpecifier), $2->tacResult);
-                codeGen.emit(TACOp::RETURN, temp);
+                string temp = irGen.newTemp();
+                irGen.emit(TACOp::TYPECAST, temp, typeCastInfo(expectedReturnType, $2->typeSpecifier), $2->tacResult);
+                irGen.emit(TACOp::RETURN, temp);
             } else {
-                codeGen.emit(TACOp::RETURN, $2->tacResult);
+                irGen.emit(TACOp::RETURN, $2->tacResult);
             }
         }
     }
@@ -1952,27 +1952,45 @@ int main(int argc, char **argv)
     labelToBeDefined.push({});
     allTables.push_back(currentTable);
 
-    int result = yyparse();
-    fclose(yyin);
-    printAllTables();
     mkdir("output", 0777);
+    mkdir("error", 0777);
+    mkdir("symTab", 0777);
 
     string inputPath(argv[1]);
     string base = inputPath.substr(inputPath.find_last_of("/\\") + 1);
-    string outName = "output/" + base.substr(0, base.find_last_of('.')) + ".3ac";
-
+    string baseName = base.substr(0, base.find_last_of('.'));
+    string outName = "output/" + baseName + ".3ac";
+    string errName = "error/" + baseName + ".err";
+    string symTabName = "symTab/" + baseName + ".txt";
+    
+    ofstream err(errName);
     ofstream out(outName);
-    if (!out)
+    ofstream sym(symTabName);
+    
+    streambuf *coutbuf = cout.rdbuf();
+    cerr.rdbuf(err.rdbuf());
+    if(!err)
+    {
+        cout << "Error opening error file: " << errName << endl;
+        return 1;
+    }else if (!out)
     {
         cout << "Error opening output file: " << outName << endl;
         return 1;
+    }else if(!sym){
+        cout << "Error opening symtab file: " << symTabName << endl;
+        return 1;
     }
 
-    streambuf *coutbuf = cout.rdbuf();
+    yyparse();
+    fclose(yyin);
+
+    cout.rdbuf(sym.rdbuf());
+    printAllTables();
+    cout.rdbuf(coutbuf);
+
     cout.rdbuf(out.rdbuf());
-
-    codeGen.printTAC();
-
+    irGen.printTAC();
     cout.rdbuf(coutbuf);
 
     return 0;

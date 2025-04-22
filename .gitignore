@@ -17,6 +17,8 @@
 *.exe
 *.out
 output/
+error/
+symTab/
 
 # CMake
 CMakeCache.txt
