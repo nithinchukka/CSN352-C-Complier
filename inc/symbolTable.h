@@ -283,6 +283,32 @@ struct CodeGenerator
 
 CodeGenerator codeGen;
 
+
+string typeName(int p) {
+    if (p == 1) {
+        return "char";
+    }
+    if (p == 2) {
+        return "short";
+    }
+    if (p == 3) {
+        return "int";
+    }
+    if (p == 4) {
+        return "long";
+    }
+    if (p == 6) {
+        return "float";
+    }
+    if (p == 7) {
+        return "double";
+    }
+    if (p == 8) {
+        return "string";
+    }
+    return "invalid type";
+}
+
 struct backpatchNode
 {
     int index;
@@ -614,7 +640,7 @@ DeclaratorInfo isValidVariableDeclaration(vector<TreeNode *> &nodes, bool isFunc
     unordered_map<string, int> storageClasses = {
         {"extern", 0}, {"static", 1}, {"auto", 2}, {"register", 3}};
     unordered_map<string, int> baseTypes = {
-        {"void", 0}, {"char", 1}, {"short", 2}, {"int", 3}, {"long", 5}, {"float", 6}, {"double", 7}};
+        {"void", 0}, {"char", 1}, {"short", 2}, {"int", 3}, {"long", 4}, {"float", 6}, {"double", 7}};
     unordered_set<string> typeModifiers = {"signed", "unsigned"};
     unordered_set<string> qualifiers = {"const", "volatile"};
 
@@ -1059,9 +1085,32 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
                 }
                 return false;
             };
-
             if (firstChild->type == ARRAY)
             {
+                if(declInfo.typeSpecifier==1 && child->children[1]->typeSpecifier == 1){
+                    int string_size = child->children[1]->valueToString().size()-2;
+                    int array_size = stoi(firstChild->children[1]->valueToString());
+                    varName = firstChild->children[0]->valueToString();
+                    if(array_size != string_size){
+                        raiseError("Dimensions doesnt match LHS Dimesnions: " + to_string(array_size)+" and RHS Dimensions: "+ to_string(string_size));
+                    }
+                    else{
+                        vector<string> temp_store;
+                        string s = child->children[1]->valueToString();
+                        for(int i=0;i<array_size;i++){
+                            string temp = codeGen.newTemp();
+                            codeGen.emit(TACOp::ASSIGN, temp,"'"+string(1, s[i + 1])+"'", nullopt);
+                            temp_store.push_back(temp);
+                        }
+                        string temp = codeGen.newTemp();
+                        codeGen.emit(TACOp::ASSIGN, temp , "/0", nullopt);
+                        for(int i=0;i<array_size;i++){
+                            string indexedName = varName + "[" + to_string(i) + "]";
+                            codeGen.emit(TACOp::ASSIGN,indexedName,temp_store[i],nullopt);
+                        }
+                    }
+                }
+                else{
                 vector<int> dimensions = findArrayDimensions(firstChild);
                 while (identifierNode && identifierNode->type == ARRAY)
                 {
@@ -1072,7 +1121,6 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
                 varName = identifierNode->valueToString();
                 if (checkDuplicate(varName))
                     continue;
-
                 int size = child->children.size();
                 if (size == 1 || size == 2)
                 {
@@ -1088,12 +1136,14 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
                         cerr << "Error\n";
                         continue;
                     }
+                    
                     setNodeAttributes(identifierNode, 2, 1);
                     identifierNode->dimensions = dimensions;
                     insertSymbol(varName, identifierNode);
                     identifierNode->offset = offsetStack.top();
                     offsetStack.top() += dimensions[0] * findOffset(declInfo.typeSpecifier);
                 }
+            }
             }
             else if (firstChild->type == NODE_POINTER)
             {
@@ -1106,7 +1156,6 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
                     identifierNode = identifierNode->children[0];
                 }
                 varName = identifierNode->valueToString();
-
                 if (identifierNode->type == ARRAY)
                 {
                     vector<int> dimensions = findArrayDimensions(identifierNode);
@@ -1148,7 +1197,10 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
                     {
                         int lhsPointerlevel = child->children[0]->pointerLevel;
                         int rhsPointerlevel = child->children[1]->pointerLevel;
-                        if (lhsPointerlevel != rhsPointerlevel && !(declInfo.typeSpecifier == 3 && child->children[1]->typeCategory == 2))
+                        if(((lhsPointerlevel == 1 && rhsPointerlevel == 1)&&(declInfo.typeSpecifier != child->children[1]->typeSpecifier)) && (child->children[1]->typeSpecifier != 9)){
+                            raiseError("Incompatible pointer types in assignment — LHS is of type '" + typeName(declInfo.typeSpecifier) + "*', RHS is of type '" + typeName(child->children[1]->typeSpecifier) + "*'."); 
+                            }
+                        else if (lhsPointerlevel != rhsPointerlevel)
                         {
                             cerr << "Error: Invalid pointer initialization for '" << varName << "'\n";
                         }
@@ -1180,17 +1232,23 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
                                 }
                                 setNodeAttributes(identifierNode, 1, pointerDepth);
                                 insertSymbol(varName, identifierNode);
-                                if (child->children[1]->trueList || child->children[1]->falseList)
-                                {
-                                    Backpatch::backpatch(child->children[1]->trueList, to_string(codeGen.currentInstrIndex));
-                                    Backpatch::backpatch(child->children[1]->falseList, to_string(codeGen.currentInstrIndex + 1));
-                                    codeGen.emit(TACOp::ASSIGN, varName, "1", nullopt);
-                                    codeGen.emit(TACOp::ASSIGN, varName, "0", nullopt);
-                                }
-                                else
-                                {
+                                // if (child->children[1]->trueList || child->children[1]->falseList)
+                                // {
+                                //     Backpatch::backpatch(child->children[1]->trueList, to_string(codeGen.currentInstrIndex));
+                                //     Backpatch::backpatch(child->children[1]->falseList, to_string(codeGen.currentInstrIndex + 1));
+                                //     codeGen.emit(TACOp::ASSIGN, varName, "1", nullopt);
+                                //     codeGen.emit(TACOp::ASSIGN, varName, "0", nullopt);
+                                // }
+                                
+                                //else 
                                     codeGen.emit(TACOp::ASSIGN, varName, child->children[1]->tacResult, nullopt);
-                                }
+                
+                            }
+                            else if(declInfo.typeSpecifier == 1 && child->children[1]->typeSpecifier == 8){
+                                codeGen.emit(TACOp::ASSIGN,varName,child->children[1]->tacResult);
+                            }
+                            else if(child->children[0]->pointerLevel > 0 && child->children[1]->typeSpecifier == 9){
+                                codeGen.emit(TACOp::ASSIGN,varName,child->children[1]->tacResult);
                             }
                             else
                             {
@@ -1222,7 +1280,10 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
                 {
                     int lhsPointerLevel = child->children[0]->pointerLevel;
                     int rhsPointerLevel = child->children[1]->pointerLevel;
-                    if (rhsPointerLevel != lhsPointerLevel)
+                    if(((lhsPointerLevel == 1 && rhsPointerLevel == 1)&&(child->children[0]->typeSpecifier != child->children[1]->typeSpecifier)) && (child->children[1]->typeSpecifier != 9)){
+                        raiseError("Incompatible pointer types in assignment — LHS is of type '" + typeName(child->children[0]->typeSpecifier) + "*', RHS is of type '" + typeName(child->children[1]->typeSpecifier) + "*' at line "); 
+                        }
+                    else if (rhsPointerLevel != lhsPointerLevel)
                     {
                         cerr << "Error: Invalid pointer initialization for '" << varName << "'\n";
                     }

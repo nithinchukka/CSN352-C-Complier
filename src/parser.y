@@ -40,7 +40,6 @@ void backTrackRelExpr(TreeNode* nd){
 }
 %}
 
-
 %union {
 	TreeNode *node;
     char *str;
@@ -58,7 +57,7 @@ void backTrackRelExpr(TreeNode* nd){
     KEYWORD_STATIC KEYWORD_STRUCT KEYWORD_SWITCH 
     KEYWORD_VOID KEYWORD_VOLATILE KEYWORD_WHILE KEYWORD_PRINTF KEYWORD_SCANF TYPE_NAME
 
-%token <node> INTEGER FLOAT CHAR STRING ID
+%token <node> INTEGER FLOAT CHAR STRING ID LONG
 
 %token <str>
     LBRACE RBRACE LBRACKET RBRACKET LPAREN RPAREN SEMICOLON COMMA COLON
@@ -129,7 +128,7 @@ primary_expression
           $$ = $1;
           $$ = lookupSymbol($$->valueToString(), true);
           if (!$$) {
-              raiseError("Undeclared identifier at line " + to_string(yylineno) + ": " + $1->valueToString());
+              raiseError("Undeclared identifier at line " + to_string(yylineno) + ": " + $1->valueToString() + " at line " + to_string(yylineno));
           }
           $$->tacResult = $1->valueToString();
           $$->isLValue = true;
@@ -143,27 +142,31 @@ primary_expression
           $$->isLValue = false;
           $$->isConstVal = 1;
       }
-    | FLOAT { 
+    | LONG {
           $$ = $1;
           string temp = codeGen.newTemp();
           codeGen.emit(TACOp::ASSIGN, temp, $1->valueToString(), nullopt);
           $$->tacResult = temp;
+          $$->typeSpecifier = 4; 
+          $$->isLValue = false;
+          $$->isConstVal = 1;    
+    }
+    | FLOAT { 
+          $$ = $1;
+          $$->tacResult = $1->valueToString(); 
           $$->typeSpecifier = 6; 
           $$->isLValue = false; 
       }
     | STRING { 
           $$ = $1;
-          string temp = codeGen.newTemp();
-          codeGen.emit(TACOp::ASSIGN, temp, $1->valueToString(), nullopt);
-          $$->tacResult = temp; 
-          $$->typeSpecifier = 8; 
+          $$->tacResult = $1->valueToString(); 
+          $$->typeSpecifier = 1; 
           $$->isLValue = false; 
+          $$->pointerLevel = 1;
       }
     | CHAR { 
           $$ = $1; 
-          string temp = codeGen.newTemp();
-          codeGen.emit(TACOp::ASSIGN, temp, $1->valueToString(), nullopt);
-          $$->tacResult = temp;
+          $$->tacResult = $1->valueToString(); 
           $$->typeSpecifier = 1; 
           $$->isLValue = false; 
           $$->isConstVal = 1;
@@ -173,6 +176,7 @@ primary_expression
           $$->tacResult = "nullptr";
           $$->typeSpecifier = 9; 
           $$->isLValue = false; 
+          $$->pointerLevel = 1;
       }
     | LPAREN expression RPAREN { 
           $$ = $2;
@@ -186,10 +190,10 @@ postfix_expression
     | postfix_expression LBRACKET expression RBRACKET { 
         $$ = createNode(NODE_POSTFIX_EXPRESSION, monostate(), $1, $3);
         if ($3->typeSpecifier != 3) {
-            raiseError("array index must be an integer");
+            raiseError("array index must be an integer at line " + to_string(yylineno));
         } else if (($1->typeCategory == 2 || $1->typeCategory == 1) && $1->type != NODE_POSTFIX_EXPRESSION) {
             if ($1->typeSpecifier != 1 && $1->typeSpecifier != 3) {
-                raiseError("can only index a char or int pointer");
+                raiseError("can only index a char or int pointer at line " + to_string(yylineno));
             } else {
                 $$->typeSpecifier = $1->typeSpecifier;
                 $$->typeCategory = 2;
@@ -206,7 +210,7 @@ postfix_expression
             }
         } else if ($1->type == NODE_POSTFIX_EXPRESSION && ($1->typeCategory == 2 || $1->typeCategory == 1)) {
             if ($1->typeSpecifier != 1 && $1->typeSpecifier != 3) {
-                raiseError("can only index a char or int pointer");
+                raiseError("can only index a char or int pointer at line " + to_string(yylineno));
             }
             if ($1->children[0]->typeSpecifier == 20) {
                 TreeNode* member = lookupSymbol($1->children[0]->valueToString());
@@ -242,23 +246,24 @@ postfix_expression
                         }
                     }
                     if (!found) {
-                        raiseError("member " + $3->valueToString() + " not found in object " + $1->valueToString());
+                        raiseError("member " + $3->valueToString() + " not found in object " + $1->valueToString()+ " at line " + to_string(yylineno));
                     }
                 }
             }
         } else {
             if ($1->type != NODE_POSTFIX_EXPRESSION) {
-                raiseError($1->valueToString() + " is not an array");
+                raiseError($1->valueToString() + " is not an array at line " + to_string(yylineno));
             } else {
-                raiseError($1->children[1]->valueToString() + " is not an array");
+                raiseError($1->children[1]->valueToString() + " is not an array at line " + to_string(yylineno));
             }
         }
-        $$->pointerLevel = 0;
+        $$->pointerLevel = $1->pointerLevel;
+        $$->pointerLevel--;
     }
     | postfix_expression LPAREN RPAREN { 
         $$ = $1;
         if ($$->paramCount > 0) {
-            raiseError("function call with no params, expected " + to_string($$->paramCount));
+            raiseError("function call with no params, expected " + to_string($$->paramCount)+" at line " + to_string(yylineno));
         } else {
             if ($1->typeSpecifier == 0) {
                 codeGen.emit(TACOp::CALL2, "", $1->tacResult, "0");
@@ -280,7 +285,7 @@ postfix_expression
                     int lhs = $1->paramTypes[i];
                     int rhs = $3->children[i]->typeSpecifier;
                     if (!isTypeCompatible(lhs, rhs, "=")) {
-                        raiseError("Expected: " + to_string($1->paramTypes[i]) + ", Got: " + to_string($3->children[i]->typeSpecifier));
+                        raiseError("Expected: " + to_string($1->paramTypes[i]) + ", Got: " + to_string($3->children[i]->typeSpecifier)+" at line " + to_string(yylineno));
                         break;
                     } else {
                         if (lhs != rhs) {
@@ -291,7 +296,7 @@ postfix_expression
                     }
                 }
             } else {
-                raiseError("function call with " + to_string($3->children.size()) + " params, expected " + to_string($1->paramCount));
+                raiseError("function call with " + to_string($3->children.size()) + " params, expected " + to_string($1->paramCount)+" at line " + to_string(yylineno));
             }
         }
         for (auto* arg : $3->children) {
@@ -340,11 +345,11 @@ postfix_expression
                     }
                 }
                 if (!found) {
-                    raiseError("member " + $3->valueToString() + " not found in object " + $1->valueToString());
+                    raiseError("member " + $3->valueToString() + " not found in object " + $1->valueToString()+" at line " + to_string(yylineno));
                 }
             }
         } else {
-            raiseError("We can use member access only for classes, structs, and unions");
+            raiseError("We can use member access only for classes, structs, and unions at line " + to_string(yylineno));
         }
     }
     | postfix_expression POINTER_TO_MEMBER_ARROW_OPERATOR ID { 
@@ -382,11 +387,11 @@ postfix_expression
                     }
                 }
                 if (!found) {
-                    raiseError("member " + $3->valueToString() + " not found in object " + $1->valueToString());
+                    raiseError("member " + $3->valueToString() + " not found in object " + $1->valueToString()+" at line " + to_string(yylineno));
                 }
             }
         } else {
-            raiseError("We can use member access only for classes, structs, and unions");
+            raiseError("We can use member access only for classes, structs, and unions at line " + to_string(yylineno));
         }
     }
     | postfix_expression INCREMENT_OPERATOR { 
@@ -397,7 +402,7 @@ postfix_expression
         $$->type = NODE_POSTFIX_EXPRESSION;
         int typeSpec = $1->typeSpecifier;
         if (typeSpec == 5 || typeSpec > 7) {
-            raiseError("invalid type for increment operator");
+            raiseError("invalid type for increment operator at line " + to_string(yylineno));
         }
         $$->isLValue = false; 
         string temp = codeGen.newTemp();
@@ -415,7 +420,7 @@ postfix_expression
         $$->type = NODE_POSTFIX_EXPRESSION;
         int typeSpec = $1->typeSpecifier;
         if (typeSpec == 5 || typeSpec > 7) {
-            raiseError("invalid type for decrement operator");
+            raiseError("invalid type for decrement operator at line " + to_string(yylineno));
         }
         $$->isLValue = false;
         string temp = codeGen.newTemp();
@@ -457,7 +462,7 @@ unary_expression
         $$->tacResult = temp2; 
         int typeSpec = $2->typeSpecifier;
         if (typeSpec == 5 || typeSpec > 7) {
-            raiseError("invalid type for increment operator");
+            raiseError("invalid type for increment operator at line " + to_string(yylineno));
         }
         $$->isLValue = false; 
     }
@@ -474,7 +479,7 @@ unary_expression
         $$->tacResult = temp2;        
         int typeSpec = $2->typeSpecifier;
         if (typeSpec == 5 || typeSpec > 7) {
-            raiseError("invalid type for decrement operator");
+            raiseError("invalid type for decrement operator at line " + to_string(yylineno));
         }
         $$->isLValue = false; 
     }
@@ -558,7 +563,7 @@ multiplicative_expression
         int rhsPointerLevel = $3->pointerLevel;
         int lhsPointerLevel = $1->pointerLevel;
         if (rhsPointerLevel || lhsPointerLevel) {
-            raiseError("Invalid operands to binary '*' — multiplication involving pointer types is not allowed.");
+            raiseError("Invalid operands to binary '*' — multiplication involving pointer types is not allowed at line " + to_string(yylineno));
         } else {
             if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "*")) {
                 $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
@@ -588,7 +593,7 @@ multiplicative_expression
         int rhsPointerLevel = $3->pointerLevel;
         int lhsPointerLevel = $1->pointerLevel;
         if (rhsPointerLevel || lhsPointerLevel) {
-            raiseError("Invalid operands to binary '/' — multiplication involving pointer types is not allowed.");
+            raiseError("Invalid operands to binary '/' — multiplication involving pointer types is not allowed at line " + to_string(yylineno));
         } else {
             if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "/")) {
                 if ($1->typeSpecifier < $3->typeSpecifier) {
@@ -617,7 +622,7 @@ multiplicative_expression
         int rhsPointerLevel = $3->pointerLevel;
         int lhsPointerLevel = $1->pointerLevel;
         if (rhsPointerLevel || lhsPointerLevel) {
-            raiseError("Invalid operands to binary '%' — multiplication involving pointer types is not allowed.");
+            raiseError("Invalid operands to binary '%' — multiplication involving pointer types is not allowed at line " + to_string(yylineno));
         } else {
             $$->isLValue = false; 
             if (($1->typeSpecifier == 3 || $1->typeSpecifier == 4) && 
@@ -656,7 +661,7 @@ additive_expression
         int lhsPointerLevel = $1->pointerLevel;
         if (rhsPointerLevel && lhsPointerLevel) {
             raiseError("Invalid operands to binary '+' — cannot add two pointers (LHS pointer level: " + 
-                       to_string(lhsPointerLevel) + ", RHS pointer level: " + to_string(rhsPointerLevel) + ").");
+                       to_string(lhsPointerLevel) + ", RHS pointer level: " + to_string(rhsPointerLevel) + ") at line "+ to_string(yylineno));
         } else {
             $$->isLValue = false; 
             $$->pointerLevel = lhsPointerLevel + rhsPointerLevel;
@@ -695,7 +700,7 @@ additive_expression
         int lhsPointerLevel = $1->pointerLevel;
         if (rhsPointerLevel && lhsPointerLevel) {
             raiseError("Invalid operands to binary '-' — cannot subtract two pointers (LHS pointer level: " + 
-                       to_string(lhsPointerLevel) + ", RHS pointer level: " + to_string(rhsPointerLevel) + ").");
+                       to_string(lhsPointerLevel) + ", RHS pointer level: " + to_string(rhsPointerLevel) + ") at line " + to_string(yylineno));
         } else {
             $$->pointerLevel = lhsPointerLevel + rhsPointerLevel;
             if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "-")) {
@@ -807,7 +812,7 @@ relational_expression
         $$->isLogical = true;
         int rhsPointerLevel = $3->pointerLevel;
         int lhsPointerLevel = $1->pointerLevel;
-        if (rhsPointerLevel || lhsPointerLevel) {
+        if (rhsPointerLevel != lhsPointerLevel) {
             raiseError("Invalid operands to binary '<' — relational comparison requires arithmetic types, but one or both operands are pointers (LHS pointer level: " + 
                        to_string(lhsPointerLevel) + ", RHS pointer level: " + to_string(rhsPointerLevel) + ") at line " + to_string(yylineno));
         } else {
@@ -840,7 +845,7 @@ relational_expression
         $$->isLValue = false;
         int rhsPointerLevel = $3->pointerLevel;
         int lhsPointerLevel = $1->pointerLevel;
-        if (rhsPointerLevel || lhsPointerLevel) {
+        if (rhsPointerLevel != lhsPointerLevel) {
             raiseError("Invalid operands to binary '>' — relational comparison requires arithmetic types, but one or both operands are pointers (LHS pointer level: " + 
                        to_string(lhsPointerLevel) + ", RHS pointer level: " + to_string(rhsPointerLevel) + ") at line " + to_string(yylineno));
         } else {
@@ -872,7 +877,7 @@ relational_expression
         $$->isLValue = false;
         int rhsPointerLevel = $3->pointerLevel;
         int lhsPointerLevel = $1->pointerLevel;
-        if (rhsPointerLevel || lhsPointerLevel) {
+        if (rhsPointerLevel != lhsPointerLevel) {
             raiseError("Invalid operands to binary '<=' — relational comparison requires arithmetic types, but one or both operands are pointers (LHS pointer level: " + 
                        to_string(lhsPointerLevel) + ", RHS pointer level: " + to_string(rhsPointerLevel) + ") at line " + to_string(yylineno));
         } else {
@@ -904,7 +909,7 @@ relational_expression
         if ($1->isConstVal && $3->isConstVal) $$->isConstVal = 1;
         int rhsPointerLevel = $3->pointerLevel;
         int lhsPointerLevel = $1->pointerLevel;
-        if (rhsPointerLevel || lhsPointerLevel) {
+        if (rhsPointerLevel != lhsPointerLevel ) {
             raiseError("Invalid operands to binary '>=' — relational comparison requires arithmetic types, but one or both operands are pointers (LHS pointer level: " + 
                        to_string(lhsPointerLevel) + ", RHS pointer level: " + to_string(rhsPointerLevel) + ") at line " + to_string(yylineno));
         } else {
@@ -950,7 +955,7 @@ equality_expression
         backTrackRelExpr($$);
         int rhsPointerLevel = $3->pointerLevel;
         int lhsPointerLevel = $1->pointerLevel;
-        if (rhsPointerLevel != lhsPointerLevel) {
+        if ((rhsPointerLevel != lhsPointerLevel)) {
             raiseError("Invalid operands to binary '==' — cannot compare values with mismatched pointer levels (LHS pointer level: " + 
                        to_string(lhsPointerLevel) + ", RHS pointer level: " + to_string(rhsPointerLevel) + ") at line " + to_string(yylineno));
         } else {
@@ -1237,9 +1242,12 @@ assignment_expression
         $$ = createNode(NODE_ASSIGNMENT_EXPRESSION, $2->value, $1, $3);
         int rhsPointerLevel = $3->pointerLevel;
         int lhsPointerLevel = $1->pointerLevel;
-        if (rhsPointerLevel != lhsPointerLevel && !($1->typeSpecifier == 3 && $3->typeCategory == 2)) {
+        if(((lhsPointerLevel == 1 && rhsPointerLevel == 1)&&($1->typeSpecifier != $3->typeSpecifier)) && ($3->typeSpecifier != 9)){
+        raiseError("Incompatible pointer types in assignment — LHS is of type '" + typeName($1->typeSpecifier) + "*', RHS is of type '" + typeName($3->typeSpecifier) + "*' at line " + to_string(yylineno)); 
+        }
+        else if ((rhsPointerLevel != lhsPointerLevel)) {
             raiseError("Incompatible types in compound assignment — pointer levels do not match (LHS has level " + 
-                       to_string(lhsPointerLevel) + ", RHS has level " + to_string(rhsPointerLevel) + ").");
+                       to_string(lhsPointerLevel) + ", RHS has level " + to_string(rhsPointerLevel) + ") at line " + to_string(yylineno));
         } else {
             if (!$1->isLValue) {
                 raiseError("Left operand of assignment must be an L-value at line " + to_string(yylineno));
@@ -1249,7 +1257,12 @@ assignment_expression
             }
             string op = $2->valueToString();
             if (op == "=") {
-                if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, op)) {
+                if($3->typeSpecifier == 9 && $1->pointerLevel == 1){
+                }
+                else if($3->typeSpecifier == 9 && $1->pointerLevel == 0){
+                    raiseError("Null pointer should be assigned to pointer but LHS in non-pointerType at line " + to_string(yylineno));
+                }
+                else if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, op)) {
                     $$->typeSpecifier = $1->typeSpecifier;
                     if ($1->typeSpecifier != $3->typeSpecifier) {
                         string temp = codeGen.newTemp();
@@ -1414,7 +1427,7 @@ declaration
         }
         if (isCustom) {
             if ($1->children.size() > 1) {
-                raiseError("Type Qualifier or Storage Class Specifier is not allowed to be used with struct or union");
+                raiseError("Type Qualifier or Storage Class Specifier is not allowed to be used with struct or union at line " + to_string(yylineno));
                 isCustom = false;
                 break;
             }
@@ -1485,6 +1498,7 @@ storage_class_specifier
     : KEYWORD_STATIC { 
         $$ = $1; 
         $$->type = NODE_STORAGE_CLASS_SPECIFIER; 
+
     }
     | KEYWORD_REGISTER { 
         $$ = $1; 
@@ -1505,32 +1519,26 @@ struct_type_specifier
     : KEYWORD_VOID { 
         $$ = $1; 
         $$->type = NODE_TYPE_SPECIFIER; 
-        $$->storageClass = 0;
     }
     | KEYWORD_CHAR { 
         $$ = $1; 
         $$->type = NODE_TYPE_SPECIFIER; 
-        $$->storageClass = 1;
     }
     | KEYWORD_INT { 
         $$ = $1; 
         $$->type = NODE_TYPE_SPECIFIER; 
-        $$->storageClass = 3;
     }
     | KEYWORD_LONG { 
-        $$ = $1; 
+        $$ = $1;
         $$->type = NODE_TYPE_SPECIFIER; 
-        $$->storageClass = 4;
     }
     | KEYWORD_FLOAT { 
         $$ = $1; 
         $$->type = NODE_TYPE_SPECIFIER; 
-        $$->storageClass = 12;
     }
     | KEYWORD_DOUBLE { 
         $$ = $1; 
         $$->type = NODE_TYPE_SPECIFIER; 
-        $$->storageClass = 13;
     }
     | TYPE_NAME { 
         $$ = $1; 

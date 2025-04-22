@@ -100,7 +100,16 @@ while       { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KE
 "."         { yylval.str = strdup(yytext); return (DOT_OPERATOR); }
 "->"       { yylval.str = strdup(yytext); return (POINTER_TO_MEMBER_ARROW_OPERATOR); }
 
-{integer}   { yylval.node = createNode(INTEGER_LITERAL, yytext); return INTEGER; }
+{integer}   {
+                long long val = atoll(yytext);
+                if (val <= 2147483647) {
+                    yylval.node = createNode(INTEGER_LITERAL, yytext);
+                    return INTEGER;
+                } else {
+                    yylval.node = createNode(LONG_LITERAL, yytext);
+                    return LONG;
+                }
+            }
 {float}     { yylval.node = createNode(FLOAT_LITERAL, yytext); return FLOAT; }
 {char}      { yylval.node = createNode(NODE_CHAR_LITERAL, yytext); return (CHAR); }
 {string}    { yylval.node = createNode(NODE_STRING_LITERAL, string(yytext)); return (STRING); }

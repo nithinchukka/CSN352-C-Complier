@@ -84,6 +84,7 @@ enum NodeType
     NODE_ACCESS_SPECIFIER,
     INTEGER_LITERAL,
     FLOAT_LITERAL,
+    LONG_LITERAL,
     NODE_DESTRUCTOR_FUNCTION,
     NODE_CONSTRUCTOR_FUNCTION,
     NODE_BLOCK_ITEM_LIST,
@@ -323,6 +324,8 @@ public:
             return "INTEGER_LITERAL";
         case FLOAT_LITERAL:
             return "FLOAT_LITERAL";
+        case LONG_LITERAL:
+            return "LONG";
         case NODE_DESTRUCTOR_FUNCTION:
             return "DESTRUCTOR";
         case NODE_CONSTRUCTOR_FUNCTION:
