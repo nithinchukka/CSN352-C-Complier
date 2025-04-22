@@ -48,13 +48,11 @@ if          { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KE
 int         { yylval.node = createNode(NODE_KEYWORD, string(yytext)); yylval.node->offset = 4; return (KEYWORD_INT); }
 long        { yylval.node = createNode(NODE_KEYWORD, string(yytext)); yylval.node->offset = 8; return (KEYWORD_LONG); }
 nullptr     { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_NULLPTR); }
-register    { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_REGISTER); }
 return      { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_RETURN); }
 static      { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_STATIC); }
 struct      { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_STRUCT); }
 switch      { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_SWITCH); }
 void        { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_VOID); }
-volatile    { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_VOLATILE); }
 while       { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_WHILE); }
 "printf"    { yylval.node = createNode(NODE_KEYWORD, string("printf")); return (KEYWORD_PRINTF); }
 "scanf"     { yylval.node = createNode(NODE_KEYWORD, string("scanf")); return (KEYWORD_SCANF); }

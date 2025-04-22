@@ -97,21 +97,17 @@ enum NodeType
     OTHERS
 };
 
-using NodeValue = variant<monostate, string, int, double, bool, char>;
-
 class TreeNode
 {
 public:
     NodeType type;
-    NodeValue value;
+    string value;
     int offset = -1;
     vector<TreeNode *> children;
     int typeCategory = -1; // var = 0, pointer = 1, arr = 2,  func = 3, struct = 4, union = 5, class = 6, label = 7, reference = 8, parameter = 9;
     bool isConst = false;
     bool isStatic = false;
-    bool isVolatile = false;
     int typeSpecifier = -1; //"void", "char : 1", "short", "int", "long", "float", "double", "string", "nullptr", object ,label
-    int storageClass = -1;  // -1: none, 0: extern, 1: static, 2: auto, 3: register
     int paramCount = 0;
     int pointerLevel = 0;
     bool isLValue = false; // true if the node is an lvalue
@@ -132,7 +128,7 @@ public:
     backpatchNode *caseList = nullptr;
     backpatchNode *switchList = nullptr;
     backpatchNode *goToList = nullptr;
-    TreeNode(NodeType type, NodeValue value = monostate()) : type(type), value(value)
+    TreeNode(NodeType type, string value = "") : type(type), value(value)
     {
     }
 
@@ -146,7 +142,7 @@ public:
     {
         for (int i = 0; i < depth; ++i)
             os << "  ";
-        os << "|- " << nodeTypeToString(type) << " " << valueToString() << " " << tacResult << "\n";
+        os << "|- " << nodeTypeToString(type) << " " << value << " " << tacResult << "\n";
 
         for (const TreeNode *child : children)
         {
@@ -341,22 +337,6 @@ public:
         }
     }
 
-    string valueToString() const
-    {
-        if (holds_alternative<monostate>(value))
-            return "(null)";
-        if (holds_alternative<string>(value))
-            return get<string>(value);
-        if (holds_alternative<int>(value))
-            return to_string(get<int>(value));
-        if (holds_alternative<double>(value))
-            return to_string(get<double>(value));
-        if (holds_alternative<bool>(value))
-            return string(get<bool>(value) ? "true" : "false");
-        if (holds_alternative<char>(value))
-            return string(1, get<char>(value));
-        return "(unknown)";
-    }
 
     friend ostream &operator<<(ostream &os, const TreeNode &node)
     {
@@ -366,7 +346,7 @@ public:
 };
 
 template <typename... Args>
-TreeNode *createNode(NodeType type, NodeValue value = monostate(), Args... children)
+TreeNode *createNode(NodeType type, string value = "", Args... children)
 {
     TreeNode *node = new TreeNode(type, value);
     (node->addChild(children), ...);

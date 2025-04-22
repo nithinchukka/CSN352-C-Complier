@@ -46,6 +46,36 @@ enum class TACOp
     oth
 };
 
+TACOp assignToOp(const char &ch)
+{
+    switch (ch)
+    {
+    case '+':
+        return TACOp::ADD;
+    case '-':
+        return TACOp::SUB;
+    case '*':
+        return TACOp::MUL;
+    case '/':
+        return TACOp::DIV;
+    case '%':
+        return TACOp::MOD;
+    case '<':
+        return TACOp::LSHFT;
+    case '>':
+        return TACOp::RSHFT;
+    case '&':
+        return TACOp::BIT_AND;
+    case '|':
+        return TACOp::BIT_OR;
+    case '^':
+        return TACOp::BIT_XOR;
+    case '=':
+        return TACOp::ASSIGN;
+    }
+    return TACOp::oth;
+}
+
 inline string opToStr(TACOp op)
 {
     switch (op)
@@ -395,13 +425,9 @@ int findOffset(int type, string name = "")
     {
     case 1: // char
         return 1;
-    case 2: // short
-        return 2;
     case 3: // int
         return 4;
-    case 4: // bool
-        return 1;
-    case 5: // long
+    case 4: // long
         return 8;
     case 6: // float
         return 4;
@@ -507,11 +533,9 @@ void printAllTables()
 //             cout << left << setw(12) << entry.first
 //                  << setw(12) << node->typeCategory
 //                  << setw(12) << node->typeSpecifier
-//                  << setw(12) << node->storageClass
 //                  << setw(8) << node->paramCount
 //                  << setw(8) << (node->isConst ? "Y" : "N")
 //                  << setw(8) << (node->isStatic ? "Y" : "N")
-//                  << setw(8) << (node->isVolatile ? "Y" : "N")
 //                  << setw(12) << node->pointerLevel
 //                  << setw(12) << node->symbolTable.size()
 //                  << "\n";
@@ -524,11 +548,9 @@ void printAllTables()
 struct DeclaratorInfo
 {
     int typeCategory = -1;  // var = 0, func = 1, struct = 2, enum = 3, class = 4
-    int storageClass = -1;  // -1: none, 0: extern, 1: static, 2: auto, 3: register
-    int typeSpecifier = -1; // -1: none, void : -1: char : 1, short : 2, 3: int, 4: bool, 5: long, 6: float, 7: double
+    int typeSpecifier = -1; // -1: none, void : -1: char : 1, short : 2, 3: int,, 4: long, 6: float, 7: double
     bool isConst = false;
     bool isStatic = false;
-    bool isVolatile = false;
     bool isUnsigned = false;
     bool hasLong = false;
     bool isValid = false;
@@ -637,30 +659,20 @@ bool checkFormatSpecifiers(string formatString, vector<int> argTypeList)
 DeclaratorInfo isValidVariableDeclaration(vector<TreeNode *> &nodes, bool isFunction = false)
 {
     DeclaratorInfo declInfo;
-    unordered_map<string, int> storageClasses = {
-        {"extern", 0}, {"static", 1}, {"auto", 2}, {"register", 3}};
     unordered_map<string, int> baseTypes = {
-        {"void", 0}, {"char", 1}, {"short", 2}, {"int", 3}, {"long", 4}, {"float", 6}, {"double", 7}};
-    unordered_set<string> typeModifiers = {"signed", "unsigned"};
-    unordered_set<string> qualifiers = {"const", "volatile"};
+        {"void", 0}, {"char", 1}, {"int", 3}, {"long", 5}, {"float", 6}, {"double", 7}};
 
-    int storageClassCount = 0, typeSpecifierCount = 0, typeModifierCount = 0, qualifierCount = 0;
-    bool hasSignedOrUnsigned = false;
+    int typeSpecifierCount = 0;
 
     for (const auto &node : nodes)
     {
-        string val = node->valueToString();
+        string val = node->value;
 
         if (node->type == NODE_STORAGE_CLASS_SPECIFIER)
         {
-            if (!storageClasses.count(val))
+            if(declInfo.isStatic)
                 return {};
-            declInfo.storageClass = storageClasses[val];
-            if (val == "static")
-                declInfo.isStatic = true;
-            storageClassCount++;
-            if (storageClassCount > 1)
-                return {};
+            declInfo.isStatic = true;
         }
         else if (node->type == NODE_TYPE_SPECIFIER)
         {
@@ -680,38 +692,20 @@ DeclaratorInfo isValidVariableDeclaration(vector<TreeNode *> &nodes, bool isFunc
                 declInfo.typeSpecifier = baseTypes[val];
                 typeSpecifierCount++;
             }
-            else if (typeModifiers.count(val))
-            {
-                typeModifierCount++;
-                if (val == "unsigned")
-                    declInfo.isUnsigned = true;
-                if (val == "signed")
-                    hasSignedOrUnsigned = true;
-            }
             else
-            {
                 return {};
-            }
         }
         else if (node->type == NODE_TYPE_QUALIFIER)
         {
-            if (!qualifiers.count(val))
+            if(declInfo.isConst)
                 return {};
-            if (val == "const")
-                declInfo.isConst = true;
-            if (val == "volatile")
-                declInfo.isVolatile = true;
-            qualifierCount++;
+            declInfo.isConst = true;
         }
         else
-        {
             return {};
-        }
     }
 
     if (typeSpecifierCount == 0)
-        return {};
-    if (typeModifierCount > 2)
         return {};
 
     if (!isFunction && declInfo.typeSpecifier == 0)
@@ -1024,7 +1018,7 @@ vector<int> findArrayDimensions(TreeNode *arr)
             if (current->children.size() > 1 && current->children[1] &&
                 current->children[1]->type == INTEGER_LITERAL)
             {
-                dimensions.push_back(stoi(current->children[1]->valueToString()));
+                dimensions.push_back(stoi(current->children[1]->value));
             }
             else
             {
@@ -1052,7 +1046,7 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
             }
         }
         if (declInfo.typeCategory == 4)
-            helper = lookupSymbol(helper->valueToString());
+            helper = lookupSymbol(helper->value);
         for (auto child : list->children)
         {
             if (child->type != NODE_DECLARATOR)
@@ -1065,11 +1059,9 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
             {
                 node->typeCategory = typeCategory;
                 node->pointerLevel = pointerLevel;
-                node->storageClass = declInfo.storageClass;
                 node->typeSpecifier = declInfo.typeSpecifier;
                 node->isConst = declInfo.isConst;
                 node->isStatic = declInfo.isStatic;
-                node->isVolatile = declInfo.isVolatile;
                 node->symbolTable = helper->symbolTable;
                 node->totalOffset = helper->totalOffset;
             };
@@ -1118,7 +1110,7 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
                         break;
                     identifierNode = identifierNode->children[0];
                 }
-                varName = identifierNode->valueToString();
+                varName = identifierNode->value;
                 if (checkDuplicate(varName))
                     continue;
                 int size = child->children.size();
@@ -1155,11 +1147,12 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
                         break;
                     identifierNode = identifierNode->children[0];
                 }
-                varName = identifierNode->valueToString();
+                varName = identifierNode->value;
+
                 if (identifierNode->type == ARRAY)
                 {
                     vector<int> dimensions = findArrayDimensions(identifierNode);
-                    varName = identifierNode->children[0]->valueToString();
+                    varName = identifierNode->children[0]->value;
                     if (checkDuplicate(varName))
                         continue;
 
@@ -1262,7 +1255,7 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
             }
             else
             {
-                varName = firstChild->valueToString();
+                varName = firstChild->value;
                 if (checkDuplicate(varName))
                     continue;
                 int size = child->children.size();
@@ -1338,16 +1331,14 @@ void addFunction(TreeNode *declSpec, TreeNode *decl)
     DeclaratorInfo declInfo = isValidVariableDeclaration(declSpec->children, true);
     if (declInfo.isValid)
     {
-        string funcName = decl->children[0]->valueToString();
+        string funcName = decl->children[0]->value;
         codeGen.emit(TACOp::LABEL, funcName, nullopt, nullopt);
         insertSymbol(funcName, decl->children[0]);
         TreeNode *funcNode = decl->children[0];
-        funcNode->storageClass = declInfo.storageClass;
         funcNode->typeSpecifier = declInfo.typeSpecifier;
         expectedReturnType = declInfo.typeSpecifier;
         funcNode->isConst = declInfo.isConst;
         funcNode->isStatic = declInfo.isStatic;
-        funcNode->isVolatile = declInfo.isVolatile;
         funcNode->typeCategory = 3;
         enterScope();
         if (decl->children.size() > 1 && decl->children[1]->type == NODE_PARAMETER_LIST)
@@ -1357,7 +1348,7 @@ void addFunction(TreeNode *declSpec, TreeNode *decl)
                 if (param->type == NODE_PARAMETER_DECLARATION)
                 {
 
-                    string varName = param->children[1]->valueToString();
+                    string varName = param->children[1]->value;
 
                     bool isDuplicate = false;
                     for (const auto &entry : currentTable->symbolTable)
@@ -1377,11 +1368,9 @@ void addFunction(TreeNode *declSpec, TreeNode *decl)
                     {
                         TreeNode *varNode = param->children[1];
                         varNode->typeCategory = 9;
-                        varNode->storageClass = paramInfo.storageClass;
                         varNode->typeSpecifier = paramInfo.typeSpecifier;
                         varNode->isConst = paramInfo.isConst;
                         varNode->isStatic = paramInfo.isStatic;
-                        varNode->isVolatile = paramInfo.isVolatile;
                         funcNode->paramTypes.push_back(varNode->typeSpecifier);
                         funcNode->paramCount++;
                         insertSymbol(varName, varNode);
@@ -1392,7 +1381,7 @@ void addFunction(TreeNode *declSpec, TreeNode *decl)
     }
     else
     {
-        cerr << "Error: Invalid function declaration for '" << decl->children[0]->valueToString() << "'\n";
+        cerr << "Error: Invalid function declaration for '" << decl->children[0]->value << "'\n";
     }
 }
 
