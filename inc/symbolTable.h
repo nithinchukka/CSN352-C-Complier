@@ -795,6 +795,11 @@ bool structInitializerCheck(TreeNode *identifierNode, TreeNode *initializerList)
         else
         {
             string temp = irGen.newTemp();
+            TreeNode* helper = new TreeNode(OTHERS);
+            helper->value = temp;
+            helper->offset=offsetStack.top();;
+            offsetStack.top() += findOffset(expectedType);
+            insertSymbol(temp,helper);
             irGen.emit(TACOp::TYPECAST, temp, typeCastInfo(expectedType, actualType), initNode->tacResult);
             initNode->tacResult = temp;
         }
@@ -1021,11 +1026,18 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
                         for (int i = 0; i < array_size; i++)
                         {
                             string temp = irGen.newTemp();
+                            TreeNode* helper = new TreeNode(OTHERS);
+                            insertSymbol(temp,helper);
                             irGen.emit(TACOp::ASSIGN, temp, "'" + string(1, s[i + 1]) + "'", "");
                             temp_store.push_back(temp);
                         }
                         string temp = irGen.newTemp();
-                        irGen.emit(TACOp::ASSIGN, temp, "0", "");
+                        TreeNode* helper = new TreeNode(OTHERS);
+                        helper->offset=offsetStack.top();;
+                        offsetStack.top() += findOffset(declInfo.typeSpecifier);
+                        helper->value = temp;
+                        insertSymbol(temp,helper);
+                        irGen.emit(TACOp::ASSIGN, temp, "/0", "");
                         for (int i = 0; i < array_size; i++)
                         {
                             string indexedName = varName + "[" + to_string(i) + "]";
@@ -1156,6 +1168,11 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
                                 if (declInfo.typeSpecifier != child->children[1]->typeSpecifier)
                                 {
                                     string temp = irGen.newTemp();
+                                    TreeNode* helper = new TreeNode(OTHERS);
+                                    helper->value = temp;
+                                    helper->offset=offsetStack.top();;
+                                    offsetStack.top() += findOffset(declInfo.typeSpecifier);
+                                    insertSymbol(temp,helper);
                                     irGen.emit(TACOp::TYPECAST, temp, typeCastInfo(declInfo.typeSpecifier, child->children[1]->typeSpecifier), child->children[1]->tacResult);
                                     child->children[1]->tacResult = temp;
                                 }
@@ -1233,6 +1250,12 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
                             if (declInfo.typeSpecifier != child->children[1]->typeSpecifier)
                             {
                                 string temp = irGen.newTemp();
+                                TreeNode* helper = new TreeNode(OTHERS);
+
+                                helper->value = temp;   
+                                helper->offset=offsetStack.top();
+                                offsetStack.top() += findOffset(declInfo.typeSpecifier);
+                                insertSymbol(temp,helper);
                                 irGen.emit(TACOp::TYPECAST, temp, typeCastInfo(declInfo.typeSpecifier, child->children[1]->typeSpecifier), child->children[1]->tacResult);
                                 child->children[1]->tacResult = temp;
                             }
