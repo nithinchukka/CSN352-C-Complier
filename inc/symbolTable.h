@@ -8,8 +8,8 @@ void raiseError(const string &message, int lineno = -1)
 {
     cerr << "Error: " << message;
     if (lineno != -1)
-        cout << " at line " << lineno;
-    cout << endl;
+        cerr << " at line " << lineno;
+    cerr << endl;
 }
 
 enum class TACOp
@@ -46,6 +46,8 @@ enum class TACOp
     TYPECAST,
     CALL2,
     PARAM,
+    DEREF,
+    REFER,
     oth
 };
 
@@ -274,6 +276,12 @@ struct TACInstruction
             break;
         case TACOp::PARAM:
             str = "PARAM " + result;
+            break;
+        case TACOp::DEREF:
+            str = result + " = *" + *operand1;
+            break;
+        case TACOp::REFER:
+            str = result + " = &" + *operand1;
             break;
         default:
             str = "Unknown";
@@ -1028,7 +1036,6 @@ vector<int> findArrayDimensions(TreeNode *arr)
 {
     if (!arr || arr->children.empty())
         return {};
-
     vector<int> dimensions;
     TreeNode *current = arr;
 
@@ -1155,12 +1162,14 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
                             raiseError("Invalid initializer for array '" + varName + "'");
                             continue;
                         }
-
-                        setNodeAttributes(identifierNode, 2, 1);
+                        setNodeAttributes(identifierNode, 2, 0);
                         identifierNode->dimensions = dimensions;
+                        identifierNode->pointerLevel = dimensions.size();
                         insertSymbol(varName, identifierNode);
                         identifierNode->offset = offsetStack.top();
-                        offsetStack.top() += dimensions[0] * findOffset(declInfo.typeSpecifier);
+                        int totalSize = 1;
+                        for(auto i:dimensions) totalSize *= i;
+                        offsetStack.top() += totalSize * findOffset(declInfo.typeSpecifier);
                     }
                 }
             }
@@ -1175,7 +1184,6 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
                     identifierNode = identifierNode->children[0];
                 }
                 varName = identifierNode->value;
-
                 if (identifierNode->type == ARRAY)
                 {
                     vector<int> dimensions = findArrayDimensions(identifierNode);
@@ -1215,8 +1223,9 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
                     }
                     else
                     {
-                        int lhsPointerlevel = child->children[0]->pointerLevel;
+                        int lhsPointerlevel = pointerDepth;
                         int rhsPointerlevel = child->children[1]->pointerLevel;
+                        cout << lhsPointerlevel << " " << rhsPointerlevel;
                         if (((lhsPointerlevel == 1 && rhsPointerlevel == 1) && (declInfo.typeSpecifier != child->children[1]->typeSpecifier)) && (child->children[1]->typeSpecifier != 9))
                         {
                             raiseError("Incompatible pointer types in assignment — LHS is of type '" + typeName(declInfo.typeSpecifier) + "*', RHS is of type '" + typeName(child->children[1]->typeSpecifier) + "*'.");

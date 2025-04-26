@@ -54,6 +54,9 @@
             backTrackExpr(b);
         }
     }
+    vector<int> curr_dimensions;
+    TreeNode* curr_struct;
+    string curr_value;
 %}
 
 
@@ -109,7 +112,7 @@
 
 %type<node> struct_declaration struct_declarator_list specifier_qualifier_list type_qualifier constant_expression
 
-%type<node> type_qualifier_list parameter_list parameter_declaration 
+%type<node> parameter_list parameter_declaration 
 
 %type<node> initializer initializer_list direct_declarator pointer assignment_expression 
 
@@ -148,6 +151,7 @@ primary_expression
           }
           $$->tacResult = $1->value;
           $$->isLValue = true;
+          if($$->typeCategory==2)curr_dimensions = $$->dimensions;
       }
     | INTEGER { 
           $$ = $1;
@@ -204,71 +208,85 @@ postfix_expression
         $$ = createNode(NODE_POSTFIX_EXPRESSION, "", $1, $3);
         if ($3->typeSpecifier != 3) {
             raiseError("Array index must be an integer", yylineno);
-        } else if (($1->typeCategory == 2 || $1->typeCategory == 1) && $1->type != NODE_POSTFIX_EXPRESSION) {
-            if ($1->typeSpecifier != 1 && $1->typeSpecifier != 3) {
+        } 
+        else if($1->typeCategory == 2){
+            if($1->typeSpecifier != 1 && $1->typeSpecifier !=3){
                 raiseError("can only index a char or int pointer at line", yylineno);
-            } else {
+            }
+            else{
                 $$->typeSpecifier = $1->typeSpecifier;
                 $$->typeCategory = 2;
-                $$->isLValue = true; 
+                $$->isLValue = true;
+                $$->pointerLevel = $1->pointerLevel-1;
                 string temp = irGen.newTemp();
-                if ($1->typeSpecifier == 1) {
-                    irGen.emit(TACOp::MUL, temp, "1", $3->tacResult);
-                } else {
-                    irGen.emit(TACOp::MUL, temp, "4", $3->tacResult);
+                irGen.emit(TACOp::ASSIGN,temp,$3->tacResult,nullopt);
+                for(int i=curr_dimensions.size()-$$->pointerLevel;i<curr_dimensions.size();i++){
+                    irGen.emit(TACOp::MUL,temp,temp,to_string(curr_dimensions[i]));
                 }
-                string temp1 = irGen.newTemp();
-                irGen.emit(TACOp::ADD, temp1, $1->tacResult, temp);
-                $$->tacResult = "*" + temp1;
+                if($1->typeSpecifier == 1){
+                    irGen.emit(TACOp::MUL,temp,temp,string(1,'1'));
+                }
+                else 
+                    irGen.emit(TACOp::MUL,temp,temp,string(1,'4'));
+                string temp2 = irGen.newTemp();
+                irGen.emit(TACOp::ADD,temp2,temp,$1->tacResult);
+                if($$->pointerLevel == 0){
+                    string temp3 = irGen.newTemp();
+                    irGen.emit(TACOp::DEREF, temp3, temp2, "");
+                    $$->tacResult = temp3;
+                }
+                else 
+                    $$->tacResult = temp2;
             }
-        } else if ($1->type == NODE_POSTFIX_EXPRESSION && ($1->typeCategory == 2 || $1->typeCategory == 1)) {
-            if ($1->typeSpecifier != 1 && $1->typeSpecifier != 3) {
+        }
+        else if($1->typeCategory == 1){
+            
+        }
+        else if($1->typeCategory == 4){
+            if ($1->typeSpecifier != 1 && $1->typeSpecifier != 3){
                 raiseError("can only index a char or int pointer at line", yylineno);
             }
-            if ($1->children[0]->typeSpecifier == 20) {
-                TreeNode* member = lookupSymbol($1->children[0]->value);
-                int offset = 0;
+            TreeNode* member = lookupSymbol(curr_struct->value);
+            int offset = 0;
                 if (member != nullptr) {
                     bool found = false;
                     for (auto entry : member->symbolTable) {
-                        if (entry.first == $1->children[1]->value) {
+                        if (entry.first == curr_value) {
                             found = true;
                             $$->typeSpecifier = entry.second->typeSpecifier;
-                            $$->typeCategory = entry.second->typeCategory;
-                            $$->pointerLevel = entry.second->pointerLevel;
+                            $$->typeCategory = 4;
                             $$->isConst = entry.second->isConst;
                             $$->isStatic = entry.second->isStatic;
                             $$->isLValue = true;
-                            if ($$->typeSpecifier == 1) {
-                                offset += stoi($3->value);
-                            } else {
-                                offset += (4 * stoi($3->value));
-                            }
+                            $$->pointerLevel = $1->pointerLevel-1;
                             string temp = irGen.newTemp();
-                            irGen.emit(TACOp::ADD, temp, $1->children[0]->tacResult, to_string(offset));
-                            $$->tacResult = "*" + temp;
-                        } else {
-                            if (entry.second->typeCategory == 1) {
-                                offset += 4;
-                            } else {
-                                offset += findOffset(entry.second->typeSpecifier);
+                            irGen.emit(TACOp::ASSIGN,temp,$3->tacResult,nullopt);
+                            for(int i=curr_dimensions.size()-$$->pointerLevel;i<curr_dimensions.size();i++){
+                                irGen.emit(TACOp::MUL,temp,temp,to_string(curr_dimensions[i]));
                             }
+                            if($1->typeSpecifier == 1){
+                                irGen.emit(TACOp::MUL,temp,temp,string(1,'1'));
+                            }
+                            else 
+                                irGen.emit(TACOp::MUL,temp,temp,string(1,'4'));
+                            string temp2 = irGen.newTemp();
+                            irGen.emit(TACOp::ADD,temp2,temp,$1->tacResult);
+                            if($$->pointerLevel == 0){
+                                string temp3 = irGen.newTemp();
+                                irGen.emit(TACOp::DEREF, temp3, temp2, "");
+                                $$->tacResult = temp3;
+                            }
+                            else 
+                                $$->tacResult = temp2;
+                            offset = entry.second->offset;
+                            break;
                         }
                     }
                     if (!found) {
                         raiseError("member " + $3->value + " not found in object " + $1->value, yylineno);
                     }
-                }
-            }
-        } else {
-            if ($1->type != NODE_POSTFIX_EXPRESSION) {
-                raiseError($1->value + " is not an array at line", yylineno);
-            } else {
-                raiseError($1->children[1]->value + " is not an array", yylineno);
-            }
+                }  
         }
-        $$->pointerLevel = $1->pointerLevel;
-        $$->pointerLevel--;
     }
     | postfix_expression LPAREN RPAREN { 
         $$ = $1;
@@ -320,35 +338,41 @@ postfix_expression
             $$->tacResult = temp; 
         }
     }
-    | postfix_expression DOT_OPERATOR ID { 
+    | postfix_expression DOT_OPERATOR ID {
         $$ = createNode(NODE_POSTFIX_EXPRESSION, $2, $1, $3);
         if ($1->typeSpecifier == 20) {
             TreeNode* member = lookupSymbol($1->value);
-            int offset = 0;
+            curr_struct = member;
             if (member != nullptr) {
                 bool found = false;
                 for (auto entry : member->symbolTable) {
                     if (entry.first == $3->value) {
                         found = true;
                         $$->typeSpecifier = entry.second->typeSpecifier;
-                        $$->typeCategory = entry.second->typeCategory;
+                        $$->typeCategory = 4;
                         $$->pointerLevel = entry.second->pointerLevel;
                         $$->isConst = entry.second->isConst;
                         $$->isStatic = entry.second->isStatic;
                         $$->isLValue = true;
                         if (entry.second->typeCategory == 2) {
+                            curr_dimensions = entry.second->dimensions;
+                            curr_value = entry.first;
+                            string temp = irGen.newTemp();
+                            string temp1 = irGen.newTemp();
+                            irGen.emit(TACOp::REFER, temp1, $1->tacResult);
+                            irGen.emit(TACOp::ADD, temp, temp1, to_string(entry.second->offset));
+                            $$->tacResult = temp;
                             break;
                         } else {
                             string temp = irGen.newTemp();
-                            irGen.emit(TACOp::ADD, temp, $1->tacResult, to_string(offset));
-                            $$->tacResult = "*" + temp;
+                            string temp1 = irGen.newTemp();
+                            irGen.emit(TACOp::REFER, temp1, $1->tacResult);
+                            irGen.emit(TACOp::ADD, temp, temp1, to_string(entry.second->offset));
+                            string temp2 = irGen.newTemp();
+                            irGen.emit(TACOp::DEREF, temp2, temp, "");
+                            $$->tacResult = temp2;
                         }
-                    } else {
-                        if (entry.second->typeCategory == 1) {
-                            offset += 4;
-                        } else {
-                            offset += findOffset(entry.second->typeSpecifier);
-                        }
+                        break;
                     }
                 }
                 if (!found) {
@@ -380,7 +404,9 @@ postfix_expression
                         } else {
                             string temp = irGen.newTemp();
                             irGen.emit(TACOp::ADD, temp, $1->tacResult, to_string(offset));
-                            $$->tacResult = "*" + temp;
+                            string temp1 = irGen.newTemp();
+                            irGen.emit(TACOp::DEREF, temp1, temp, "");
+                            $$->tacResult = temp1;
                         }
                     } else {
                         if (entry.second->typeCategory == 1) {
@@ -494,13 +520,17 @@ unary_expression
         string temp = irGen.newTemp();
         string op = $1->value;
         if (op == "&") {
-            irGen.emit(TACOp::ASSIGN, temp, "&" + $2->tacResult, nullopt);
+            string temp1 = irGen.newTemp();
+            irGen.emit(TACOp::REFER, temp1, $2->tacResult, "");
+            irGen.emit(TACOp::ASSIGN, temp, temp1, nullopt);
             $$->isLValue = false;
-            $$->pointerLevel = 1;
+            $$->pointerLevel = $2->pointerLevel+1;
         } else if (op == "*") {
-            irGen.emit(TACOp::ASSIGN, temp, "*" + $2->tacResult, nullopt);
+            string temp1 = irGen.newTemp();
+            irGen.emit(TACOp::DEREF, temp1, temp, "");
+            irGen.emit(TACOp::ASSIGN, temp, temp1, nullopt);
             $$->isLValue = true;
-            $$->pointerLevel = 0;
+            $$->pointerLevel = $2->pointerLevel-1;
         } else if (op == "+") {
             $$->isConstVal = 1;
             irGen.emit(TACOp::ASSIGN, temp, $2->tacResult, nullopt);
@@ -1445,20 +1475,11 @@ pointer
     : MULTIPLY_OPERATOR { 
         $$ = createNode(NODE_POINTER, $1); 
     }
-    | MULTIPLY_OPERATOR type_qualifier_list { 
-        $$ = createNode(NODE_POINTER, $1, $2); 
+    | MULTIPLY_OPERATOR pointer{
+        $$ = createNode(NODE_POINTER,$1,$2);
     }
     ;
 
-type_qualifier_list
-    : type_qualifier { 
-        $$ = createNode(NODE_TYPE_QUALIFIER_LIST, "", $1); 
-    }
-    | type_qualifier_list type_qualifier { 
-        $$ = $1;
-        $$->children.push_back($2);
-    }
-    ;
 
 parameter_list
     : parameter_declaration { 
@@ -1885,7 +1906,7 @@ jump_statement
 
 translation_unit
     : external_declaration {
-        $$ = $1;
+        $$ = $1; 
     }
     | translation_unit external_declaration {
         $$ = createNode(NODE_TRANSLATION_UNIT, "", $1, $2);
