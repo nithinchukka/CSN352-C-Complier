@@ -24,8 +24,8 @@
         if(nd->trueList || nd->falseList){
             Backpatch::backpatch(nd->trueList, to_string(irGen.currentInstrIndex));
             Backpatch::backpatch(nd->falseList, to_string(irGen.currentInstrIndex  + 1));
-            irGen.emit(TACOp::oth, nd->tacResult, "1", nullopt);
-            irGen.emit(TACOp::oth, nd->tacResult, "0", nullopt);
+            irGen.emit(TACOp::ASSIGN, nd->tacResult, "1", nullopt);
+            irGen.emit(TACOp::ASSIGN, nd->tacResult, "0", nullopt);
         }
     }
 
@@ -1168,12 +1168,12 @@ assignment_expression
                 Backpatch::backpatch($3->trueList, to_string(irGen.currentInstrIndex));
                 Backpatch::backpatch($3->falseList, to_string(irGen.currentInstrIndex + 1));
                 if ($2->value == "=") {
-                    irGen.emit(TACOp::oth, $1->tacResult, "1", nullopt);
+                    irGen.emit(TACOp::ASSIGN, $1->tacResult, "1", nullopt);
                 } else {
                     irGen.emit(assignToOp(opr[0]), $1->tacResult, $1->tacResult, "1");
                 }
                 if ($2->value == "=") {
-                    irGen.emit(TACOp::oth, $1->tacResult, "0", nullopt);
+                    irGen.emit(TACOp::ASSIGN, $1->tacResult, "0", nullopt);
                 } else {
                     irGen.emit(assignToOp(opr[0]), $1->tacResult, $1->tacResult, "0");
                 }
