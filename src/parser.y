@@ -6,8 +6,8 @@
 
 %{
     #include <bits/stdc++.h>
+    #include "../inc/symbolTable.h"
 	#include "../inc/treeNode.h"
-    #include "../inc/symbolTable.h" 
     #include <sys/stat.h> // for mkdir
 
     extern irGenerator irGen;
@@ -24,8 +24,8 @@
         if(nd->trueList || nd->falseList){
             Backpatch::backpatch(nd->trueList, to_string(irGen.currentInstrIndex));
             Backpatch::backpatch(nd->falseList, to_string(irGen.currentInstrIndex  + 1));
-            irGen.emit(TACOp::ASSIGN, nd->tacResult, "1", nullopt);
-            irGen.emit(TACOp::ASSIGN, nd->tacResult, "0", nullopt);
+            irGen.emit(TACOp::ASSIGN, nd->tacResult, "1", "");
+            irGen.emit(TACOp::ASSIGN, nd->tacResult, "0", "");
         }
     }
 
@@ -138,7 +138,7 @@ N
       backpatchNode* curr = $$->nextList;
       backpatchNode* next = Backpatch::addToBackpatchList(curr, irGen.currentInstrIndex);
       $$->nextList = next;
-      irGen.emit(TACOp::oth, "", nullopt, nullopt, true);
+      irGen.emit(TACOp::oth, "", "", "", true);
   }
 ;
 
@@ -219,7 +219,7 @@ postfix_expression
                 $$->isLValue = true;
                 $$->pointerLevel = $1->pointerLevel-1;
                 string temp = irGen.newTemp();
-                irGen.emit(TACOp::ASSIGN,temp,$3->tacResult,nullopt);
+                irGen.emit(TACOp::ASSIGN,temp,$3->tacResult,"");
                 for(int i=curr_dimensions.size()-$$->pointerLevel;i<curr_dimensions.size();i++){
                     irGen.emit(TACOp::MUL,temp,temp,to_string(curr_dimensions[i]));
                 }
@@ -260,7 +260,7 @@ postfix_expression
                             $$->isLValue = true;
                             $$->pointerLevel = $1->pointerLevel-1;
                             string temp = irGen.newTemp();
-                            irGen.emit(TACOp::ASSIGN,temp,$3->tacResult,nullopt);
+                            irGen.emit(TACOp::ASSIGN,temp,$3->tacResult,"");
                             for(int i=curr_dimensions.size()-$$->pointerLevel;i<curr_dimensions.size();i++){
                                 irGen.emit(TACOp::MUL,temp,temp,to_string(curr_dimensions[i]));
                             }
@@ -328,7 +328,7 @@ postfix_expression
             }
         }
         for (auto* arg : $3->children) {
-            irGen.emit(TACOp::ASSIGN, "param", arg->tacResult, nullopt);
+            irGen.emit(TACOp::ASSIGN, "param", arg->tacResult, "");
         }
         if ($1->typeSpecifier == 0) {
             irGen.emit(TACOp::CALL2, "", $1->value, to_string($3->children.size()));
@@ -436,10 +436,10 @@ postfix_expression
         }
         $$->isLValue = false; 
         string temp = irGen.newTemp();
-        irGen.emit(TACOp::ASSIGN, temp, $1->tacResult, nullopt);
+        irGen.emit(TACOp::ASSIGN, temp, $1->tacResult, "");
         string temp2 = irGen.newTemp();
         irGen.emit(TACOp::ADD, temp2, temp, "1");
-        irGen.emit(TACOp::ASSIGN, $1->tacResult, temp2, nullopt);
+        irGen.emit(TACOp::ASSIGN, $1->tacResult, temp2, "");
         $$->tacResult = temp;
     }
     | postfix_expression DECREMENT_OPERATOR {
@@ -454,10 +454,10 @@ postfix_expression
         }
         $$->isLValue = false;
         string temp = irGen.newTemp();
-        irGen.emit(TACOp::ASSIGN, temp, $1->tacResult, nullopt);
+        irGen.emit(TACOp::ASSIGN, temp, $1->tacResult, "");
         string temp2 = irGen.newTemp();
         irGen.emit(TACOp::SUB, temp2, temp, "1");
-        irGen.emit(TACOp::ASSIGN, $1->tacResult, temp2, nullopt);
+        irGen.emit(TACOp::ASSIGN, $1->tacResult, temp2, "");
         $$->tacResult = temp;
     }
     ;
@@ -485,10 +485,10 @@ unary_expression
         } 
         $$ = $2;
         string temp = irGen.newTemp();
-        irGen.emit(TACOp::ASSIGN, temp, $2->tacResult, nullopt);
+        irGen.emit(TACOp::ASSIGN, temp, $2->tacResult, "");
         string temp2 = irGen.newTemp();
         irGen.emit(TACOp::ADD, temp2, temp, "1");
-        irGen.emit(TACOp::ASSIGN, $2->tacResult, temp2, nullopt);
+        irGen.emit(TACOp::ASSIGN, $2->tacResult, temp2, "");
         $$->tacResult = temp2; 
         int typeSpec = $2->typeSpecifier;
         if (typeSpec > 7) {
@@ -502,10 +502,10 @@ unary_expression
         }
         $$ = $2;
         string temp = irGen.newTemp();
-        irGen.emit(TACOp::ASSIGN, temp, $2->tacResult, nullopt);
+        irGen.emit(TACOp::ASSIGN, temp, $2->tacResult, "");
         string temp2 = irGen.newTemp();
         irGen.emit(TACOp::SUB, temp2, temp, "1");
-        irGen.emit(TACOp::ASSIGN, $2->tacResult, temp2, nullopt);
+        irGen.emit(TACOp::ASSIGN, $2->tacResult, temp2, "");
         $$->tacResult = temp2;        
         int typeSpec = $2->typeSpecifier;
         if (typeSpec > 7) {
@@ -522,18 +522,18 @@ unary_expression
         if (op == "&") {
             string temp1 = irGen.newTemp();
             irGen.emit(TACOp::REFER, temp1, $2->tacResult, "");
-            irGen.emit(TACOp::ASSIGN, temp, temp1, nullopt);
+            irGen.emit(TACOp::ASSIGN, temp, temp1, "");
             $$->isLValue = false;
             $$->pointerLevel = $2->pointerLevel+1;
         } else if (op == "*") {
             string temp1 = irGen.newTemp();
             irGen.emit(TACOp::DEREF, temp1, temp, "");
-            irGen.emit(TACOp::ASSIGN, temp, temp1, nullopt);
+            irGen.emit(TACOp::ASSIGN, temp, temp1, "");
             $$->isLValue = true;
             $$->pointerLevel = $2->pointerLevel-1;
         } else if (op == "+") {
             $$->isConstVal = 1;
-            irGen.emit(TACOp::ASSIGN, temp, $2->tacResult, nullopt);
+            irGen.emit(TACOp::ASSIGN, temp, $2->tacResult, "");
             $$->isLValue = false;
         } else if (op == "-") {
             $$->isConstVal = 1;
@@ -585,7 +585,7 @@ cast_expression
             $$->isLValue = false;
             string temp = irGen.newTemp();
             string castExpr = "(" + $2->value + ")" + $4->tacResult;
-            irGen.emit(TACOp::ASSIGN, temp, castExpr, nullopt);
+            irGen.emit(TACOp::ASSIGN, temp, castExpr, "");
             $$->tacResult = temp;
         } */
     ;
@@ -791,7 +791,7 @@ relational_expression
                 backTrackRelExpr($$);
                 $$->tacResult = irGen.newTemp();
                 irGen.emit(TACOp::LT, "", $1->tacResult, $3->tacResult, true);
-                irGen.emit(TACOp::oth, "", nullopt, nullopt, true);
+                irGen.emit(TACOp::oth, "", "", "", true);
             } else {
                 raiseError("Incompatible Type: " + to_string($1->typeSpecifier) + " and " + 
                            to_string($3->typeSpecifier), yylineno);
@@ -814,7 +814,7 @@ relational_expression
                 typeCastFunction($1, $3, true);
                 backTrackRelExpr($$);
                 irGen.emit(TACOp::GT, "", $1->tacResult, $3->tacResult, true);
-                irGen.emit(TACOp::oth, "", nullopt, nullopt, true);
+                irGen.emit(TACOp::oth, "", "", "", true);
                 $$->tacResult = irGen.newTemp();
             } else {
                 raiseError("Incompatible Type: " + to_string($1->typeSpecifier) + " and " + 
@@ -838,7 +838,7 @@ relational_expression
                 typeCastFunction($1, $3, true);
                 backTrackRelExpr($$);
                 irGen.emit(TACOp::LE, "", $1->tacResult, $3->tacResult, true);
-                irGen.emit(TACOp::oth, "", nullopt, nullopt, true);
+                irGen.emit(TACOp::oth, "", "", "", true);
                 $$->tacResult = irGen.newTemp();
             } else {
                 raiseError("Incompatible Type: " + to_string($1->typeSpecifier) + " and " + 
@@ -862,7 +862,7 @@ relational_expression
                 typeCastFunction($1, $3, true);
                 backTrackRelExpr($$);
                 irGen.emit(TACOp::GE, "", $1->tacResult, $3->tacResult, true);
-                irGen.emit(TACOp::oth, "", nullopt, nullopt, true);
+                irGen.emit(TACOp::oth, "", "", "", true);
                 $$->tacResult = irGen.newTemp();
             } else {
                 raiseError("Incompatible Type: " + to_string($1->typeSpecifier) + " and " + 
@@ -890,7 +890,7 @@ equality_expression
                 $$->typeSpecifier = 3;
                 backTrackRelExpr($$);
                 irGen.emit(TACOp::EQ, "", $1->tacResult, $3->tacResult, true);
-                irGen.emit(TACOp::oth, "", nullopt, nullopt, true);
+                irGen.emit(TACOp::oth, "", "", "", true);
                 $$->tacResult = irGen.newTemp();
             } else {
                 raiseError("Incompatible Type: " + to_string($1->typeSpecifier) + " and " + 
@@ -914,7 +914,7 @@ equality_expression
                 typeCastFunction($1, $3, true);
                 backTrackRelExpr($$);
                 irGen.emit(TACOp::NE, "", $1->tacResult, $3->tacResult, true);
-                irGen.emit(TACOp::oth, "", nullopt, nullopt, true);
+                irGen.emit(TACOp::oth, "", "", "", true);
                 $$->tacResult = irGen.newTemp();
             } else {
                 raiseError("Incompatible Type: " + to_string($1->typeSpecifier) + " and " + 
@@ -1021,7 +1021,7 @@ logical_and_expression
             next = Backpatch::addToBackpatchList(curr, irGen.currentInstrIndex + 1);
             $1->falseList = next;
             irGen.emit(TACOp::NE, "", $1->tacResult, "0", true);
-            irGen.emit(TACOp::oth, "", nullopt, nullopt, true);
+            irGen.emit(TACOp::oth, "", "", "", true);
         }
     } LOGICAL_AND_OPERATOR M inclusive_or_expression { 
         int rhsPointerLevel = $5->pointerLevel;
@@ -1041,7 +1041,7 @@ logical_and_expression
                 next = Backpatch::addToBackpatchList(curr, irGen.currentInstrIndex + 1);
                 $5->falseList = next;
                 irGen.emit(TACOp::NE, "", $5->tacResult, "0", true);
-                irGen.emit(TACOp::oth, "", nullopt, nullopt, true);
+                irGen.emit(TACOp::oth, "", "", "", true);
             }
             string temp = irGen.newTemp();
             $$->tacResult = temp; 
@@ -1066,7 +1066,7 @@ logical_or_expression
             next = Backpatch::addToBackpatchList(curr, irGen.currentInstrIndex + 1);
             $1->falseList = next;
             irGen.emit(TACOp::NE, "", $1->tacResult, "0", true);
-            irGen.emit(TACOp::oth, "", nullopt, nullopt, true);
+            irGen.emit(TACOp::oth, "", "", "", true);
         }
     } LOGICAL_OR_OPERATOR M logical_and_expression { 
         int rhsPointerLevel = $5->pointerLevel;
@@ -1086,7 +1086,7 @@ logical_or_expression
                 next = Backpatch::addToBackpatchList(curr, irGen.currentInstrIndex + 1);
                 $5->falseList = next;
                 irGen.emit(TACOp::NE, "", $5->tacResult, "0", true);
-                irGen.emit(TACOp::oth, "", nullopt, nullopt, true);
+                irGen.emit(TACOp::oth, "", "", "", true);
             }
             string temp = irGen.newTemp();
             $$->tacResult = temp; 
@@ -1168,18 +1168,18 @@ assignment_expression
                 Backpatch::backpatch($3->trueList, to_string(irGen.currentInstrIndex));
                 Backpatch::backpatch($3->falseList, to_string(irGen.currentInstrIndex + 1));
                 if ($2->value == "=") {
-                    irGen.emit(TACOp::ASSIGN, $1->tacResult, "1", nullopt);
+                    irGen.emit(TACOp::ASSIGN, $1->tacResult, "1", "");
                 } else {
                     irGen.emit(assignToOp(opr[0]), $1->tacResult, $1->tacResult, "1");
                 }
                 if ($2->value == "=") {
-                    irGen.emit(TACOp::ASSIGN, $1->tacResult, "0", nullopt);
+                    irGen.emit(TACOp::ASSIGN, $1->tacResult, "0", "");
                 } else {
                     irGen.emit(assignToOp(opr[0]), $1->tacResult, $1->tacResult, "0");
                 }
             } else {
                 if ($2->value == "=") {
-                    irGen.emit(TACOp::ASSIGN, $1->tacResult, $3->tacResult, nullopt);
+                    irGen.emit(TACOp::ASSIGN, $1->tacResult, $3->tacResult, "");
                 } else {
                     irGen.emit(assignToOp(opr[0]), $1->tacResult, $3->tacResult, $3->tacResult);
                 }
@@ -1223,7 +1223,7 @@ single_expression
             next = Backpatch::addToBackpatchList(curr, irGen.currentInstrIndex + 1);
             $$->falseList = next;
             irGen.emit(TACOp::NE, "", $1->tacResult, "0", true);
-            irGen.emit(TACOp::oth, "", nullopt, nullopt, true);
+            irGen.emit(TACOp::oth, "", "", "", true);
         }
     }
     ;
@@ -1577,7 +1577,7 @@ io_statement
                     Backpatch::backpatch(arg->trueList, to_string(irGen.currentInstrIndex));
                     Backpatch::backpatch(arg->falseList, to_string(irGen.currentInstrIndex + 1));
                     irGen.emit(TACOp::NE, "", arg->tacResult, "0", true);
-                    irGen.emit(TACOp::oth, "", nullopt, nullopt, true);
+                    irGen.emit(TACOp::oth, "", "", "", true);
                 }
                 irGen.emit(TACOp::PARAM, arg->tacResult);
                 paramCount++;
@@ -1611,7 +1611,7 @@ io_statement
                         Backpatch::backpatch(arg->trueList, to_string(irGen.currentInstrIndex));
                         Backpatch::backpatch(arg->falseList, to_string(irGen.currentInstrIndex + 1));
                         irGen.emit(TACOp::NE, "", arg->tacResult, "0", true);
-                        irGen.emit(TACOp::oth, "", nullopt, nullopt, true);
+                        irGen.emit(TACOp::oth, "", "", "", true);
                     }
                     irGen.emit(TACOp::PARAM, arg->tacResult);
                     paramCount++;
@@ -1741,7 +1741,7 @@ selection_statement
     }
     | KEYWORD_SWITCH {
         switchStack.push(irGen.currentInstrIndex);
-        irGen.emit(TACOp::oth, "", nullopt, nullopt, true);
+        irGen.emit(TACOp::oth, "", "", "", true);
     } LPAREN expression RPAREN {
         enterScope(); 
         inLoop++; 
@@ -1751,7 +1751,7 @@ selection_statement
     } statement {
         if ($4->typeSpecifier == 1 || $4->typeSpecifier == 2 || $4->typeSpecifier == 3 || $4->typeSpecifier == 4) {
             $$->nextList = Backpatch::addToBackpatchList($$->nextList, irGen.currentInstrIndex);
-            irGen.emit(TACOp::oth, "", nullopt, nullopt, true);
+            irGen.emit(TACOp::oth, "", "", "", true);
             irGen.tacCode[switchStack.top()].result = to_string(irGen.currentInstrIndex);
             switchStack.pop();
             backpatchNode* curr = $7->switchList;
@@ -1762,7 +1762,7 @@ selection_statement
                 curr = curr->next;
             }
             if ($7->continueList) {
-                irGen.emit(TACOp::oth, to_string($7->continueList->index), nullopt, nullopt, true);
+                irGen.emit(TACOp::oth, to_string($7->continueList->index), "", "", true);
             }
             exitScope();
             inLoop--;
@@ -1782,7 +1782,7 @@ iteration_statement
     } M statement {
         Backpatch::backpatch($4->trueList, $7->tacResult);
         Backpatch::backpatch($8->nextList, $1->tacResult);
-        irGen.emit(TACOp::oth, $1->tacResult, nullopt, nullopt, true);
+        irGen.emit(TACOp::oth, $1->tacResult, "", "", true);
         Backpatch::backpatch($8->continueList, $1->tacResult);
         $$->nextList = Backpatch::mergeBackpatchLists($8->breakList, $4->falseList);
         $$->goToList = $8->goToList;
@@ -1805,14 +1805,14 @@ iteration_statement
         enterScope();
     } for_init M for_cond M for_inc RPAREN {
         inLoop++;
-        irGen.emit(TACOp::oth, $5->tacResult, nullopt, nullopt, true);
+        irGen.emit(TACOp::oth, $5->tacResult, "", "", true);
     } M statement {
         Backpatch::backpatch($6->trueList, $11->tacResult);            
         Backpatch::backpatch($12->nextList, $7->tacResult);
         Backpatch::backpatch($12->continueList, $7->tacResult);
         $$->nextList = Backpatch::mergeBackpatchLists($12->breakList, $6->falseList);
         $$->goToList = $12->goToList;
-        irGen.emit(TACOp::oth, $7->tacResult, nullopt, nullopt, true);
+        irGen.emit(TACOp::oth, $7->tacResult, "", "", true);
         exitScope();
         inLoop--; 
     }
@@ -1849,7 +1849,7 @@ jump_statement
         if (!labelNode) {
             backpatchNode* newList = Backpatch::addToBackpatchList(nullptr, irGen.currentInstrIndex);
             labelToBeDefined.top()[$2->value] = Backpatch::mergeBackpatchLists(labelToBeDefined.top()[$2->value], newList);
-            irGen.emit(TACOp::oth, "", nullopt, nullopt, true);
+            irGen.emit(TACOp::oth, "", "", "", true);
         } else {
             irGen.emit(TACOp::GOTO, labelNode->tacResult);
         }
@@ -1862,7 +1862,7 @@ jump_statement
         } else {
             $$ = createNode(NODE_JUMP_STATEMENT, "", $1);
             $$->continueList = Backpatch::addToBackpatchList(nullptr, irGen.currentInstrIndex);
-            irGen.emit(TACOp::oth, "", nullopt, nullopt, true);
+            irGen.emit(TACOp::oth, "", "", "", true);
         }
     }
     | KEYWORD_BREAK SEMICOLON {
@@ -1871,7 +1871,7 @@ jump_statement
         } else {
             $$ = createNode(NODE_JUMP_STATEMENT, "", $1);
             $$->breakList = Backpatch::addToBackpatchList(nullptr, irGen.currentInstrIndex);
-            irGen.emit(TACOp::oth, "", nullopt, nullopt, true);
+            irGen.emit(TACOp::oth, "", "", "", true);
         }
     }
     | KEYWORD_RETURN SEMICOLON {
@@ -1952,19 +1952,19 @@ void yyerror(const char *s) {
 }
 
 
-int main(int argc, char **argv)
+vector<TACInstruction> parser(int argc, char **argv)
 {
     if (argc < 2)
     {
         cout << "Usage: " << argv[0] << " <input_file>" << endl;
-        return 1;
+        return {};
     }
 
     yyin = fopen(argv[1], "r");
     if (!yyin)
     {
         cout << "Error opening file" << endl;
-        return 1;
+        return {};
     }
 
     currentTable = new Table();
@@ -1993,14 +1993,14 @@ int main(int argc, char **argv)
     if(!err)
     {
         cout << "Error opening error file: " << errName << endl;
-        return 1;
+        return {};
     }else if (!out)
     {
         cout << "Error opening output file: " << outName << endl;
-        return 1;
+        return {};
     }else if(!sym){
         cout << "Error opening symtab file: " << symTabName << endl;
-        return 1;
+        return {};
     }
 
     yyparse();
@@ -2013,6 +2013,5 @@ int main(int argc, char **argv)
     cout.rdbuf(out.rdbuf());
     irGen.printTAC();
     cout.rdbuf(coutbuf);
-
-    return 0;
+    return irGen.tacCode;
 }

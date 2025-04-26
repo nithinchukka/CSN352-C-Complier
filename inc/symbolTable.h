@@ -1,8 +1,9 @@
 #ifndef SYMBOL_TABLE_H
 #define SYMBOL_TABLE_H
-
+#pragma once
 #include <bits/stdc++.h>
 #include "treeNode.h"
+#include "tac.h"
 
 void raiseError(const string &message, int lineno = -1)
 {
@@ -11,45 +12,6 @@ void raiseError(const string &message, int lineno = -1)
         cerr << " at line " << lineno;
     cerr << endl;
 }
-
-enum class TACOp
-{
-    ASSIGN,
-    ADD,
-    SUB,
-    MUL,
-    DIV,
-    MOD,
-    INDEX,
-    ARR_INDEX,
-    LABEL,
-    GOTO,
-    IF_EQ,
-    IF_NE,
-    LSHFT,
-    RSHFT,
-    LT,
-    GT,
-    LE,
-    GE,
-    EQ,
-    NE,
-    BIT_AND,
-    BIT_OR,
-    BIT_XOR,
-    AND,
-    OR,
-    XOR,
-    PRINT,
-    RETURN,
-    CALL,
-    TYPECAST,
-    CALL2,
-    PARAM,
-    DEREF,
-    REFER,
-    oth
-};
 
 TACOp assignToOp(const char &ch)
 {
@@ -131,22 +93,6 @@ inline string opToStr(TACOp op)
         return "IF ==";
     case TACOp::IF_NE:
         return "IF !=";
-    case TACOp::TYPECAST:
-        return "cast";
-    case TACOp::CALL:
-        return "CALL";
-    case TACOp::PRINT:
-        return "print";
-    case TACOp::INDEX:
-        return "index";
-    case TACOp::ARR_INDEX:
-        return "arr_index";
-    case TACOp::RETURN:
-        return "RETURN";
-    case TACOp::LABEL:
-        return "LABEL";
-    case TACOp::PARAM:
-        return "PARAM";
     case TACOp::oth:
         return "";
     default:
@@ -154,142 +100,94 @@ inline string opToStr(TACOp op)
     }
 }
 
-struct TACInstruction
+string TACInstruction::toString() const
 {
-    TACOp op;
-    string result;
-    optional<string> operand1;
-    optional<string> operand2;
-    bool isGoto = false;
-    TACInstruction(TACOp operation, const string &res,
-                   const optional<string> &op1 = nullopt,
-                   const optional<string> &op2 = nullopt,
-                   bool isGotoFlag = false)
-        : op(operation), result(res), operand1(op1), operand2(op2),
-          isGoto(isGotoFlag) {}
-
-    string toString() const
+    string str;
+    if (isGoto)
     {
-        string str;
-        if (isGoto)
-        {
-            if (op == TACOp::oth)
-                str = "GOTO " + result;
-            else
-                str = "IF " + *operand1 + " " + opToStr(op) + " " + *operand2 + " GOTO " + result;
-            return str;
-        }
-        switch (op)
-        {
-        case TACOp::ASSIGN:
-            str = result + " = " + (operand1 ? *operand1 : "");
-            break;
-        case TACOp::ADD:
-            str = result + " = " + *operand1 + " + " + *operand2;
-            break;
-        case TACOp::SUB:
-            str = result + " = " + *operand1 + " - " + *operand2;
-            break;
-        case TACOp::MUL:
-            str = result + " = " + *operand1 + " * " + *operand2;
-            break;
-        case TACOp::DIV:
-            str = result + " = " + *operand1 + " / " + *operand2;
-            break;
-        case TACOp::MOD:
-            str = result + " = " + *operand1 + " % " + *operand2;
-            break;
-        case TACOp::LSHFT:
-            str = result + " = " + *operand1 + " << " + *operand2;
-            break;
-        case TACOp::RSHFT:
-            str = result + " = " + *operand1 + " >> " + *operand2;
-            break;
-        case TACOp::LT:
-            str = result + " = " + *operand1 + " < " + *operand2;
-            break;
-        case TACOp::GT:
-            str = result + " = " + *operand1 + " > " + *operand2;
-            break;
-        case TACOp::LE:
-            str = result + " = " + *operand1 + " <= " + *operand2;
-            break;
-        case TACOp::GE:
-            str = result + " = " + *operand1 + " >= " + *operand2;
-            break;
-        case TACOp::EQ:
-            str = result + " = " + *operand1 + " == " + *operand2;
-            break;
-        case TACOp::NE:
-            str = result + " = " + *operand1 + " != " + *operand2;
-            break;
-        case TACOp::BIT_AND:
-            str = result + " = " + *operand1 + " & " + *operand2;
-            break;
-        case TACOp::BIT_OR:
-            str = result + " = " + *operand1 + " | " + *operand2;
-            break;
-        case TACOp::BIT_XOR:
-            str = result + " = " + *operand1 + " ^ " + *operand2;
-            break;
-        case TACOp::AND:
-            str = result + " = " + *operand1 + " && " + *operand2;
-            break;
-        case TACOp::OR:
-            str = result + " = " + *operand1 + " || " + *operand2;
-            break;
-        case TACOp::XOR:
-            str = result + " = " + *operand1 + " ^ " + *operand2;
-            break;
-        case TACOp::PRINT:
-            str = "print " + result;
-            break;
-        case TACOp::INDEX:
-            str = result + " = " + *operand1 + "[" + *operand2 + "]";
-            break;
-        case TACOp::LABEL:
-            str = result + ":";
-            break;
-        case TACOp::GOTO:
+        if (op == TACOp::oth)
             str = "GOTO " + result;
-            break;
-        case TACOp::IF_EQ:
-            str = "IF " + *operand1 + " == " + *operand2 + " GOTO " + result;
-            break;
-        case TACOp::IF_NE:
-            str = "IF " + *operand1 + " != " + *operand2 + " GOTO " + result;
-            break;
-        case TACOp::RETURN:
-            str = "RETURN " + result;
-            break;
-        case TACOp::CALL:
-            str = result + " = CALL " + *operand1 + "(" + (operand2 ? *operand2 : "") + ")";
-            break;
-        case TACOp::CALL2:
-            str = "CALL " + *operand1 + "(" + (operand2 ? *operand2 : "") + ")";
-            break;
-        case TACOp::TYPECAST:
-            str = result + " = " + *operand1 + "(" + *operand2 + ")";
-            break;
-        case TACOp::oth:
-            str = result + " = " + *operand1 + " " + *operand2;
-            break;
-        case TACOp::PARAM:
-            str = "PARAM " + result;
-            break;
-        case TACOp::DEREF:
-            str = result + " = *" + *operand1;
-            break;
-        case TACOp::REFER:
-            str = result + " = &" + *operand1;
-            break;
-        default:
-            str = "Unknown";
-            break;
-        }
+        else
+            str = "IF " + operand1 + " " + opToStr(op) + " " + operand2 + " GOTO " + result;
         return str;
     }
-};
+
+    switch (op)
+    {
+    case TACOp::ASSIGN:
+        str = result + " = " + operand1;
+        break;
+    case TACOp::ADD:
+    case TACOp::SUB:
+    case TACOp::MUL:
+    case TACOp::DIV:
+    case TACOp::MOD:
+    case TACOp::LSHFT:
+    case TACOp::RSHFT:
+    case TACOp::LT:
+    case TACOp::GT:
+    case TACOp::LE:
+    case TACOp::GE:
+    case TACOp::EQ:
+    case TACOp::NE:
+    case TACOp::BIT_AND:
+    case TACOp::BIT_OR:
+    case TACOp::BIT_XOR:
+    case TACOp::AND:
+    case TACOp::OR:
+    case TACOp::XOR:
+        str = result + " = " + operand1 + " " + opToStr(op) + " " + operand2;
+        break;
+    case TACOp::PRINT:
+        str = "PRINTF " + result;
+        break;
+    case TACOp::SCAN:
+        str = "SCANF " + result;
+    case TACOp::INDEX:
+        str = result + " = " + operand1 + "[" + operand2 + "]";
+        break;
+    case TACOp::LABEL:
+        str = result + ":";
+        break;
+    case TACOp::GOTO:
+        str = "GOTO " + result;
+        break;
+    case TACOp::IF_EQ:
+        str = "IF " + operand1 + " == " + operand2 + " GOTO " + result;
+        break;
+    case TACOp::IF_NE:
+        str = "IF " + operand1 + " != " + operand2 + " GOTO " + result;
+        break;
+    case TACOp::RETURN:
+        str = "RETURN " + result;
+        break;
+    case TACOp::CALL:
+        str = result + " = CALL " + operand1 + ", " + operand2;
+        break;
+    case TACOp::CALL2:
+        str = "CALL " + operand1 + ", " + operand2;
+        break;
+    case TACOp::TYPECAST:
+        str = result + " = " + operand1 + "(" + operand2 + ")";
+        break;
+    case TACOp::oth:
+        str = "GOTO " + result + " " + operand1 + " " + operand2;
+        break;
+    case TACOp::PARAM:
+        str = "PARAM " + result;
+        break;
+    case TACOp::DEREF:
+        str = result + " = *" + operand1;
+        break;
+    case TACOp::REFER:
+        str = result + " = &" + operand1;
+        break;
+    default:
+        str = "Unknown";
+        break;
+    }
+    return str;
+}
 
 struct irGenerator
 {
@@ -308,8 +206,8 @@ struct irGenerator
         return "L" + to_string(labelCounter++);
     }
     int emit(TACOp op, const string &result,
-             const optional<string> &op1 = nullopt,
-             const optional<string> &op2 = nullopt, bool isGotoFlag = false)
+             const string &op1 = "",
+             const string &op2 = "", bool isGotoFlag = false)
     {
         tacCode.emplace_back(op, result, op1, op2, isGotoFlag);
         return currentInstrIndex++;
@@ -943,7 +841,7 @@ void GenerateTAC(TreeNode *initList, vector<int> dimensions, int level, string n
         for (TreeNode *child : initList->children)
         {
             string indexedName = name + "[" + to_string(i) + "]";
-            irGen.emit(TACOp::ASSIGN, indexedName, child->tacResult, nullopt);
+            irGen.emit(TACOp::ASSIGN, indexedName, child->tacResult, "");
             i++;
         }
     }
@@ -1123,15 +1021,15 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
                         for (int i = 0; i < array_size; i++)
                         {
                             string temp = irGen.newTemp();
-                            irGen.emit(TACOp::ASSIGN, temp, "'" + string(1, s[i + 1]) + "'", nullopt);
+                            irGen.emit(TACOp::ASSIGN, temp, "'" + string(1, s[i + 1]) + "'", "");
                             temp_store.push_back(temp);
                         }
                         string temp = irGen.newTemp();
-                        irGen.emit(TACOp::ASSIGN, temp, "/0", nullopt);
+                        irGen.emit(TACOp::ASSIGN, temp, "0", "");
                         for (int i = 0; i < array_size; i++)
                         {
                             string indexedName = varName + "[" + to_string(i) + "]";
-                            irGen.emit(TACOp::ASSIGN, indexedName, temp_store[i], nullopt);
+                            irGen.emit(TACOp::ASSIGN, indexedName, temp_store[i], "");
                         }
                     }
                 }
@@ -1168,7 +1066,8 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
                         insertSymbol(varName, identifierNode);
                         identifierNode->offset = offsetStack.top();
                         int totalSize = 1;
-                        for(auto i:dimensions) totalSize *= i;
+                        for (auto i : dimensions)
+                            totalSize *= i;
                         offsetStack.top() += totalSize * findOffset(declInfo.typeSpecifier);
                     }
                 }
@@ -1244,12 +1143,12 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
                                 {
                                     Backpatch::backpatch(child->children[1]->trueList, to_string(irGen.currentInstrIndex));
                                     Backpatch::backpatch(child->children[1]->falseList, to_string(irGen.currentInstrIndex + 1));
-                                    irGen.emit(TACOp::ASSIGN, varName, "1", nullopt);
-                                    irGen.emit(TACOp::ASSIGN, varName, "0", nullopt);
+                                    irGen.emit(TACOp::ASSIGN, varName, "1", "");
+                                    irGen.emit(TACOp::ASSIGN, varName, "0", "");
                                 }
                                 else
                                 {
-                                    irGen.emit(TACOp::ASSIGN, varName, child->children[1]->tacResult, nullopt);
+                                    irGen.emit(TACOp::ASSIGN, varName, child->children[1]->tacResult, "");
                                 }
                             }
                             else if (isTypeCompatible(declInfo.typeSpecifier, child->children[1]->typeSpecifier, "="))
@@ -1263,15 +1162,15 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
                                 setNodeAttributes(identifierNode, 1, pointerDepth);
                                 insertSymbol(varName, identifierNode);
                                 // if (child->children[1]->trueList || child->children[1]->falseList)
-                                // {    
+                                // {
                                 //     Backpatch::backpatch(child->children[1]->trueList, to_string(irGen.currentInstrIndex));
                                 //     Backpatch::backpatch(child->children[1]->falseList, to_string(irGen.currentInstrIndex + 1));
-                                //     irGen.emit(TACOp::ASSIGN, varName, "1", nullopt);
-                                //     irGen.emit(TACOp::ASSIGN, varName, "0", nullopt);
+                                //     irGen.emit(TACOp::ASSIGN, varName, "1", "");
+                                //     irGen.emit(TACOp::ASSIGN, varName, "0", "");
                                 // }
 
                                 // else
-                                irGen.emit(TACOp::ASSIGN, varName, child->children[1]->tacResult, nullopt);
+                                irGen.emit(TACOp::ASSIGN, varName, child->children[1]->tacResult, "");
                             }
                             else if (declInfo.typeSpecifier == 1 && child->children[1]->typeSpecifier == 8)
                             {
@@ -1344,12 +1243,12 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
                             {
                                 Backpatch::backpatch(child->children[1]->trueList, to_string(irGen.currentInstrIndex));
                                 Backpatch::backpatch(child->children[1]->falseList, to_string(irGen.currentInstrIndex + 1));
-                                irGen.emit(TACOp::ASSIGN, varName, "1", nullopt);
-                                irGen.emit(TACOp::ASSIGN, varName, "0", nullopt);
+                                irGen.emit(TACOp::ASSIGN, varName, "1", "");
+                                irGen.emit(TACOp::ASSIGN, varName, "0", "");
                             }
                             else
                             {
-                                irGen.emit(TACOp::ASSIGN, varName, child->children[1]->tacResult, nullopt);
+                                irGen.emit(TACOp::ASSIGN, varName, child->children[1]->tacResult, "");
                             }
                         }
                         else
@@ -1371,7 +1270,7 @@ void addFunction(TreeNode *declSpec, TreeNode *decl)
     if (declInfo.isValid)
     {
         string funcName = decl->children[0]->value;
-        irGen.emit(TACOp::LABEL, funcName, nullopt, nullopt);
+        irGen.emit(TACOp::LABEL, funcName, "", "");
         insertSymbol(funcName, decl->children[0]);
         TreeNode *funcNode = decl->children[0];
         funcNode->typeSpecifier = declInfo.typeSpecifier;
