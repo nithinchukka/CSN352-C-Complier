@@ -1,5 +1,5 @@
-int main(){
-    int arr[5];
-    int x;
-    x = arr[4];
+int main()
+{
+    int a = 1;
+    a = a + a;
 }

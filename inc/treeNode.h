@@ -6,6 +6,7 @@ using namespace std;
 struct backpatchNode;
 enum NodeType
 {
+    REGISTER,
     NODE_ASSIGNMENT,
     NODE_TRANSLATION_UNIT,
     NODE_PARAMETER_TYPE_LIST,

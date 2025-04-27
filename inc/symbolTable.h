@@ -182,6 +182,12 @@ string TACInstruction::toString() const
     case TACOp::REFER:
         str = result + " = &" + operand1;
         break;
+    case TACOp::ENDFUNC:
+        str = "END FUNCTION";
+        break;
+    case TACOp::STARTFUNC:
+        str = result + ":";
+        break;
     default:
         str = "Unknown";
         break;
@@ -198,7 +204,7 @@ struct irGenerator
 
     string newTemp()
     {
-        return "t" + to_string(tempCounter++);
+        return "#t" + to_string(tempCounter++);
     }
 
     string newLabel()
@@ -313,7 +319,7 @@ Table *currentTable;
 vector<Table *> allTables;
 stack<unordered_map<string, backpatchNode *>> labelToBeDefined;
 
-TreeNode *lookupSymbol(string symbol, bool arg = false)
+TreeNode *lookupSymbol(string symbol, bool arg = false, bool orginal = false)
 {
     Table *temp = currentTable;
     while (temp != nullptr)
@@ -322,6 +328,8 @@ TreeNode *lookupSymbol(string symbol, bool arg = false)
         {
             if (entry.first == symbol)
             {
+                if (orginal)
+                    return entry.second;
                 TreeNode *original = entry.second;
                 TreeNode *copy = new TreeNode(*original);
                 return copy;
@@ -364,33 +372,37 @@ int findOffset(int type, string name = "")
     }
 }
 
-void enterScope()
+void enterScope(bool arg = false)
 {
     Table *newTable = new Table();
     newTable->parent = currentTable;
     currentTable = newTable;
     tableStack.push(newTable);
-    offsetStack.push(0);
+    if (arg)
+        offsetStack.push(0);
     labelToBeDefined.push({});
     allTables.push_back(newTable);
 }
 
-void exitScope()
+void exitScope(bool arg = false)
 {
     if (currentTable->parent == nullptr)
     {
         raiseError("Cannot exit global scope");
         return;
     }
-    currentTable->totalSize = offsetStack.top();
     currentTable = currentTable->parent;
+    if (arg)
+    {
+        currentTable->totalSize = offsetStack.top();
+        offsetStack.pop();
+    }
     tableStack.pop();
     if (labelToBeDefined.top().size())
     {
         raiseError("Unresolved labels in scope");
     }
     labelToBeDefined.pop();
-    offsetStack.pop();
 }
 
 void insertSymbol(string symbol, TreeNode *node)
@@ -795,11 +807,12 @@ bool structInitializerCheck(TreeNode *identifierNode, TreeNode *initializerList)
         else
         {
             string temp = irGen.newTemp();
-            TreeNode* helper = new TreeNode(OTHERS);
+            TreeNode *helper = new TreeNode(OTHERS);
             helper->value = temp;
-            helper->offset=offsetStack.top();;
+            helper->offset = offsetStack.top();
+            ;
             offsetStack.top() += findOffset(expectedType);
-            insertSymbol(temp,helper);
+            insertSymbol(temp, helper);
             irGen.emit(TACOp::TYPECAST, temp, typeCastInfo(expectedType, actualType), initNode->tacResult);
             initNode->tacResult = temp;
         }
@@ -1026,17 +1039,18 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
                         for (int i = 0; i < array_size; i++)
                         {
                             string temp = irGen.newTemp();
-                            TreeNode* helper = new TreeNode(OTHERS);
-                            insertSymbol(temp,helper);
+                            TreeNode *helper = new TreeNode(OTHERS);
+                            insertSymbol(temp, helper);
                             irGen.emit(TACOp::ASSIGN, temp, "'" + string(1, s[i + 1]) + "'", "");
                             temp_store.push_back(temp);
                         }
                         string temp = irGen.newTemp();
-                        TreeNode* helper = new TreeNode(OTHERS);
-                        helper->offset=offsetStack.top();;
+                        TreeNode *helper = new TreeNode(OTHERS);
+                        helper->offset = offsetStack.top();
+                        ;
                         offsetStack.top() += findOffset(declInfo.typeSpecifier);
                         helper->value = temp;
-                        insertSymbol(temp,helper);
+                        insertSymbol(temp, helper);
                         irGen.emit(TACOp::ASSIGN, temp, "/0", "");
                         for (int i = 0; i < array_size; i++)
                         {
@@ -1168,11 +1182,12 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
                                 if (declInfo.typeSpecifier != child->children[1]->typeSpecifier)
                                 {
                                     string temp = irGen.newTemp();
-                                    TreeNode* helper = new TreeNode(OTHERS);
+                                    TreeNode *helper = new TreeNode(OTHERS);
                                     helper->value = temp;
-                                    helper->offset=offsetStack.top();;
+                                    helper->offset = offsetStack.top();
+                                    ;
                                     offsetStack.top() += findOffset(declInfo.typeSpecifier);
-                                    insertSymbol(temp,helper);
+                                    insertSymbol(temp, helper);
                                     irGen.emit(TACOp::TYPECAST, temp, typeCastInfo(declInfo.typeSpecifier, child->children[1]->typeSpecifier), child->children[1]->tacResult);
                                     child->children[1]->tacResult = temp;
                                 }
@@ -1250,12 +1265,12 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
                             if (declInfo.typeSpecifier != child->children[1]->typeSpecifier)
                             {
                                 string temp = irGen.newTemp();
-                                TreeNode* helper = new TreeNode(OTHERS);
+                                TreeNode *helper = new TreeNode(OTHERS);
 
-                                helper->value = temp;   
-                                helper->offset=offsetStack.top();
+                                helper->value = temp;
+                                helper->offset = offsetStack.top();
                                 offsetStack.top() += findOffset(declInfo.typeSpecifier);
-                                insertSymbol(temp,helper);
+                                insertSymbol(temp, helper);
                                 irGen.emit(TACOp::TYPECAST, temp, typeCastInfo(declInfo.typeSpecifier, child->children[1]->typeSpecifier), child->children[1]->tacResult);
                                 child->children[1]->tacResult = temp;
                             }
@@ -1293,7 +1308,7 @@ void addFunction(TreeNode *declSpec, TreeNode *decl)
     if (declInfo.isValid)
     {
         string funcName = decl->children[0]->value;
-        irGen.emit(TACOp::LABEL, funcName, "", "");
+        irGen.emit(TACOp::STARTFUNC, funcName, "", "");
         insertSymbol(funcName, decl->children[0]);
         TreeNode *funcNode = decl->children[0];
         funcNode->typeSpecifier = declInfo.typeSpecifier;
@@ -1301,7 +1316,7 @@ void addFunction(TreeNode *declSpec, TreeNode *decl)
         funcNode->isConst = declInfo.isConst;
         funcNode->isStatic = declInfo.isStatic;
         funcNode->typeCategory = 3;
-        enterScope();
+        enterScope(true);
         if (decl->children.size() > 1 && decl->children[1]->type == NODE_PARAMETER_LIST)
         {
             for (auto param : decl->children[1]->children)

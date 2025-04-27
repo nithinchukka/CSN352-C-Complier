@@ -2221,7 +2221,8 @@ function_definition
     } compound_statement_func {
         $$ = createNode(NODE_FUNCTION_DEFINITION, "" , $1, $2, $4);
         inFunc = false;
-        exitScope();
+        exitScope(true);
+        irGen.emit(TACOp::ENDFUNC, "", "", "");
         expectedReturnType = -1;
     }
     ;
