@@ -1,32 +1,69 @@
 # CSN352-C-Compiler
 A minimal end-to-end compiler for a C-like language.
 
-## Installation & Compilation
-### Prerequisites
-Ensure you have the following installed:
-- **Flex** (Lexical analyzer generator)
-- **G++** (C++ compiler)
+---
 
-### Build the Lexer
-To compile the lexer, run:
-```sh
+## Installation & Compilation
+
+### Prerequisites
+Make sure you have the following installed:
+- Flex
+- Bison
+- G++
+
+---
+
+### Build the Compiler
+To compile the project, run:
+```bash
 make
 ```
-This will generate `lexer.out` inside the `build/` directory.
+This will generate `compiler.out` inside the `build/` directory.
 
-### Running the Lexer
-To run the lexer on a test file, use:
-```sh
-make runlexer FILE=test/test1.c
-```
-Alternatively, use the provided script to run all test cases:
-```sh
-bash run.sh
-```
-The output will be stored in `output.log`.
+---
 
-### Cleaning Build Files
-To remove compiled files and reset the build directory, run:
-```sh
+### Running the Compiler
+To run the compiler on a test file:
+```bash
+./build/compiler.out <test_file_path>
+```
+
+Or to run all provided test cases:
+```bash
+./run.sh
+```
+
+---
+
+### Cleaning Up
+To clean the build files and reset:
+```bash
 make clean
 ```
+
+---
+
+## Output Files
+- Intermediate 3-address code (`.3ac`) will be stored in `output/3ac/`
+- Generated assembly code (`.s`) will be stored in `output/asm/`
+- Output filenames will match the input filenames.
+
+---
+
+## Running the Assembly Code
+You can execute the generated `.s` files in two ways:
+
+### 1. Online Simulator
+Use [this x86-64 online simulator](https://app.x64.halb.it/) to upload and run `.s` files directly.
+
+### 2. GCC on Local Machine
+Compile and run the assembly file locally:  
+**Note:** If you are using this method, remove the code section labeled `_start:` from the `<file_name>.s` file before compiling.
+
+```bash
+gcc <file_name>.s
+./a.out
+```
+
+
+---
