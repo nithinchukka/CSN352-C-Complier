@@ -41,13 +41,14 @@
     }
 
     void typeCastFunction(TreeNode *a, TreeNode *b, bool isRel = false){
+        cout << "hi";
         if (a->typeSpecifier < b->typeSpecifier) {
             string temp = irGen.newTemp();
             helper = new TreeNode(OTHERS);
             helper->typeSpecifier = a->typeSpecifier;
             helper->value = temp;
             helper->offset = offsetStack.top();
-            offsetStack.top() += 4;
+            offsetStack.top() += findOffset(helper->typeSpecifier);
             insertSymbol(temp,helper);
             irGen.emit(TACOp::TYPECAST, temp, typeCastInfo(b->typeSpecifier, a->typeSpecifier), a->tacResult);
             a->tacResult = temp;
@@ -57,7 +58,7 @@
             helper->typeSpecifier = b->typeSpecifier;
             helper->value = temp;
             helper->offset = offsetStack.top();
-            offsetStack.top() += 4;
+            offsetStack.top() += findOffset(helper->typeSpecifier);
             insertSymbol(temp,helper);
             irGen.emit(TACOp::TYPECAST, temp, typeCastInfo(a->typeSpecifier, b->typeSpecifier), b->tacResult);
             b->tacResult = temp;
@@ -821,6 +822,7 @@ additive_expression
         $$ = $1; 
     }
     | additive_expression PLUS_OPERATOR multiplicative_expression {
+        cout << "hi";
         $$ = createNode(NODE_ADDITIVE_EXPRESSION, $2, $1, $3);
         if ($1->isConstVal && $3->isConstVal) $$->isConstVal = 1;
         int rhsPointerLevel = $3->pointerLevel;
@@ -833,6 +835,7 @@ additive_expression
             $$->pointerLevel = lhsPointerLevel + rhsPointerLevel;
             if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "+")) {
                 $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
+                cout << "hi";
                 typeCastFunction($1, $3);
                 string temp = irGen.newTemp(); 
                 helper = new TreeNode(OTHERS);

@@ -455,8 +455,7 @@ void generateCodeForBasicBlock(const vector<TACInstruction> &tacCode, const vect
                 }
                 else
                 {
-                    int reg = fetchRegForImmediate(liveVars, regX.reg);
-                    emitCode("    mov " + getRegisterBySize(regMap[reg]->value, 3) + ", " + instr.operand1);
+                    emitCode("    mov " + getRegisterBySize(regMap[regX.reg]->value, instr.resNode->typeSpecifier) + ", " + instr.operand1);
                     emitCode("    add " + getRegisterBySize(regMap[regX.reg]->value, instr.resNode->typeSpecifier) + ", " + instr.operand2);
                 }
             }
@@ -479,16 +478,63 @@ void generateCodeForBasicBlock(const vector<TACInstruction> &tacCode, const vect
                 }
                 else
                 {
-                    int reg = fetchRegForImmediate(liveVars, regX.reg);
-                    emitCode("    mov " + getRegisterBySize(regMap[reg]->value, 3) + ", " + instr.operand1);
+                    emitCode("    mov " + getRegisterBySize(regMap[regX.reg]->value, instr.resNode->typeSpecifier) + ", " + instr.operand1);
                     emitCode("    sub " + getRegisterBySize(regMap[regX.reg]->value, instr.resNode->typeSpecifier) + ", " + instr.operand2);
                 }
             }
             else if (instr.op == TACOp::MUL)
             {
+                if (instr.opNode1 && instr.opNode2)
+                {
+                    emitCode("    mov " + getRegisterBySize(regMap[regX.reg]->value, instr.resNode->typeSpecifier) + ", " + getRegisterBySize(regMap[regY.reg]->value, instr.opNode1->typeSpecifier));
+                    emitCode("    imul " + getRegisterBySize(regMap[regX.reg]->value, instr.resNode->typeSpecifier) + ", " + getRegisterBySize(regMap[regZ.reg]->value, instr.opNode2->typeSpecifier));
+                }
+                else if (instr.opNode1)
+                {
+                    emitCode("    mov " + getRegisterBySize(regMap[regX.reg]->value, instr.resNode->typeSpecifier) + ", " + getRegisterBySize(regMap[regY.reg]->value, instr.opNode1->typeSpecifier));
+                    emitCode("    imul " + getRegisterBySize(regMap[regX.reg]->value, instr.resNode->typeSpecifier) + ", " + instr.operand2);
+                }
+                else if (instr.opNode2)
+                {
+                    emitCode("    mov " + getRegisterBySize(regMap[regX.reg]->value, instr.resNode->typeSpecifier) + ", " + instr.operand1);
+                    emitCode("    imul " + getRegisterBySize(regMap[regX.reg]->value, instr.resNode->typeSpecifier) + ", " + getRegisterBySize(regMap[regZ.reg]->value, instr.opNode2->typeSpecifier));
+                }
+                else
+                {
+                    emitCode("    mov " + getRegisterBySize(regMap[regX.reg]->value, instr.resNode->typeSpecifier) + ", " + instr.operand1);
+                    emitCode("    imul " + getRegisterBySize(regMap[regX.reg]->value, instr.resNode->typeSpecifier) + ", " + instr.operand2);
+                }
             }
             else if (instr.op == TACOp::DIV)
             {
+                if(instr.opNode1 && instr.opNode2)
+                {
+                    emitCode("    mov " + getRegisterBySize("rax",instr.opNode1->typeSpecifier) + ", " + getRegisterBySize(regMap[regY.reg]->value, instr.opNode1->typeSpecifier));
+                    emitCode("    cdq");
+                    emitCode("    idiv " + getRegisterBySize(regMap[regZ.reg]->value, instr.opNode2->typeSpecifier));
+                    emitCode("    mov " + getRegisterBySize(regMap[regX.reg]->value, instr.resNode->typeSpecifier) + ", " + getRegisterBySize("rax", instr.resNode->typeSpecifier));
+                }
+                else if(instr.opNode1)
+                {
+                    emitCode("    mov " + getRegisterBySize("rax",instr.opNode1->typeSpecifier) + ", " + getRegisterBySize(regMap[regY.reg]->value, instr.opNode1->typeSpecifier));
+                    emitCode("    cdq");
+                    emitCode("    idiv " + instr.operand2);
+                    emitCode("    mov " + getRegisterBySize(regMap[regX.reg]->value, instr.resNode->typeSpecifier) + ", " + getRegisterBySize("rax", instr.resNode->typeSpecifier));
+                }
+                else if(instr.opNode2)
+                {
+                    emitCode("    mov " + getRegisterBySize("rax", instr.resNode->typeSpecifier) + ", " + instr.operand1);
+                    emitCode("    cdq");
+                    emitCode("    idiv " + getRegisterBySize(regMap[regZ.reg]->value, instr.opNode2->typeSpecifier));
+                    emitCode("    mov " + getRegisterBySize(regMap[regX.reg]->value, instr.resNode->typeSpecifier) + ", " + getRegisterBySize("rax", instr.resNode->typeSpecifier));
+                }
+                else
+                {
+                    emitCode("    mov " + getRegisterBySize("rax", instr.resNode->typeSpecifier) + ", " + instr.operand1);
+                    emitCode("    cdq");
+                    emitCode("    idiv " + instr.operand2);
+                    emitCode("    mov " + getRegisterBySize(regMap[regX.reg]->value, instr.resNode->typeSpecifier) + ", " + getRegisterBySize("rax", instr.resNode->typeSpecifier));
+                }
             }
         }
         else
