@@ -119,7 +119,7 @@ public:
     vector<pair<string, TreeNode *>> symbolTable;
     int totalOffset = 0;
     string tacResult;
-
+    
     backpatchNode *nextList = nullptr;
     backpatchNode *falseList = nullptr;
     backpatchNode *trueList = nullptr;

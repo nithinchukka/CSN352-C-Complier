@@ -41,7 +41,6 @@
     }
 
     void typeCastFunction(TreeNode *a, TreeNode *b, bool isRel = false){
-        
         if (a->typeSpecifier < b->typeSpecifier) {
             string temp = irGen.newTemp();
             helper = new TreeNode(OTHERS);
@@ -247,7 +246,7 @@ postfix_expression
                 if($1->typeSpecifier == 1){
                     irGen.emit(TACOp::MUL,temp,temp,string(1,'1'));
                 }
-                else 
+                else
                     irGen.emit(TACOp::MUL,temp,temp,string(1,'4'));
                 string temp2 = irGen.newTemp();
                 helper = new TreeNode(OTHERS);
@@ -344,6 +343,12 @@ postfix_expression
                 irGen.emit(TACOp::CALL2, "", $1->tacResult, "0");
             } else {
                 string temp = irGen.newTemp();
+                helper = new TreeNode(OTHERS);
+                helper->value = temp;
+                helper->typeSpecifier = $1->typeSpecifier;
+                helper->offset = offsetStack.top();
+                offsetStack.top() += findOffset($1->typeSpecifier);
+                insertSymbol(temp,helper);
                 irGen.emit(TACOp::CALL, temp, $1->tacResult, "0");
                 $$->tacResult = temp;
             }
@@ -374,13 +379,19 @@ postfix_expression
                 raiseError("function call with " + to_string($3->children.size()) + " params, expected " + to_string($1->paramCount), yylineno);
             }
         }
-        for (auto* arg : $3->children) {
-            irGen.emit(TACOp::ASSIGN, "param", arg->tacResult, "");
+        for (auto it = $3->children.begin(); it != $3->children.end(); ++it) {
+            irGen.emit(TACOp::PARAM, (*it)->tacResult);
         }
         if ($1->typeSpecifier == 0) {
             irGen.emit(TACOp::CALL2, "", $1->value, to_string($3->children.size()));
         } else {
             string temp = irGen.newTemp();
+            helper = new TreeNode(OTHERS);
+            helper->value = temp;
+            helper->typeSpecifier = $1->typeSpecifier;
+            helper->offset = offsetStack.top();
+            offsetStack.top() += findOffset($1->typeSpecifier);
+            insertSymbol(temp,helper);
             irGen.emit(TACOp::CALL, temp, $1->tacResult, to_string($3->children.size()));
             $$->tacResult = temp; 
         }
@@ -701,14 +712,14 @@ unary_expression
             $$->isLValue = false;
         } else if (op == "~") {
             $$->isConstVal = 1;
-            irGen.emit(TACOp::BIT_XOR, temp, $2->tacResult, "-1");
+            irGen.emit(TACOp::BIT_NOT, temp, $2->tacResult, "-1");
             $$->isLogical = true;
             $$->falseList = $2->falseList;
             $$->trueList = $2->trueList;
             $$->isLValue = false;
         } else if (op == "!") {
             $$->isConstVal = 1;
-            irGen.emit(TACOp::EQ, temp, $2->tacResult, "0");
+            irGen.emit(TACOp::NOT, temp, $2->tacResult, "0");
             $$->isLValue = false;
         }
         $$->tacResult = temp;         
@@ -1224,7 +1235,7 @@ exclusive_or_expression
                 helper->offset = offsetStack.top();
                 offsetStack.top() += findOffset($$->typeSpecifier);
                 insertSymbol(temp,helper);
-                irGen.emit(TACOp::BIT_XOR, temp, $1->tacResult, $3->tacResult);
+                irGen.emit(TACOp::XOR, temp, $1->tacResult, $3->tacResult);
                 $$->tacResult = temp;
             } else {
                 raiseError("Incompatible Type: " + to_string($1->typeSpecifier) + " and " + 
@@ -1656,12 +1667,12 @@ struct_specifier
             $2->typeCategory = 4;
             $2->typeSpecifier = 20;
         }
-        enterScope();
+        enterScope(true);
     } LBRACE struct_declaration_list RBRACE {
         $$ = createNode(NODE_STRUCT_SPECIFIER, "", $1, $2, $5);
         $2->symbolTable = currentTable->symbolTable;
         $2->totalOffset = offsetStack.top();
-        exitScope();
+        exitScope(true);
     }
     ;
 
@@ -2201,6 +2212,8 @@ jump_statement
                 helper->value = temp;
                 helper->offset = offsetStack.top();
                 offsetStack.top() += findOffset(expectedReturnType);
+                if($2->typeCategory == 1)offsetStack.top() += 8;
+                else offsetStack.top() += findOffset($2->typeSpecifier);
                 insertSymbol(temp, helper);
                 irGen.emit(TACOp::TYPECAST, temp, typeCastInfo(expectedReturnType, $2->typeSpecifier), $2->tacResult);
                 irGen.emit(TACOp::RETURN, temp);
@@ -2245,6 +2258,7 @@ function_definition
     } compound_statement_func {
         $$ = createNode(NODE_FUNCTION_DEFINITION, "" , $1, $2, $4);
         inFunc = false;
+        $2->children[0]->totalOffset = offsetStack.top();
         exitScope(true);
         irGen.emit(TACOp::ENDFUNC, "", "", "");
         expectedReturnType = -1;
@@ -2280,14 +2294,15 @@ pair<vector<TACInstruction>,vector<TACInstruction>> parser(int argc, char **argv
     labelToBeDefined.push({});
     allTables.push_back(currentTable);
 
-    mkdir("output", 0777);
+    mkdir("output/3ac", 0777);
+    mkdir("output/asm", 0777);
     mkdir("error", 0777);
     mkdir("symTab", 0777);
 
     string inputPath(argv[1]);
     string base = inputPath.substr(inputPath.find_last_of("/\\") + 1);
     string baseName = base.substr(0, base.find_last_of('.'));
-    string outName = "output/" + baseName + ".3ac";
+    string outName = "output/3ac/" + baseName + ".3ac";
     string errName = "error/" + baseName + ".err";
     string symTabName = "symTab/" + baseName + ".txt";
     

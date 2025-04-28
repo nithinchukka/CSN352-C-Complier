@@ -6,7 +6,7 @@ BUILDDIR = build
 YACC = bison
 LEX = flex
 CC = g++
-LDFLAGS = -lfl -ll -lm
+LDFLAGS = -lfl -ll -lm -g
 CFLAGS = -I$(BUILDDIR)
 
 # Files

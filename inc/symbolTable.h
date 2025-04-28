@@ -91,10 +91,10 @@ inline string opToStr(TACOp op)
         return "IF ==";
     case TACOp::IF_NE:
         return "IF !=";
-    // case TACOp::NOT:
-    //     return "!";
-    // case TACOp::BIT_NOT:
-    //     return "~";
+    case TACOp::NOT:
+        return "!";
+    case TACOp::BIT_NOT:
+        return "~";
     case TACOp::oth:
         return "";
     default:
@@ -137,9 +137,9 @@ string TACInstruction::toString() const
     case TACOp::AND:
     case TACOp::OR:
     case TACOp::XOR:
-    // case TACOp::BIT_NOT:
-    //     str = result + " = " + operand1 + " " + opToStr(op) + " " + operand2;
-    //     break;
+    case TACOp::BIT_NOT:
+        str = result + " = " + operand1 + " " + opToStr(op) + " " + operand2;
+        break;
     case TACOp::PRINT:
         str = "PRINTF " + result;
         break;
@@ -151,9 +151,9 @@ string TACInstruction::toString() const
     case TACOp::LABEL:
         str = result + ":";
         break;
-    // case TACOp::NOT:
-    //     str = result + " = !" + operand1;
-    //     break;
+    case TACOp::NOT:
+        str = result + " = !" + operand1;
+        break;
     case TACOp::GOTO:
         str = "GOTO " + result;
         break;
@@ -221,8 +221,10 @@ struct irGenerator
              const string &op1 = "",
              const string &op2 = "", bool isGotoFlag = false, bool isGlobal = false)
     {
-        if(isGlobal){
+        if (isGlobal)
+        {
             globalVars.emplace_back(op, result, op1, op2, false);
+            return currentInstrIndex;
         }
         tacCode.emplace_back(op, result, op1, op2, isGotoFlag);
         return currentInstrIndex++;
@@ -823,7 +825,6 @@ bool structInitializerCheck(TreeNode *identifierNode, TreeNode *initializerList)
             insertSymbol(temp, helper);
             irGen.emit(TACOp::TYPECAST, temp, typeCastInfo(expectedType, actualType), initNode->tacResult);
             initNode->tacResult = temp;
-            
         }
 
         if (memberNode->isConst)
@@ -1054,9 +1055,11 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
                             helper->offset = offsetStack.top();
                             offsetStack.top() += 1;
                             insertSymbol(temp, helper);
-                            if(tableStack.size() == 1){
+                            if (tableStack.size() == 1)
+                            {
                                 irGen.emit(TACOp::ASSIGN, temp, "'" + string(1, s[i + 1]) + "'", "", false, false);
-                            }else
+                            }
+                            else
                                 irGen.emit(TACOp::ASSIGN, temp, "'" + string(1, s[i + 1]) + "'", "");
                             temp_store.push_back(temp);
                         }
@@ -1072,7 +1075,7 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
                             string indexedName = varName + "[" + to_string(i) + "]";
                             irGen.emit(TACOp::ASSIGN, indexedName, temp_store[i], "");
                         }
-                        setNodeAttributes(identifierNode,1,0);
+                        setNodeAttributes(identifierNode, 1, 0);
                         identifierNode->dimensions = dimensions;
                         identifierNode->offset = offsetStack.top();
                         identifierNode->pointerLevel = dimensions.size();
@@ -1198,10 +1201,10 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
                                 }
                                 else
                                 {
-                                    if(tableStack.size()==1)
-                                    irGen.emit(TACOp::ASSIGN, varName, child->children[1]->tacResult, "",false,true);
+                                    if (tableStack.size() == 1)
+                                        irGen.emit(TACOp::ASSIGN, varName, child->children[1]->tacResult, "", false, true);
                                     else
-                                    irGen.emit(TACOp::ASSIGN, varName, child->children[1]->tacResult, "");
+                                        irGen.emit(TACOp::ASSIGN, varName, child->children[1]->tacResult, "");
                                 }
                             }
                             else if (isTypeCompatible(declInfo.typeSpecifier, child->children[1]->typeSpecifier, "="))
@@ -1229,23 +1232,23 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
                                 // }
 
                                 // else
-                                if(tableStack.size()==1)
-                                    irGen.emit(TACOp::ASSIGN, varName, child->children[1]->tacResult, "",false,true);
-                                    else
+                                if (tableStack.size() == 1)
+                                    irGen.emit(TACOp::ASSIGN, varName, child->children[1]->tacResult, "", false, true);
+                                else
                                     irGen.emit(TACOp::ASSIGN, varName, child->children[1]->tacResult, "");
                             }
                             else if (declInfo.typeSpecifier == 1 && child->children[1]->typeSpecifier == 8)
                             {
-                                if(tableStack.size()==1)
-                                    irGen.emit(TACOp::ASSIGN, varName, child->children[1]->tacResult, "",false,true);
-                                    else
+                                if (tableStack.size() == 1)
+                                    irGen.emit(TACOp::ASSIGN, varName, child->children[1]->tacResult, "", false, true);
+                                else
                                     irGen.emit(TACOp::ASSIGN, varName, child->children[1]->tacResult, "");
                             }
                             else if (child->children[0]->pointerLevel > 0 && child->children[1]->typeSpecifier == 9)
                             {
-                                if(tableStack.size()==1)
-                                    irGen.emit(TACOp::ASSIGN, varName, child->children[1]->tacResult, "",false,true);
-                                    else
+                                if (tableStack.size() == 1)
+                                    irGen.emit(TACOp::ASSIGN, varName, child->children[1]->tacResult, "", false, true);
+                                else
                                     irGen.emit(TACOp::ASSIGN, varName, child->children[1]->tacResult, "");
                             }
                             else
@@ -1322,11 +1325,13 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
                             }
                             else
                             {
-                                
-                                if(tableStack.size()==1){
-                                    irGen.emit(TACOp::ASSIGN,varName,child->children[1]->tacResult,"",false,true);
+
+                                if (tableStack.size() == 1)
+                                {
+                                    irGen.emit(TACOp::ASSIGN, varName, child->children[1]->tacResult, "", false, true);
                                 }
-                                else{
+                                else
+                                {
                                     irGen.emit(TACOp::ASSIGN, varName, child->children[1]->tacResult, "");
                                 }
                             }
@@ -1350,8 +1355,8 @@ void addFunction(TreeNode *declSpec, TreeNode *decl)
     if (declInfo.isValid)
     {
         string funcName = decl->children[0]->value;
-        irGen.emit(TACOp::STARTFUNC, funcName, "", "");
         insertSymbol(funcName, decl->children[0]);
+        irGen.emit(TACOp::STARTFUNC, funcName, "", "");
         TreeNode *funcNode = decl->children[0];
         funcNode->typeSpecifier = declInfo.typeSpecifier;
         expectedReturnType = declInfo.typeSpecifier;
@@ -1393,6 +1398,15 @@ void addFunction(TreeNode *declSpec, TreeNode *decl)
                         funcNode->paramCount++;
                         insertSymbol(varName, varNode);
                     }
+                }
+            }
+            int i = 0;
+            for (auto param : decl->children[1]->children)
+            {
+                if (param->type == NODE_PARAMETER_DECLARATION)
+                {
+                    TreeNode *varNode = param->children[1];
+                    varNode->paramCount = funcNode->paramCount - i++;
                 }
             }
         }
