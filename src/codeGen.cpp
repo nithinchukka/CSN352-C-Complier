@@ -568,7 +568,9 @@ void generateCodeForBasicBlock(const vector<TACInstruction> &tacCode, const vect
                 {
                     emitCode("    mov " + getRegisterBySize("rax", instr.opNode1->typeSpecifier) + ", " + getRegisterBySize(regMap[regY.reg]->value, instr.opNode1->typeSpecifier));
                     emitCode("    cdq");
-                    emitCode("    idiv " + instr.operand2);
+                    int reg = fetchRegForImmediate(liveVars, regX.reg);
+                    emitCode("    mov " + getRegisterBySize(regMap[reg]->value, 3) + ", " + instr.operand2);
+                    emitCode("    idiv " + getRegisterBySize(regMap[reg]->value, 3));
                     emitCode("    mov " + getRegisterBySize(regMap[regX.reg]->value, instr.resNode->typeSpecifier) + ", " + getRegisterBySize("rax", instr.resNode->typeSpecifier));
                 }
                 else if (instr.opNode2)
@@ -729,7 +731,9 @@ void generateCodeForBasicBlock(const vector<TACInstruction> &tacCode, const vect
                 {
                     emitCode("    mov " + getRegisterBySize("rax", instr.opNode1->typeSpecifier) + ", " + getRegisterBySize(regMap[regY.reg]->value, instr.opNode1->typeSpecifier));
                     emitCode("    cdq");
-                    emitCode("    idiv " + instr.operand2);
+                    int reg = fetchRegForImmediate(liveVars, regX.reg);
+                    emitCode("    mov " + getRegisterBySize(regMap[reg]->value, 3) + ", " + instr.operand2);
+                    emitCode("    idiv " + getRegisterBySize(regMap[reg]->value, 3));
                     emitCode("    mov " + getRegisterBySize(regMap[regX.reg]->value, instr.resNode->typeSpecifier) + ", " + getRegisterBySize("rdx", instr.resNode->typeSpecifier));
                 }
                 else if (instr.opNode2)
@@ -764,9 +768,8 @@ void generateCodeForBasicBlock(const vector<TACInstruction> &tacCode, const vect
             }
             else if (instr.op == TACOp::ENDFUNC)
             {
-                if (asmOutput.back() != "    ret")
-                    emitFuncExit();
                 spillAllRegisters();
+                emitFuncExit();
             }
             else if (instr.op == TACOp::RETURN)
             {

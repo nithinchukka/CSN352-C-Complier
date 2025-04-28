@@ -1038,7 +1038,7 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
                     int string_size = child->children[1]->value.size() - 2;
                     vector<int> dimensions;
                     dimensions.push_back(string_size);
-                    int array_size = 6;
+                    int array_size = stoi(child->children[0]->children[1]->value);
                     varName = firstChild->children[0]->value;
                     if (array_size != string_size)
                     {
@@ -1070,15 +1070,20 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
                         helper->value = temp;
                         insertSymbol(temp, helper);
                         irGen.emit(TACOp::ASSIGN, temp, "/0", "");
-                        for (int i = 0; i < array_size; i++)
+                        temp_store.push_back(temp);
+                        int i = 0;
+                        for (i = 0; i < array_size; i++)
                         {
                             string indexedName = varName + "[" + to_string(i) + "]";
                             irGen.emit(TACOp::ASSIGN, indexedName, temp_store[i], "");
                         }
-                        setNodeAttributes(identifierNode, 1, 0);
+                        string indexedName = varName + "[" + to_string(i) + "]";
+                        irGen.emit(TACOp::ASSIGN, indexedName, temp_store[i],"");
+                        setNodeAttributes(identifierNode,1,0);
                         identifierNode->dimensions = dimensions;
                         identifierNode->offset = offsetStack.top();
                         identifierNode->pointerLevel = dimensions.size();
+                        identifierNode->isConstVal = 1;
                         insertSymbol(varName, identifierNode);
                         int totalSize = 1;
                         for (auto i : dimensions)
@@ -1116,6 +1121,7 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
                         setNodeAttributes(identifierNode, 2, 0);
                         identifierNode->dimensions = dimensions;
                         identifierNode->pointerLevel = dimensions.size();
+                        identifierNode->isConstVal = 1;
                         insertSymbol(varName, identifierNode);
                         identifierNode->offset = offsetStack.top();
                         int totalSize = 1;
@@ -1188,7 +1194,7 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
                         }
                         else
                         {
-                            if (declInfo.typeSpecifier == 3 && child->children[1]->typeCategory == 2)
+                            if (((declInfo.typeSpecifier == 3) || (declInfo.typeSpecifier==1)) && child->children[1]->typeCategory == 2)
                             {
                                 setNodeAttributes(identifierNode, 1, pointerDepth);
                                 insertSymbol(varName, identifierNode);
@@ -1215,7 +1221,7 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
                                     TreeNode *helper = new TreeNode(OTHERS);
                                     helper->value = temp;
                                     helper->offset = offsetStack.top();
-                                    ;
+                                    
                                     offsetStack.top() += findOffset(declInfo.typeSpecifier);
                                     insertSymbol(temp, helper);
                                     irGen.emit(TACOp::TYPECAST, temp, typeCastInfo(declInfo.typeSpecifier, child->children[1]->typeSpecifier), child->children[1]->tacResult);
@@ -1232,8 +1238,11 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
                                 // }
 
                                 // else
-                                if (tableStack.size() == 1)
-                                    irGen.emit(TACOp::ASSIGN, varName, child->children[1]->tacResult, "", false, true);
+                                if(tableStack.size()==1){
+                                    
+                                    if(child->children[1]->isConstVal==0)raiseError("initializer elemesnt is not constant");
+                                    else irGen.emit(TACOp::ASSIGN, varName, child->children[1]->tacResult, "",false,true);
+                                }    
                                 else
                                     irGen.emit(TACOp::ASSIGN, varName, child->children[1]->tacResult, "");
                             }
@@ -1259,7 +1268,7 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
                     }
                 }
                 identifierNode->offset = offsetStack.top();
-                offsetStack.top() = identifierNode->offset + 4;
+                offsetStack.top() = identifierNode->offset + 8;
             }
             else
             {
@@ -1325,10 +1334,9 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
                             }
                             else
                             {
-
-                                if (tableStack.size() == 1)
-                                {
-                                    irGen.emit(TACOp::ASSIGN, varName, child->children[1]->tacResult, "", false, true);
+                                if(tableStack.size()==1){
+                                    if(child->children[1]->isConstVal == 0)raiseError("initializer element is not constant");
+                                    else irGen.emit(TACOp::ASSIGN,varName,child->children[1]->tacResult,"",false,true);
                                 }
                                 else
                                 {

@@ -1,12 +1,7 @@
-int fac(int a)
-{
-    if (a == 1)
-        return 1;
-    return a * fac(a - 1);
-}
-
-int main()
-{
-    int c = fac(5);
-    return 0;
+int main(){
+    int x;
+    int y = 4;
+    x = y + 3;
+    int z = 4 * y;
+    int d = y/2;
 }

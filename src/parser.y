@@ -680,6 +680,7 @@ unary_expression
         insertSymbol(temp,helper);
         if (op == "&") {
             $$->pointerLevel = $2->pointerLevel+1;
+            $$->isConstVal = 1;
             string temp1 = irGen.newTemp();
             helper = new TreeNode(OTHERS);
             helper->value = temp1;
@@ -687,11 +688,13 @@ unary_expression
             if($$->pointerLevel)offsetStack.top()+=8;
             else offsetStack.top()+= findOffset($$->typeSpecifier);
             insertSymbol(temp1,helper);
+            cout << "hi";
             irGen.emit(TACOp::REFER, temp1, $2->tacResult, "");
             irGen.emit(TACOp::ASSIGN, temp, temp1, "");
             $$->isLValue = false;
         } else if (op == "*") {
             $$->pointerLevel = $2->pointerLevel-1;
+            $$->isConstVal = 0;
             string temp1 = irGen.newTemp();
             helper = new TreeNode(OTHERS);
             helper->value = temp1;
@@ -1476,7 +1479,7 @@ assignment_expression
                 if ($2->value == "=") {
                     irGen.emit(TACOp::ASSIGN, $1->tacResult, $3->tacResult, "");
                 } else {
-                    irGen.emit(assignToOp(opr[0]), $1->tacResult, $3->tacResult, $3->tacResult);
+                    irGen.emit(assignToOp(opr[0]), $1->tacResult, $1->tacResult, $3->tacResult);
                 }
             }
             $$->tacResult = $1->tacResult;
@@ -1774,7 +1777,6 @@ pointer
         $$ = createNode(NODE_POINTER,$1,$2);
     }
     ;
-
 
 parameter_list
     : parameter_declaration { 
