@@ -999,7 +999,7 @@ int main(int argc, char **argv)
     string inputPath(argv[1]);
     string base = inputPath.substr(inputPath.find_last_of("/\\") + 1);
     string baseName = base.substr(0, base.find_last_of('.'));
-    string outName = "output/asm/" + baseName + ".asm";
+    string outName = "output/asm/" + baseName + ".s";
     ofstream asmOut(outName);
     if (!asmOut)
     {
@@ -1008,7 +1008,7 @@ int main(int argc, char **argv)
     }
     for (const auto &line : asmOutput)
     {
-        cout << line << endl;
+        asmOut << line << endl;
     }
     return 0;
 }

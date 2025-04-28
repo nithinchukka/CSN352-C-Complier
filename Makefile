@@ -16,7 +16,7 @@ CODEGEN_SRC = $(SRCDIR)/codeGen.cpp
 
 LEX_OUT = $(BUILDDIR)/lex.yy.c
 YACC_OUT = $(BUILDDIR)/y.tab.cc
-OUTPUT_BIN = $(BUILDDIR)/parser.out
+OUTPUT_BIN = $(BUILDDIR)/compiler.out
 
 # Create build directory if not exists
 $(shell mkdir -p $(BUILDDIR))
