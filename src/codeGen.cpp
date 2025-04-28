@@ -6,7 +6,6 @@ using namespace std;
 
 vector<set<TreeNode *>> registerDescriptor(16);
 map<TreeNode *, set<TreeNode *>> addressDescriptor;
-
 vector<TreeNode *> regMap = {
     new TreeNode(REGISTER, "rsp"),
     new TreeNode(REGISTER, "rbp"),
@@ -555,6 +554,89 @@ void generateCodeForBasicBlock(const vector<TACInstruction> &tacCode, const vect
     }
 }
 
+string floatToIntBits(const string& value) {
+    static_assert(sizeof(float) == 4, "Float must be 32 bits");
+    float f;
+    try {
+        f = stof(value);
+    } catch (const invalid_argument&) {
+        throw invalid_argument("Invalid float format in string: " + value);
+    } catch (const out_of_range&) {
+        throw out_of_range("Float value out of range in string: " + value);
+    }
+    int32_t result;
+    memcpy(&result, &f, sizeof(float));
+    return to_string(result);
+}
+
+pair<string, string> doubleToIntBits(const string& value) {
+    static_assert(sizeof(double) == 8, "Double must be 64 bits");
+    
+    double d;
+    try {
+        d = stod(value);
+    } catch (const invalid_argument&) {
+        throw invalid_argument("Invalid double format in string: " + value);
+    } catch (const out_of_range&) {
+        throw out_of_range("Double value out of range in string: " + value);
+    }
+    
+    uint64_t bits;
+    memcpy(&bits, &d, sizeof(double));
+    
+    int32_t high_bits = static_cast<int32_t>(bits >> 32);
+    int32_t low_bits = static_cast<int32_t>(bits & 0xFFFFFFFF);
+    
+    return make_pair(to_string(high_bits), to_string(low_bits));
+}
+
+
+void addDataSection(const vector<TACInstruction> &globalVars){
+    for(auto instr:globalVars){
+        TreeNode* curr_node = lookupSymbol(instr.result,false,false);
+        if(curr_node->typeCategory == 0){
+            if(curr_node->typeSpecifier == 1){
+                asmOutput.push_back( ".globl "  + instr.result );
+                asmOutput.push_back( instr.result + ":" );
+                asmOutput.push_back( "    .byte  " + instr.operand1 );
+            }
+            else if(curr_node->typeSpecifier == 2){
+                asmOutput.push_back( ".globl "  + instr.result );
+                asmOutput.push_back( instr.result + ":" );
+                asmOutput.push_back( "    .word  " + (instr.operand1));
+            }
+            else if(curr_node->typeSpecifier == 3){
+                asmOutput.push_back( ".globl "  + instr.result );
+                asmOutput.push_back( instr.result + ":" );
+                asmOutput.push_back( " .long  " + (instr.operand1));
+            }
+            else if(curr_node->typeSpecifier == 4){
+                asmOutput.push_back( ".globl "  + instr.result );
+                asmOutput.push_back( instr.result + ":" );
+                asmOutput.push_back( "    .long " + (instr.operand1));
+            }
+            else if(curr_node->typeSpecifier == 6){
+                asmOutput.push_back( ".globl "  + instr.result );
+                asmOutput.push_back( instr.result + ":" );
+                asmOutput.push_back( "  .long  " +  floatToIntBits(instr.operand1));
+            }
+            else if(curr_node->typeSpecifier == 7){
+                asmOutput.push_back( ".globl "  + instr.result );
+                asmOutput.push_back( instr.result + ":" );
+                pair<string, string> bits = doubleToIntBits(instr.operand1);
+                asmOutput.push_back( "    .long  " + bits.second );
+                asmOutput.push_back( "    .long  " + bits.first );
+            }
+        }
+        if (curr_node->typeCategory == 1) { //pointer
+            asmOutput.push_back( ".globl "  + instr.result );
+            asmOutput.push_back( instr.operand1.substr(1,instr.operand1.size()-2)+"_str" + ":" );
+            asmOutput.push_back( "    .asciz  " + instr.operand1);
+            asmOutput.push_back( instr.result + ":" );
+            asmOutput.push_back( "    .long  " + instr.operand1.substr(1,instr.operand1.size()-2)+"_str" );
+        }
+    }
+}
 void markLeaders(const vector<TACInstruction> &tacCode, vector<bool> &leaderList)
 {
     if (tacCode.empty())
@@ -651,12 +733,15 @@ vector<unordered_set<string>> livenessInfo(const vector<TACInstruction> &tacCode
     return liveInfo;
 }
 
-extern vector<TACInstruction> parser(int argc, char **argv);
+extern pair<vector<TACInstruction>,vector<TACInstruction>> parser(int argc, char **argv);
 
 int main(int argc, char **argv)
 {
-    vector<TACInstruction> tacCode = parser(argc, argv);
+    auto helper = parser(argc,argv);
+    vector<TACInstruction> tacCode = helper.second;
+    vector<TACInstruction> global_vars = helper.first;
     vector<pair<int, int>> basicBlocks = createBasicBlocks(tacCode);
+    addDataSection(global_vars);
     // for(int i = 0; i < basicBlocks.size(); ++i)
     // {
     //     cout << "Basic Block " << i << ": " << basicBlocks[i].first << " to " << basicBlocks[i].second << endl;
@@ -675,7 +760,6 @@ int main(int argc, char **argv)
     {
         generateCodeForBasicBlock(tacCode, liveness, basicBlocks, i);
     }
-
     for (const auto &line : asmOutput)
     {
         cout << line << endl;

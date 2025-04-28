@@ -41,11 +41,11 @@
     }
 
     void typeCastFunction(TreeNode *a, TreeNode *b, bool isRel = false){
-        cout << "hi";
+        
         if (a->typeSpecifier < b->typeSpecifier) {
             string temp = irGen.newTemp();
             helper = new TreeNode(OTHERS);
-            helper->typeSpecifier = a->typeSpecifier;
+            helper->typeSpecifier = b->typeSpecifier;
             helper->value = temp;
             helper->offset = offsetStack.top();
             offsetStack.top() += findOffset(helper->typeSpecifier);
@@ -55,7 +55,7 @@
         } else if (a->typeSpecifier > b->typeSpecifier) {
             string temp = irGen.newTemp();
             helper = new TreeNode(OTHERS);
-            helper->typeSpecifier = b->typeSpecifier;
+            helper->typeSpecifier = a->typeSpecifier;
             helper->value = temp;
             helper->offset = offsetStack.top();
             offsetStack.top() += findOffset(helper->typeSpecifier);
@@ -238,7 +238,7 @@ postfix_expression
                 helper->typeSpecifier = $3->typeSpecifier;
                 helper->value = temp;
                 helper->offset = offsetStack.top();
-                offsetStack.top() += 4;
+                offsetStack.top() += findOffset($3->typeSpecifier);
                 insertSymbol(temp,helper);
                 irGen.emit(TACOp::ASSIGN,temp,$3->tacResult,"");
                 for(int i=curr_dimensions.size()-$$->pointerLevel;i<curr_dimensions.size();i++){
@@ -254,7 +254,7 @@ postfix_expression
                 helper->typeSpecifier = $3->typeSpecifier;
                 helper->value = temp2;
                 helper->offset = offsetStack.top();
-                offsetStack.top() += 4;
+                offsetStack.top() += 8;
                 insertSymbol(temp2,helper);
                 irGen.emit(TACOp::ADD,temp2,temp,$1->tacResult);
                 if($$->pointerLevel == 0){
@@ -262,7 +262,7 @@ postfix_expression
                     helper = new TreeNode(OTHERS);
                     helper->value = temp3;
                     helper->offset = offsetStack.top();
-                    offsetStack.top() += 4;
+                    offsetStack.top() += findOffset($$->typeSpecifier);
                     insertSymbol(temp3,helper);
                     irGen.emit(TACOp::DEREF, temp3, temp2, "");
                     $$->tacResult = temp3;
@@ -295,7 +295,7 @@ postfix_expression
                             helper = new TreeNode(OTHERS);
                             helper->value = temp;
                             helper->offset = offsetStack.top();
-                            offsetStack.top() += 4;
+                            offsetStack.top() += findOffset($3->typeSpecifier);
                             insertSymbol(temp,helper);
                             irGen.emit(TACOp::ASSIGN,temp,$3->tacResult,"");
                             for(int i=curr_dimensions.size()-$$->pointerLevel;i<curr_dimensions.size();i++){
@@ -305,12 +305,12 @@ postfix_expression
                                 irGen.emit(TACOp::MUL,temp,temp,string(1,'1'));
                             }
                             else 
-                                irGen.emit(TACOp::MUL,temp,temp,string(1,'4'));
+                            irGen.emit(TACOp::MUL,temp,temp,string(1,'4'));
                             string temp2 = irGen.newTemp();
                             helper = new TreeNode(OTHERS);
                             helper->value = temp2;
                             helper->offset = offsetStack.top();
-                            offsetStack.top() += 4;
+                            offsetStack.top() += 8;
                             insertSymbol(temp2,helper);
                             irGen.emit(TACOp::ADD,temp2,temp,$1->tacResult);
                             if($$->pointerLevel == 0){
@@ -318,7 +318,7 @@ postfix_expression
                                 helper = new TreeNode(OTHERS);
                                 helper->value = temp3;
                                 helper->offset = offsetStack.top();
-                                offsetStack.top() += 4;
+                                offsetStack.top() += findOffset($$->typeSpecifier);
                                 insertSymbol(temp3,helper);
                                 irGen.emit(TACOp::DEREF, temp3, temp2, "");
                                 $$->tacResult = temp3;
@@ -408,13 +408,13 @@ postfix_expression
                             helper = new TreeNode(OTHERS);
                             helper->value = temp;
                             helper->offset = offsetStack.top();
-                            offsetStack.top() += 4;
+                            offsetStack.top() += 8;
                             insertSymbol(temp,helper);
                             string temp1 = irGen.newTemp();
                             helper = new TreeNode(OTHERS);
                             helper->value = temp1;
                             helper->offset = offsetStack.top();
-                            offsetStack.top() += 4;
+                            offsetStack.top() += 8;
                             insertSymbol(temp1,helper);
                             irGen.emit(TACOp::REFER, temp1, $1->tacResult);
                             irGen.emit(TACOp::ADD, temp, temp1, to_string(entry.second->offset));
@@ -425,13 +425,13 @@ postfix_expression
                             helper = new TreeNode(OTHERS);
                             helper->value = temp;
                             helper->offset = offsetStack.top();
-                            offsetStack.top() += 4;
+                            offsetStack.top() += 8;
                             insertSymbol(temp,helper);
                             string temp1 = irGen.newTemp();
                             helper = new TreeNode(OTHERS);
                             helper->value = temp1;
                             helper->offset = offsetStack.top();
-                            offsetStack.top() += 4;
+                            offsetStack.top() += 8;
                             insertSymbol(temp1,helper);
                             irGen.emit(TACOp::REFER, temp1, $1->tacResult);
                             irGen.emit(TACOp::ADD, temp, temp1, to_string(entry.second->offset));
@@ -439,7 +439,8 @@ postfix_expression
                             helper = new TreeNode(OTHERS);
                             helper->value = temp2;
                             helper->offset = offsetStack.top();
-                            offsetStack.top() += 4;
+                            if($$->pointerLevel)offsetStack.top()+=8;
+                            else offsetStack.top() += findOffset($$->typeSpecifier);
                             insertSymbol(temp2,helper);
                             irGen.emit(TACOp::DEREF, temp2, temp, "");
                             $$->tacResult = temp2;
@@ -478,14 +479,15 @@ postfix_expression
                             helper = new TreeNode(OTHERS);
                             helper->value = temp;
                             helper->offset = offsetStack.top();
-                            offsetStack.top() += 4;
+                            offsetStack.top() += 8;
                             insertSymbol(temp,helper);
                             irGen.emit(TACOp::ADD, temp, $1->tacResult, to_string(offset));
                             string temp1 = irGen.newTemp();
                             helper = new TreeNode(OTHERS);
                             helper->value = temp1;
                             helper->offset = offsetStack.top();
-                            offsetStack.top() += 4;
+                            if($$->pointerLevel)offsetStack.top() += 8;
+                            else offsetStack.top() += findOffset($$->typeSpecifier);
                             insertSymbol(temp1,helper);
                             irGen.emit(TACOp::DEREF, temp1, temp, "");
                             $$->tacResult = temp1;
@@ -522,7 +524,8 @@ postfix_expression
         helper->typeSpecifier = typeSpec;
         helper->value = temp;
         helper->offset = offsetStack.top();
-        offsetStack.top() += 4;
+        if($$->pointerLevel)offsetStack.top()+=8;
+        else offsetStack.top()+= findOffset($$->typeSpecifier);
         insertSymbol(temp,helper);
         irGen.emit(TACOp::ASSIGN, temp, $1->tacResult, "");
         string temp2 = irGen.newTemp();
@@ -530,7 +533,8 @@ postfix_expression
         helper->typeSpecifier = typeSpec;
         helper->value = temp2;
         helper->offset = offsetStack.top();
-        offsetStack.top() += 4;
+        if($$->pointerLevel)offsetStack.top()+=8;
+        else offsetStack.top()+= findOffset($$->typeSpecifier);
         insertSymbol(temp2,helper);
         irGen.emit(TACOp::ADD, temp2, temp, "1");
         irGen.emit(TACOp::ASSIGN, $1->tacResult, temp2, "");
@@ -552,7 +556,8 @@ postfix_expression
         helper->typeSpecifier = typeSpec;
         helper->value = temp;
         helper->offset = offsetStack.top();
-        offsetStack.top() += 4;
+        if($$->pointerLevel)offsetStack.top()+=8;
+        else offsetStack.top()+= findOffset($$->typeSpecifier);
         insertSymbol(temp,helper);
         irGen.emit(TACOp::ASSIGN, temp, $1->tacResult, "");
         string temp2 = irGen.newTemp();
@@ -560,7 +565,8 @@ postfix_expression
         helper->typeSpecifier = typeSpec;
         helper->value = temp2;
         helper->offset = offsetStack.top();
-        offsetStack.top() += 4;
+        if($$->pointerLevel)offsetStack.top()+=8;
+        else offsetStack.top()+= findOffset($$->typeSpecifier);
         insertSymbol(temp2,helper);
         irGen.emit(TACOp::SUB, temp2, temp, "1");
         irGen.emit(TACOp::ASSIGN, $1->tacResult, temp2, "");
@@ -594,14 +600,16 @@ unary_expression
         helper = new TreeNode(OTHERS);
         helper->value = temp;
         helper->offset = offsetStack.top();
-        offsetStack.top() += 4;
+        if($$->pointerLevel)offsetStack.top()+=8;
+        else offsetStack.top()+= findOffset($$->typeSpecifier);
         insertSymbol(temp,helper);
         irGen.emit(TACOp::ASSIGN, temp, $2->tacResult, "");
         string temp2 = irGen.newTemp();
         helper = new TreeNode(OTHERS);
         helper->value = temp2;
         helper->offset = offsetStack.top();
-        offsetStack.top() += 4;
+        if($$->pointerLevel)offsetStack.top()+=8;
+        else offsetStack.top()+= findOffset($$->typeSpecifier);
         insertSymbol(temp2,helper);
         irGen.emit(TACOp::ADD, temp2, temp, "1");
         irGen.emit(TACOp::ASSIGN, $2->tacResult, temp2, "");
@@ -621,14 +629,16 @@ unary_expression
         helper = new TreeNode(OTHERS);
         helper->value = temp;
         helper->offset = offsetStack.top();
-        offsetStack.top() += 4;
+        if($$->pointerLevel)offsetStack.top()+=8;
+        else offsetStack.top()+= findOffset($$->typeSpecifier);
         insertSymbol(temp,helper);
         irGen.emit(TACOp::ASSIGN, temp, $2->tacResult, "");
         string temp2 = irGen.newTemp();
         helper = new TreeNode(OTHERS);
         helper->value = temp2;
         helper->offset = offsetStack.top();
-        offsetStack.top() += 4;
+        if($$->pointerLevel)offsetStack.top()+=8;
+        else offsetStack.top()+= findOffset($$->typeSpecifier);
         insertSymbol(temp2,helper);
         irGen.emit(TACOp::SUB, temp2, temp, "1");
         irGen.emit(TACOp::ASSIGN, $2->tacResult, temp2, "");
@@ -643,35 +653,44 @@ unary_expression
         $$ = createNode(NODE_UNARY_EXPRESSION, "", $1, $2);
         if ($1->isConstVal) $$->isConstVal = 1;
         $$->typeSpecifier = $2->typeSpecifier;
+        string op = $1->value;
         string temp = irGen.newTemp();
         helper = new TreeNode(OTHERS);
         helper->value = temp;
         helper->offset = offsetStack.top();
-        offsetStack.top() += 4;
+        if(op == "&"){
+            offsetStack.top() += 8;
+        }
+        else if(op == "*"){
+            if($2->pointerLevel > 1)offsetStack.top()+=8;
+            else offsetStack.top()+= findOffset($2->typeSpecifier);
+        }
+        else offsetStack.top() += findOffset($2->typeSpecifier);
         insertSymbol(temp,helper);
-        string op = $1->value;
         if (op == "&") {
+            $$->pointerLevel = $2->pointerLevel+1;
             string temp1 = irGen.newTemp();
             helper = new TreeNode(OTHERS);
             helper->value = temp1;
             helper->offset = offsetStack.top();
-            offsetStack.top() += 4;
+            if($$->pointerLevel)offsetStack.top()+=8;
+            else offsetStack.top()+= findOffset($$->typeSpecifier);
             insertSymbol(temp1,helper);
             irGen.emit(TACOp::REFER, temp1, $2->tacResult, "");
             irGen.emit(TACOp::ASSIGN, temp, temp1, "");
             $$->isLValue = false;
-            $$->pointerLevel = $2->pointerLevel+1;
         } else if (op == "*") {
+            $$->pointerLevel = $2->pointerLevel-1;
             string temp1 = irGen.newTemp();
             helper = new TreeNode(OTHERS);
             helper->value = temp1;
             helper->offset = offsetStack.top();
-            offsetStack.top() += 4;
+            if($$->pointerLevel)offsetStack.top()+=8;
+            else offsetStack.top()+= findOffset($$->typeSpecifier);
             insertSymbol(temp1,helper);
             irGen.emit(TACOp::DEREF, temp1, temp, "");
             irGen.emit(TACOp::ASSIGN, temp, temp1, "");
             $$->isLValue = true;
-            $$->pointerLevel = $2->pointerLevel-1;
         } else if (op == "+") {
             $$->isConstVal = 1;
             irGen.emit(TACOp::ASSIGN, temp, $2->tacResult, "");
@@ -752,7 +771,7 @@ multiplicative_expression
                 helper->typeSpecifier = $$->typeSpecifier;
                 helper->value = temp;
                 helper->offset = offsetStack.top();
-                offsetStack.top() += 4;
+                offsetStack.top() += findOffset($$->typeSpecifier);
                 insertSymbol(temp,helper);
                 irGen.emit(TACOp::MUL, temp, $1->tacResult, $3->tacResult);
                 $$->tacResult = temp;
@@ -778,7 +797,7 @@ multiplicative_expression
                 helper->typeSpecifier = $$->typeSpecifier;
                 helper->value = temp;
                 helper->offset = offsetStack.top();
-                offsetStack.top() += 4;
+                offsetStack.top() += findOffset($$->typeSpecifier);
                 insertSymbol(temp,helper);
                 irGen.emit(TACOp::DIV, temp, $1->tacResult, $3->tacResult);
                 $$->tacResult = temp;
@@ -806,7 +825,7 @@ multiplicative_expression
                 helper->typeSpecifier = $$->typeSpecifier;
                 helper->value = temp;
                 helper->offset = offsetStack.top();
-                offsetStack.top() += 4;
+                offsetStack.top() += findOffset($$->typeSpecifier);
                 insertSymbol(temp,helper);
                 irGen.emit(TACOp::MOD, temp, $1->tacResult, $3->tacResult);
                 $$->tacResult = temp;
@@ -822,7 +841,7 @@ additive_expression
         $$ = $1; 
     }
     | additive_expression PLUS_OPERATOR multiplicative_expression {
-        cout << "hi";
+        
         $$ = createNode(NODE_ADDITIVE_EXPRESSION, $2, $1, $3);
         if ($1->isConstVal && $3->isConstVal) $$->isConstVal = 1;
         int rhsPointerLevel = $3->pointerLevel;
@@ -835,14 +854,15 @@ additive_expression
             $$->pointerLevel = lhsPointerLevel + rhsPointerLevel;
             if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "+")) {
                 $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
-                cout << "hi";
+                
                 typeCastFunction($1, $3);
                 string temp = irGen.newTemp(); 
                 helper = new TreeNode(OTHERS);
                 helper->typeSpecifier = $$->typeSpecifier;
                 helper->value = temp;
                 helper->offset = offsetStack.top();
-                offsetStack.top() += 4;
+                if($$->pointerLevel)offsetStack.top()+=8;
+                else offsetStack.top() += findOffset($$->typeSpecifier);
                 insertSymbol(temp,helper);
                 if ($1->typeCategory == 2 || $3->typeCategory == 2) {
                     $$->typeCategory = 2;
@@ -879,7 +899,8 @@ additive_expression
                 helper->typeSpecifier = $$->typeSpecifier;
                 helper->value = temp;
                 helper->offset = offsetStack.top();
-                offsetStack.top() += 4;
+                if($$->pointerLevel)offsetStack.top()+=8;
+                else offsetStack.top() += findOffset($$->typeSpecifier);
                 insertSymbol(temp,helper);
                 irGen.emit(TACOp::SUB, temp, $1->tacResult, $3->tacResult);
                 $$->tacResult = temp; 
@@ -915,7 +936,7 @@ shift_expression
                 helper->typeSpecifier = $$->typeSpecifier;
                 helper->value = temp;
                 helper->offset = offsetStack.top();
-                offsetStack.top() += 4;
+                offsetStack.top() += findOffset($$->typeSpecifier);
                 insertSymbol(temp,helper);
                 irGen.emit(TACOp::LSHFT, temp, $1->tacResult, $3->tacResult);
                 $$->tacResult = temp;
@@ -945,7 +966,7 @@ shift_expression
                 helper->typeSpecifier = $$->typeSpecifier;
                 helper->value = temp;
                 helper->offset = offsetStack.top();
-                offsetStack.top() += 4;
+                offsetStack.top() += findOffset($$->typeSpecifier);
                 insertSymbol(temp,helper);
                 irGen.emit(TACOp::RSHFT, temp, $1->tacResult, $3->tacResult);
                 $$->tacResult = temp; 
@@ -1167,7 +1188,7 @@ and_expression
                 helper->typeSpecifier = $$->typeSpecifier;
                 helper->value = temp;
                 helper->offset = offsetStack.top();
-                offsetStack.top() += 4;
+                offsetStack.top() += findOffset($$->typeSpecifier);
                 insertSymbol(temp,helper);
                 irGen.emit(TACOp::BIT_AND, temp, $1->tacResult, $3->tacResult);
                 $$->tacResult = temp;
@@ -1201,7 +1222,7 @@ exclusive_or_expression
                 helper->typeSpecifier = $$->typeSpecifier;
                 helper->value = temp;
                 helper->offset = offsetStack.top();
-                offsetStack.top() += 4;
+                offsetStack.top() += findOffset($$->typeSpecifier);
                 insertSymbol(temp,helper);
                 irGen.emit(TACOp::BIT_XOR, temp, $1->tacResult, $3->tacResult);
                 $$->tacResult = temp;
@@ -1235,7 +1256,7 @@ inclusive_or_expression
                 helper->typeSpecifier = $$->typeSpecifier;
                 helper->value = temp;
                 helper->offset = offsetStack.top();
-                offsetStack.top() += 4;
+                offsetStack.top() += findOffset($$->typeSpecifier);
                 insertSymbol(temp,helper);
                 irGen.emit(TACOp::BIT_OR, temp, $1->tacResult, $3->tacResult);
                 $$->tacResult = temp;
@@ -1394,7 +1415,7 @@ assignment_expression
                         helper->typeSpecifier = $$->typeSpecifier;
                         helper->value = temp;
                         helper->offset = offsetStack.top();
-                        offsetStack.top() += 4;
+                        offsetStack.top() += findOffset($1->typeSpecifier);
                         insertSymbol(temp,helper);
                         irGen.emit(TACOp::TYPECAST, temp, typeCastInfo($1->typeSpecifier, $3->typeSpecifier), $3->tacResult);
                         $3->tacResult = temp;
@@ -1416,7 +1437,7 @@ assignment_expression
                         helper->typeSpecifier = $$->typeSpecifier;
                         helper->value = temp;
                         helper->offset = offsetStack.top();
-                        offsetStack.top() += 4;
+                        offsetStack.top() += findOffset($1->typeSpecifier);
                         insertSymbol(temp,helper);
                         irGen.emit(TACOp::TYPECAST, temp, typeCastInfo($1->typeSpecifier, $3->typeSpecifier), $3->tacResult);
                         $3->tacResult = temp;
@@ -1918,7 +1939,7 @@ labeled_statement
             helper->typeSpecifier = switch_type;
             helper->value = temp;
             helper->offset = offsetStack.top();
-            offsetStack.top() += 4;
+            offsetStack.top() += findOffset(switch_type);
             insertSymbol(temp, helper);
             irGen.emit(TACOp::TYPECAST, temp, typeCastInfo(switch_type, $2->typeSpecifier), $2->tacResult); 
             $2->tacResult = temp;
@@ -2179,7 +2200,7 @@ jump_statement
                 helper->typeSpecifier = expectedReturnType;
                 helper->value = temp;
                 helper->offset = offsetStack.top();
-                offsetStack.top() += 4;
+                offsetStack.top() += findOffset(expectedReturnType);
                 insertSymbol(temp, helper);
                 irGen.emit(TACOp::TYPECAST, temp, typeCastInfo(expectedReturnType, $2->typeSpecifier), $2->tacResult);
                 irGen.emit(TACOp::RETURN, temp);
@@ -2239,14 +2260,13 @@ void yyerror(const char *s) {
 }
 
 
-vector<TACInstruction> parser(int argc, char **argv)
+pair<vector<TACInstruction>,vector<TACInstruction>> parser(int argc, char **argv)
 {
     if (argc < 2)
     {
         cout << "Usage: " << argv[0] << " <input_file>" << endl;
         return {};
     }
-
     yyin = fopen(argv[1], "r");
     if (!yyin)
     {
@@ -2292,7 +2312,6 @@ vector<TACInstruction> parser(int argc, char **argv)
 
     yyparse();
     fclose(yyin);
-
     cout.rdbuf(sym.rdbuf());
     printAllTables();
     cout.rdbuf(coutbuf);
@@ -2300,5 +2319,5 @@ vector<TACInstruction> parser(int argc, char **argv)
     cout.rdbuf(out.rdbuf());
     irGen.printTAC();
     cout.rdbuf(coutbuf);
-    return irGen.tacCode;
+    return {irGen.globalVars,irGen.tacCode};
 }
