@@ -1,39 +1,31 @@
-int main(){
-    int x = 3;
-    int y = 2;
-    int a = 10;
-    if((x>2) && (y>5)){
-        a++;
-    }
-    else if (x > 1){
-        a--;
-    }
-    else{
-        a *= 2;
-    }
-    int w = 11;
-    for(int i=0;i<10;i++){
-        if(i%2){
-            w++;
+void count_with_static() {
+    static int counter = 0;
+    counter++;
+    printf("Static counter = %d\n", counter);
+}
+
+int main() {
+    int i = 0;
+
+start_loop:
+    for (i = 0; i < 10; i++) {
+        if (i == 2) {
+            continue; 
         }
-        else w-=2;
-        int a = w+3;
-        if(a==4){
-            break;
+        if (i == 5) {
+            break; 
         }
+        printf("i = %d\n", i);
+        count_with_static();
     }
-    while(w > 2){
-        w++;
-        if(w == 6){
-            continue;
-        }
-        else if(w==8){
-            break;
-        }
+
+    static int repeat = 0;
+    if (repeat == 0) {
+        repeat = 1;
+        printf("Repeating the loop using goto!\n\n");
+        goto start_loop;
     }
-    do{
-        x++;
-        y--;
-    }while(x<y);
-    printf("%d,  %d, %d, %d" , a, x, y,w);
+
+    printf("Program finished.\n");
+    return 0;
 }

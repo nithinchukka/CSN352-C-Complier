@@ -1847,27 +1847,41 @@ statement
 
 io_statement
     : KEYWORD_PRINTF LPAREN STRING RPAREN SEMICOLON {
-        $3->tacResult = $3->value;
+        string strTemp = irGen.newLabel();
+        TreeNode* strNode = new TreeNode(NODE_STRING_LITERAL);
+        strNode->typeSpecifier = 8;
+        strNode->typeCategory = 0;
+        strNode->value = strTemp;
+        allTables[0]->symbolTable.emplace_back(strTemp, strNode);
+        irGen.emit(TACOp::ASSIGN, strTemp, $3->value, "", false, true);
+        $3->tacResult = strTemp;
         $$ = createNode(NODE_IO_STATEMENT, "", $1, $3);  
         if (!checkFormatSpecifiers($3->value, {})) {
             raiseError("Format string in printf has specifiers but no arguments provided", yylineno);
             $$ = nullptr;
         } else {
             string temp = irGen.newTemp();
-            irGen.emit(TACOp::PARAM, $3->tacResult);
+            irGen.emit(TACOp::PARAM, $3->tacResult,"printf");
             irGen.emit(TACOp::CALL, temp, "printf", "1");   
             $$->tacResult = temp;
         }
     }
     | KEYWORD_PRINTF LPAREN STRING COMMA argument_expression_list RPAREN SEMICOLON {
-        $3->tacResult = $3->value;     
+        string strTemp = irGen.newLabel();
+        TreeNode* strNode = new TreeNode(NODE_STRING_LITERAL);
+        strNode->typeSpecifier = 8;
+        strNode->typeCategory = 0;
+        strNode->value = strTemp;
+        allTables[0]->symbolTable.emplace_back(strTemp, strNode);
+        irGen.emit(TACOp::ASSIGN, strTemp, $3->value, "", false, true);
+        $3->tacResult = strTemp;     
         $$ = createNode(NODE_IO_STATEMENT, "", $1, $3, $5);          
         vector<int> types = typeExtract($5);
         if (!checkFormatSpecifiers($3->value, types)) {
             raiseError("Type mismatch between format specifiers and arguments in printf", yylineno);
             $$ = nullptr;
         } else {
-            irGen.emit(TACOp::PARAM, $3->tacResult);
+            irGen.emit(TACOp::PARAM, $3->tacResult,"printf");
             int paramCount = 1;
             for (auto* arg : $5->children) {
                 if (arg->trueList || arg->falseList) {
@@ -1876,7 +1890,7 @@ io_statement
                     irGen.emit(TACOp::NE, "", arg->tacResult, "0", true);
                     irGen.emit(TACOp::oth, "", "", "", true);
                 }
-                irGen.emit(TACOp::PARAM, arg->tacResult);
+                irGen.emit(TACOp::PARAM, arg->tacResult,"printf");
                 paramCount++;
             }
             string temp = irGen.newTemp();
@@ -1914,7 +1928,6 @@ io_statement
                     paramCount++;
                 }
                 string temp = irGen.newTemp();
-                
                 irGen.emit(TACOp::CALL, temp, "scanf", to_string(paramCount));
                 $$->tacResult = temp;   
             }
@@ -1998,7 +2011,7 @@ block_item_list
         $$ = $1;
     }
     | block_item_list block_item { 
-        $$ = $1; 
+        $$ = new TreeNode(OTHERS); 
         $$->children.push_back($2);
         $$->continueList = Backpatch::mergeBackpatchLists($1->continueList, $2->continueList);
         $$->breakList = Backpatch::mergeBackpatchLists($1->breakList, $2->breakList);
@@ -2130,6 +2143,7 @@ iteration_statement
         Backpatch::backpatch($9->continueList, $1->tacResult);
         $$->nextList = Backpatch::mergeBackpatchLists($9->breakList, $4->trueList);
         $$->goToList = $10->goToList;
+        irGen.emit(TACOp::oth, $1->tacResult, "", "", true);
     }
 
 for_init

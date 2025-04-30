@@ -215,7 +215,7 @@ struct irGenerator
 
     string newLabel()
     {
-        return "L" + to_string(labelCounter++);
+        return "str_" + to_string(labelCounter++);
     }
     int emit(TACOp op, const string &result,
              const string &op1 = "",
@@ -1340,7 +1340,7 @@ void addDeclarators(TreeNode *specifier, TreeNode *list)
                                 }
                                 else
                                 {
-                                    irGen.emit(TACOp::ASSIGN, varName, child->children[1]->tacResult, "");
+                                    irGen.emit(TACOp::ASSIGN, varName, child->children[1]->tacResult, "", false, declInfo.isStatic);
                                 }
                             }
                         }

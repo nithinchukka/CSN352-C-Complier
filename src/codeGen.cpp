@@ -22,9 +22,8 @@ vector<TreeNode *> regMap = {
     new TreeNode(REGISTER, "r13"),
     new TreeNode(REGISTER, "r14"),
     new TreeNode(REGISTER, "r15")};
-
+int curr_param = 0;
 vector<string> asmOutput;
-
 void emitFuncExit()
 {
     asmOutput.push_back("    mov rsp, rbp");
@@ -36,6 +35,7 @@ void emitFuncEntry(int totalSize)
 {
     asmOutput.push_back("    push " + regMap[1]->value);
     asmOutput.push_back("    mov " + regMap[1]->value + ", " + regMap[0]->value);
+    totalSize = ((totalSize + 15) / 16) * 16;
     asmOutput.push_back("    sub " + regMap[0]->value + ", " + to_string(totalSize));
 }
 
@@ -55,22 +55,28 @@ void emitStart()
 {
     emitCode("    .intel_syntax noprefix");
     emitCode("    .text");
-    emitCode("    .global _start");
+    // emitCode("    .global _start");
     emitCode("    .global main");
-    emitCode("_start:");
-    emitCode("    call main");
-    emitCode("    mov rax, 60");
-    emitCode("    xor rdi, rdi");
-    emitCode("    syscall");
+    emitCode("    .extern printf");
+    emitCode("");
+    // emitCode("_start:");
+    // emitCode("    call main");
+    // emitCode("    mov rax, 60");
+    // emitCode("    xor rdi, rdi");
+    // emitCode("    syscall");
 }
 
 string baseAdressing(TreeNode *var)
 {
-    if (lookupSymbol(var->value, true, false))
+    if (var->isStatic)
     {
         return "[rip + " + var->value + "]";
     }
-    if (var->paramCount > 0)
+    else if (lookupSymbol(var->value, true, false))
+    {
+        return "[rip + " + var->value + "]";
+    }
+    else if (var->paramCount > 0)
     {
         return "[" + regMap[1]->value + " + " + to_string(var->paramCount * 8 + 8) + "]";
     }
@@ -732,7 +738,7 @@ void generateCodeForBasicBlock(const vector<TACInstruction> &tacCode, const vect
             }
             else if (instr.op == TACOp::MOD) // handle mod
             {
-                //remainder is stored in rdx
+                // remainder is stored in rdx
                 if (instr.opNode1 && instr.opNode2)
                 {
                     emitCode("    mov " + getRegisterBySize(regMap[regX.reg]->value, instr.resNode->typeSpecifier) + ", " + getRegisterBySize(regMap[regY.reg]->value, instr.opNode1->typeSpecifier));
@@ -769,12 +775,12 @@ void generateCodeForBasicBlock(const vector<TACInstruction> &tacCode, const vect
         }
         else
         {
-            if (instr.isGoto) // if jump or goto
+            if (instr.isGoto || instr.op == TACOp::GOTO) // if jump or goto
             {
                 string target = getGOTOLabel(stoi(instr.result), basicBlocks);
                 emitCode("    jmp " + target);
             }
-            else if (instr.op == TACOp::STARTFUNC) // start function 
+            else if (instr.op == TACOp::STARTFUNC) // start function
             {
                 emitCode(instr.result + ":");
                 emitFuncEntry(instr.resNode->totalOffset);
@@ -806,7 +812,14 @@ void generateCodeForBasicBlock(const vector<TACInstruction> &tacCode, const vect
             }
             else if (instr.op == TACOp::CALL2 || instr.op == TACOp::CALL)
             {
+                curr_param = 0;
                 spillAllRegisters(); // safe all registers before calling
+                if (instr.operand1 == "printf")
+                {
+                    emitCode("    call printf");
+                    emitCode("    add rsp, " + to_string(max(0, 8 * (stoi(instr.operand2) - 6))));
+                    continue;
+                }
                 emitCode("    call " + instr.operand1);
                 emitCode("    add rsp, " + to_string(8 * instr.opNode1->paramCount));
                 if (instr.resNode)
@@ -816,9 +829,62 @@ void generateCodeForBasicBlock(const vector<TACInstruction> &tacCode, const vect
                     addressDescriptor[instr.resNode].insert(regMap[reg]);
                     emitCode("    mov " + getRegisterBySize(regMap[reg]->value, instr.resNode->typeSpecifier) + ", " + getRegisterBySize("rax", instr.resNode->typeSpecifier));
                 }
+                spillAllRegisters(); // safe all registers before calling
             }
             else if (instr.op == TACOp::PARAM)
             {
+                if (instr.operand1 == string("printf"))
+                {
+                    if (curr_param < 6)
+                    {
+                        if (curr_param == 0)
+                        {
+                            emitCode("    lea rdi, " + baseAdressing(instr.resNode));
+                        }
+                        else
+                        {
+                            string regName;
+                            switch (curr_param)
+                            {
+                            case 0:
+                                regName = "rdi";
+                                break;
+                            case 1:
+                                regName = "rsi";
+                                break;
+                            case 2:
+                                regName = "rdx";
+                                break;
+                            case 3:
+                                regName = "rcx";
+                                break;
+                            case 4:
+                                regName = "r8";
+                                break;
+                            case 5:
+                                regName = "r9";
+                                break;
+                            }
+                            if (!instr.resNode)
+                                emitCode("    mov " + getRegisterBySize(regName, 4) + ", " + instr.result);
+                            else
+                            {
+                                int reg = checkAddressDescriptor(instr.resNode);
+                                if (reg == -1)
+                                {
+                                    reg = fetchRegForImmediate(liveVars, -1);
+                                    registerDescriptor[reg].insert(instr.resNode);
+                                    addressDescriptor[instr.resNode].insert(regMap[reg]);
+                                    emitCode("    mov " + getRegisterBySize(regMap[reg]->value, instr.resNode->typeSpecifier) + ", " + getWordPTR(instr.resNode->typeSpecifier) + " " + baseAdressing(instr.resNode));
+                                }
+                                emitCode("    mov " + getRegisterBySize(regName, 3) + ", " + getRegisterBySize(regMap[reg]->value, instr.resNode->typeSpecifier));
+                            }
+                        }
+                    }
+                    curr_param++;
+                    continue;
+                }
+
                 if (!instr.resNode) // push immediate value to stack
                 {
                     int reg = fetchRegForImmediate(liveVars, -1);
@@ -848,6 +914,10 @@ void addDataSection(const vector<TACInstruction> &globalVars)
     for (auto instr : globalVars)
     {
         TreeNode *curr_node = lookupSymbol(instr.result, true, false);
+        if (instr.resNode->isStatic)
+        {
+            curr_node = instr.resNode;
+        }
         if (curr_node->typeCategory == 0)
         {
             if (curr_node->typeSpecifier == 1)
@@ -880,6 +950,11 @@ void addDataSection(const vector<TACInstruction> &globalVars)
                 asmOutput.push_back(instr.result + ":");
                 asmOutput.push_back("    .quad  " + instr.operand1);
             }
+            else if (curr_node->typeSpecifier == 8)
+            {
+                asmOutput.push_back(instr.result + ":");
+                asmOutput.push_back("    .string " + instr.operand1);
+            }
         }
         else
 
@@ -894,18 +969,18 @@ void markLeaders(const vector<TACInstruction> &tacCode, vector<bool> &leaderList
     if (tacCode.empty())
         return;
     leaderList.assign(tacCode.size(), false);
-    leaderList[0] = true;// the first instruction is always a leader
+    leaderList[0] = true; // the first instruction is always a leader
     for (int i = 0; i < tacCode.size(); i++)
     {
         TACOp op = tacCode[i].op;
-        if (op == TACOp::GOTO || op == TACOp::oth || op == TACOp::IF_EQ || op == TACOp::IF_NE)
+        if (op == TACOp::GOTO || op == TACOp::oth || op == TACOp::EQ || op == TACOp::NE || tacCode[i].isGoto)
         {
             try
             {
                 int lineNo = stoi(tacCode[i].result);
                 if (lineNo < tacCode.size())
                 {
-                    leaderList[lineNo] = true;// mark the target of the GOTO as a leader
+                    leaderList[lineNo] = true; // mark the target of the GOTO as a leader
                 }
             }
             catch (const invalid_argument &ia)
@@ -914,7 +989,7 @@ void markLeaders(const vector<TACInstruction> &tacCode, vector<bool> &leaderList
             }
             if (i + 1 < tacCode.size())
             {
-                leaderList[i + 1] = true;// mark the next instruction as a leader
+                leaderList[i + 1] = true; // mark the next instruction as a leader
             }
         }
     }
@@ -924,6 +999,7 @@ vector<pair<int, int>> createBasicBlocks(const vector<TACInstruction> &tacCode)
 {
     vector<bool> leaderList;
     markLeaders(tacCode, leaderList);
+
     vector<pair<int, int>> basicBlocks;
     if (tacCode.empty())
         return basicBlocks;
