@@ -16,7 +16,7 @@ for file in test/*; do
     echo "Processing File: $file" | tee -a output.log
     echo " " | tee -a output.log
 
-    ./build/parser.out "$file" | tee -a output.log
+    ./build/compiler.out "$file" | tee -a output.log
 
     echo " " | tee -a output.log
 done

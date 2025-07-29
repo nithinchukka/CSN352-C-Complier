@@ -54,6 +54,8 @@ struct      { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KE
 switch      { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_SWITCH); }
 void        { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_VOID); }
 while       { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_WHILE); }
+until       { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_UNTIL); }
+done       { yylval.node = createNode(NODE_KEYWORD, string(yytext)); return (KEYWORD_DONE); }
 "printf"    { yylval.node = createNode(NODE_KEYWORD, string("printf")); return (KEYWORD_PRINTF); }
 "scanf"     { yylval.node = createNode(NODE_KEYWORD, string("scanf")); return (KEYWORD_SCANF); }
 

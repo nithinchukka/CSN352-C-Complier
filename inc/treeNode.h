@@ -6,6 +6,7 @@ using namespace std;
 struct backpatchNode;
 enum NodeType
 {
+    REGISTER,
     NODE_ASSIGNMENT,
     NODE_TRANSLATION_UNIT,
     NODE_PARAMETER_TYPE_LIST,
@@ -118,7 +119,7 @@ public:
     vector<pair<string, TreeNode *>> symbolTable;
     int totalOffset = 0;
     string tacResult;
-
+    
     backpatchNode *nextList = nullptr;
     backpatchNode *falseList = nullptr;
     backpatchNode *trueList = nullptr;

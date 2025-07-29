@@ -6,8 +6,8 @@
 
 %{
     #include <bits/stdc++.h>
+    #include "../inc/symbolTable.h"
 	#include "../inc/treeNode.h"
-    #include "../inc/symbolTable.h" 
     #include <sys/stat.h> // for mkdir
 
     extern irGenerator irGen;
@@ -19,13 +19,14 @@
     extern FILE *yyin;
     extern unordered_set<string> classOrStructOrUnion;
     extern int expectedReturnType;
+    TreeNode* helper;
     void backTrackExpr(TreeNode* nd){
         if(nd == nullptr) return;
         if(nd->trueList || nd->falseList){
             Backpatch::backpatch(nd->trueList, to_string(irGen.currentInstrIndex));
             Backpatch::backpatch(nd->falseList, to_string(irGen.currentInstrIndex  + 1));
-            irGen.emit(TACOp::ASSIGN, nd->tacResult, "1", nullopt);
-            irGen.emit(TACOp::ASSIGN, nd->tacResult, "0", nullopt);
+            irGen.emit(TACOp::ASSIGN, nd->tacResult, "1", "");
+            irGen.emit(TACOp::ASSIGN, nd->tacResult, "0", "");
         }
     }
 
@@ -42,10 +43,22 @@
     void typeCastFunction(TreeNode *a, TreeNode *b, bool isRel = false){
         if (a->typeSpecifier < b->typeSpecifier) {
             string temp = irGen.newTemp();
+            helper = new TreeNode(OTHERS);
+            helper->typeSpecifier = b->typeSpecifier;
+            helper->value = temp;
+            helper->offset = offsetStack.top();
+            offsetStack.top() += findOffset(helper->typeSpecifier);
+            insertSymbol(temp,helper);
             irGen.emit(TACOp::TYPECAST, temp, typeCastInfo(b->typeSpecifier, a->typeSpecifier), a->tacResult);
             a->tacResult = temp;
         } else if (a->typeSpecifier > b->typeSpecifier) {
             string temp = irGen.newTemp();
+            helper = new TreeNode(OTHERS);
+            helper->typeSpecifier = a->typeSpecifier;
+            helper->value = temp;
+            helper->offset = offsetStack.top();
+            offsetStack.top() += findOffset(helper->typeSpecifier);
+            insertSymbol(temp,helper);
             irGen.emit(TACOp::TYPECAST, temp, typeCastInfo(a->typeSpecifier, b->typeSpecifier), b->tacResult);
             b->tacResult = temp;
         }
@@ -74,7 +87,7 @@
     KEYWORD_FOR KEYWORD_GOTO KEYWORD_IF KEYWORD_INT 
     KEYWORD_LONG KEYWORD_NULLPTR KEYWORD_RETURN 
     KEYWORD_STATIC KEYWORD_STRUCT KEYWORD_SWITCH 
-    KEYWORD_VOID KEYWORD_WHILE KEYWORD_PRINTF KEYWORD_SCANF TYPE_NAME
+    KEYWORD_VOID KEYWORD_WHILE KEYWORD_PRINTF KEYWORD_SCANF TYPE_NAME KEYWORD_UNTIL KEYWORD_DONE
 
 %token <node> INTEGER FLOAT CHAR STRING ID LONG
 
@@ -129,7 +142,8 @@
 %start translation_unit
 
 %nonassoc NO_ELSE
-%nonassoc KEYWORD_ELSE
+%nonassoc KEYWORD_ELSE 
+
 %%
 
 N
@@ -138,7 +152,7 @@ N
       backpatchNode* curr = $$->nextList;
       backpatchNode* next = Backpatch::addToBackpatchList(curr, irGen.currentInstrIndex);
       $$->nextList = next;
-      irGen.emit(TACOp::oth, "", nullopt, nullopt, true);
+      irGen.emit(TACOp::oth, "", "", "", true);
   }
 ;
 
@@ -219,19 +233,36 @@ postfix_expression
                 $$->isLValue = true;
                 $$->pointerLevel = $1->pointerLevel-1;
                 string temp = irGen.newTemp();
-                irGen.emit(TACOp::ASSIGN,temp,$3->tacResult,nullopt);
+                helper = new TreeNode(OTHERS);
+                helper->typeSpecifier = $3->typeSpecifier;
+                helper->value = temp;
+                helper->offset = offsetStack.top();
+                offsetStack.top() += findOffset($3->typeSpecifier);
+                insertSymbol(temp,helper);
+                irGen.emit(TACOp::ASSIGN,temp,$3->tacResult,"");
                 for(int i=curr_dimensions.size()-$$->pointerLevel;i<curr_dimensions.size();i++){
                     irGen.emit(TACOp::MUL,temp,temp,to_string(curr_dimensions[i]));
                 }
                 if($1->typeSpecifier == 1){
                     irGen.emit(TACOp::MUL,temp,temp,string(1,'1'));
                 }
-                else 
+                else
                     irGen.emit(TACOp::MUL,temp,temp,string(1,'4'));
                 string temp2 = irGen.newTemp();
+                helper = new TreeNode(OTHERS);
+                helper->typeSpecifier = $3->typeSpecifier;
+                helper->value = temp2;
+                helper->offset = offsetStack.top();
+                offsetStack.top() += 8;
+                insertSymbol(temp2,helper);
                 irGen.emit(TACOp::ADD,temp2,temp,$1->tacResult);
                 if($$->pointerLevel == 0){
                     string temp3 = irGen.newTemp();
+                    helper = new TreeNode(OTHERS);
+                    helper->value = temp3;
+                    helper->offset = offsetStack.top();
+                    offsetStack.top() += findOffset($$->typeSpecifier);
+                    insertSymbol(temp3,helper);
                     irGen.emit(TACOp::DEREF, temp3, temp2, "");
                     $$->tacResult = temp3;
                 }
@@ -260,7 +291,12 @@ postfix_expression
                             $$->isLValue = true;
                             $$->pointerLevel = $1->pointerLevel-1;
                             string temp = irGen.newTemp();
-                            irGen.emit(TACOp::ASSIGN,temp,$3->tacResult,nullopt);
+                            helper = new TreeNode(OTHERS);
+                            helper->value = temp;
+                            helper->offset = offsetStack.top();
+                            offsetStack.top() += findOffset($3->typeSpecifier);
+                            insertSymbol(temp,helper);
+                            irGen.emit(TACOp::ASSIGN,temp,$3->tacResult,"");
                             for(int i=curr_dimensions.size()-$$->pointerLevel;i<curr_dimensions.size();i++){
                                 irGen.emit(TACOp::MUL,temp,temp,to_string(curr_dimensions[i]));
                             }
@@ -268,11 +304,21 @@ postfix_expression
                                 irGen.emit(TACOp::MUL,temp,temp,string(1,'1'));
                             }
                             else 
-                                irGen.emit(TACOp::MUL,temp,temp,string(1,'4'));
+                            irGen.emit(TACOp::MUL,temp,temp,string(1,'4'));
                             string temp2 = irGen.newTemp();
+                            helper = new TreeNode(OTHERS);
+                            helper->value = temp2;
+                            helper->offset = offsetStack.top();
+                            offsetStack.top() += 8;
+                            insertSymbol(temp2,helper);
                             irGen.emit(TACOp::ADD,temp2,temp,$1->tacResult);
                             if($$->pointerLevel == 0){
                                 string temp3 = irGen.newTemp();
+                                helper = new TreeNode(OTHERS);
+                                helper->value = temp3;
+                                helper->offset = offsetStack.top();
+                                offsetStack.top() += findOffset($$->typeSpecifier);
+                                insertSymbol(temp3,helper);
                                 irGen.emit(TACOp::DEREF, temp3, temp2, "");
                                 $$->tacResult = temp3;
                             }
@@ -297,6 +343,12 @@ postfix_expression
                 irGen.emit(TACOp::CALL2, "", $1->tacResult, "0");
             } else {
                 string temp = irGen.newTemp();
+                helper = new TreeNode(OTHERS);
+                helper->value = temp;
+                helper->typeSpecifier = $1->typeSpecifier;
+                helper->offset = offsetStack.top();
+                offsetStack.top() += findOffset($1->typeSpecifier);
+                insertSymbol(temp,helper);
                 irGen.emit(TACOp::CALL, temp, $1->tacResult, "0");
                 $$->tacResult = temp;
             }
@@ -327,13 +379,19 @@ postfix_expression
                 raiseError("function call with " + to_string($3->children.size()) + " params, expected " + to_string($1->paramCount), yylineno);
             }
         }
-        for (auto* arg : $3->children) {
-            irGen.emit(TACOp::ASSIGN, "param", arg->tacResult, nullopt);
+        for (auto it = $3->children.begin(); it != $3->children.end(); ++it) {
+            irGen.emit(TACOp::PARAM, (*it)->tacResult);
         }
         if ($1->typeSpecifier == 0) {
             irGen.emit(TACOp::CALL2, "", $1->value, to_string($3->children.size()));
         } else {
             string temp = irGen.newTemp();
+            helper = new TreeNode(OTHERS);
+            helper->value = temp;
+            helper->typeSpecifier = $1->typeSpecifier;
+            helper->offset = offsetStack.top();
+            offsetStack.top() += findOffset($1->typeSpecifier);
+            insertSymbol(temp,helper);
             irGen.emit(TACOp::CALL, temp, $1->tacResult, to_string($3->children.size()));
             $$->tacResult = temp; 
         }
@@ -358,17 +416,43 @@ postfix_expression
                             curr_dimensions = entry.second->dimensions;
                             curr_value = entry.first;
                             string temp = irGen.newTemp();
+                            helper = new TreeNode(OTHERS);
+                            helper->value = temp;
+                            helper->offset = offsetStack.top();
+                            offsetStack.top() += 8;
+                            insertSymbol(temp,helper);
                             string temp1 = irGen.newTemp();
+                            helper = new TreeNode(OTHERS);
+                            helper->value = temp1;
+                            helper->offset = offsetStack.top();
+                            offsetStack.top() += 8;
+                            insertSymbol(temp1,helper);
                             irGen.emit(TACOp::REFER, temp1, $1->tacResult);
                             irGen.emit(TACOp::ADD, temp, temp1, to_string(entry.second->offset));
                             $$->tacResult = temp;
                             break;
                         } else {
                             string temp = irGen.newTemp();
+                            helper = new TreeNode(OTHERS);
+                            helper->value = temp;
+                            helper->offset = offsetStack.top();
+                            offsetStack.top() += 8;
+                            insertSymbol(temp,helper);
                             string temp1 = irGen.newTemp();
+                            helper = new TreeNode(OTHERS);
+                            helper->value = temp1;
+                            helper->offset = offsetStack.top();
+                            offsetStack.top() += 8;
+                            insertSymbol(temp1,helper);
                             irGen.emit(TACOp::REFER, temp1, $1->tacResult);
                             irGen.emit(TACOp::ADD, temp, temp1, to_string(entry.second->offset));
                             string temp2 = irGen.newTemp();
+                            helper = new TreeNode(OTHERS);
+                            helper->value = temp2;
+                            helper->offset = offsetStack.top();
+                            if($$->pointerLevel)offsetStack.top()+=8;
+                            else offsetStack.top() += findOffset($$->typeSpecifier);
+                            insertSymbol(temp2,helper);
                             irGen.emit(TACOp::DEREF, temp2, temp, "");
                             $$->tacResult = temp2;
                         }
@@ -403,8 +487,19 @@ postfix_expression
                             break;
                         } else {
                             string temp = irGen.newTemp();
+                            helper = new TreeNode(OTHERS);
+                            helper->value = temp;
+                            helper->offset = offsetStack.top();
+                            offsetStack.top() += 8;
+                            insertSymbol(temp,helper);
                             irGen.emit(TACOp::ADD, temp, $1->tacResult, to_string(offset));
                             string temp1 = irGen.newTemp();
+                            helper = new TreeNode(OTHERS);
+                            helper->value = temp1;
+                            helper->offset = offsetStack.top();
+                            if($$->pointerLevel)offsetStack.top() += 8;
+                            else offsetStack.top() += findOffset($$->typeSpecifier);
+                            insertSymbol(temp1,helper);
                             irGen.emit(TACOp::DEREF, temp1, temp, "");
                             $$->tacResult = temp1;
                         }
@@ -436,10 +531,24 @@ postfix_expression
         }
         $$->isLValue = false; 
         string temp = irGen.newTemp();
-        irGen.emit(TACOp::ASSIGN, temp, $1->tacResult, nullopt);
+        helper = new TreeNode(OTHERS);
+        helper->typeSpecifier = typeSpec;
+        helper->value = temp;
+        helper->offset = offsetStack.top();
+        if($$->pointerLevel)offsetStack.top()+=8;
+        else offsetStack.top()+= findOffset($$->typeSpecifier);
+        insertSymbol(temp,helper);
+        irGen.emit(TACOp::ASSIGN, temp, $1->tacResult, "");
         string temp2 = irGen.newTemp();
+        helper = new TreeNode(OTHERS);
+        helper->typeSpecifier = typeSpec;
+        helper->value = temp2;
+        helper->offset = offsetStack.top();
+        if($$->pointerLevel)offsetStack.top()+=8;
+        else offsetStack.top()+= findOffset($$->typeSpecifier);
+        insertSymbol(temp2,helper);
         irGen.emit(TACOp::ADD, temp2, temp, "1");
-        irGen.emit(TACOp::ASSIGN, $1->tacResult, temp2, nullopt);
+        irGen.emit(TACOp::ASSIGN, $1->tacResult, temp2, "");
         $$->tacResult = temp;
     }
     | postfix_expression DECREMENT_OPERATOR {
@@ -454,10 +563,24 @@ postfix_expression
         }
         $$->isLValue = false;
         string temp = irGen.newTemp();
-        irGen.emit(TACOp::ASSIGN, temp, $1->tacResult, nullopt);
+        helper = new TreeNode(OTHERS);
+        helper->typeSpecifier = typeSpec;
+        helper->value = temp;
+        helper->offset = offsetStack.top();
+        if($$->pointerLevel)offsetStack.top()+=8;
+        else offsetStack.top()+= findOffset($$->typeSpecifier);
+        insertSymbol(temp,helper);
+        irGen.emit(TACOp::ASSIGN, temp, $1->tacResult, "");
         string temp2 = irGen.newTemp();
+        helper = new TreeNode(OTHERS);
+        helper->typeSpecifier = typeSpec;
+        helper->value = temp2;
+        helper->offset = offsetStack.top();
+        if($$->pointerLevel)offsetStack.top()+=8;
+        else offsetStack.top()+= findOffset($$->typeSpecifier);
+        insertSymbol(temp2,helper);
         irGen.emit(TACOp::SUB, temp2, temp, "1");
-        irGen.emit(TACOp::ASSIGN, $1->tacResult, temp2, nullopt);
+        irGen.emit(TACOp::ASSIGN, $1->tacResult, temp2, "");
         $$->tacResult = temp;
     }
     ;
@@ -485,10 +608,22 @@ unary_expression
         } 
         $$ = $2;
         string temp = irGen.newTemp();
-        irGen.emit(TACOp::ASSIGN, temp, $2->tacResult, nullopt);
+        helper = new TreeNode(OTHERS);
+        helper->value = temp;
+        helper->offset = offsetStack.top();
+        if($$->pointerLevel)offsetStack.top()+=8;
+        else offsetStack.top()+= findOffset($$->typeSpecifier);
+        insertSymbol(temp,helper);
+        irGen.emit(TACOp::ASSIGN, temp, $2->tacResult, "");
         string temp2 = irGen.newTemp();
+        helper = new TreeNode(OTHERS);
+        helper->value = temp2;
+        helper->offset = offsetStack.top();
+        if($$->pointerLevel)offsetStack.top()+=8;
+        else offsetStack.top()+= findOffset($$->typeSpecifier);
+        insertSymbol(temp2,helper);
         irGen.emit(TACOp::ADD, temp2, temp, "1");
-        irGen.emit(TACOp::ASSIGN, $2->tacResult, temp2, nullopt);
+        irGen.emit(TACOp::ASSIGN, $2->tacResult, temp2, "");
         $$->tacResult = temp2; 
         int typeSpec = $2->typeSpecifier;
         if (typeSpec > 7) {
@@ -502,10 +637,22 @@ unary_expression
         }
         $$ = $2;
         string temp = irGen.newTemp();
-        irGen.emit(TACOp::ASSIGN, temp, $2->tacResult, nullopt);
+        helper = new TreeNode(OTHERS);
+        helper->value = temp;
+        helper->offset = offsetStack.top();
+        if($$->pointerLevel)offsetStack.top()+=8;
+        else offsetStack.top()+= findOffset($$->typeSpecifier);
+        insertSymbol(temp,helper);
+        irGen.emit(TACOp::ASSIGN, temp, $2->tacResult, "");
         string temp2 = irGen.newTemp();
+        helper = new TreeNode(OTHERS);
+        helper->value = temp2;
+        helper->offset = offsetStack.top();
+        if($$->pointerLevel)offsetStack.top()+=8;
+        else offsetStack.top()+= findOffset($$->typeSpecifier);
+        insertSymbol(temp2,helper);
         irGen.emit(TACOp::SUB, temp2, temp, "1");
-        irGen.emit(TACOp::ASSIGN, $2->tacResult, temp2, nullopt);
+        irGen.emit(TACOp::ASSIGN, $2->tacResult, temp2, "");
         $$->tacResult = temp2;        
         int typeSpec = $2->typeSpecifier;
         if (typeSpec > 7) {
@@ -517,23 +664,50 @@ unary_expression
         $$ = createNode(NODE_UNARY_EXPRESSION, "", $1, $2);
         if ($1->isConstVal) $$->isConstVal = 1;
         $$->typeSpecifier = $2->typeSpecifier;
-        string temp = irGen.newTemp();
         string op = $1->value;
+        string temp = irGen.newTemp();
+        helper = new TreeNode(OTHERS);
+        helper->value = temp;
+        helper->offset = offsetStack.top();
+        if(op == "&"){
+            offsetStack.top() += 8;
+        }
+        else if(op == "*"){
+            if($2->pointerLevel > 1)offsetStack.top()+=8;
+            else offsetStack.top()+= findOffset($2->typeSpecifier);
+        }
+        else offsetStack.top() += findOffset($2->typeSpecifier);
+        insertSymbol(temp,helper);
         if (op == "&") {
-            string temp1 = irGen.newTemp();
-            irGen.emit(TACOp::REFER, temp1, $2->tacResult, "");
-            irGen.emit(TACOp::ASSIGN, temp, temp1, nullopt);
-            $$->isLValue = false;
             $$->pointerLevel = $2->pointerLevel+1;
-        } else if (op == "*") {
+            $$->isConstVal = 1;
             string temp1 = irGen.newTemp();
-            irGen.emit(TACOp::DEREF, temp1, temp, "");
-            irGen.emit(TACOp::ASSIGN, temp, temp1, nullopt);
-            $$->isLValue = true;
+            helper = new TreeNode(OTHERS);
+            helper->value = temp1;
+            helper->offset = offsetStack.top();
+            if($$->pointerLevel)offsetStack.top()+=8;
+            else offsetStack.top()+= findOffset($$->typeSpecifier);
+            insertSymbol(temp1,helper);
+            cout << "hi";
+            irGen.emit(TACOp::REFER, temp1, $2->tacResult, "");
+            irGen.emit(TACOp::ASSIGN, temp, temp1, "");
+            $$->isLValue = false;
+        } else if (op == "*") {
             $$->pointerLevel = $2->pointerLevel-1;
+            $$->isConstVal = 0;
+            string temp1 = irGen.newTemp();
+            helper = new TreeNode(OTHERS);
+            helper->value = temp1;
+            helper->offset = offsetStack.top();
+            if($$->pointerLevel)offsetStack.top()+=8;
+            else offsetStack.top()+= findOffset($$->typeSpecifier);
+            insertSymbol(temp1,helper);
+            irGen.emit(TACOp::DEREF, temp1, temp, "");
+            irGen.emit(TACOp::ASSIGN, temp, temp1, "");
+            $$->isLValue = true;
         } else if (op == "+") {
             $$->isConstVal = 1;
-            irGen.emit(TACOp::ASSIGN, temp, $2->tacResult, nullopt);
+            irGen.emit(TACOp::ASSIGN, temp, $2->tacResult, "");
             $$->isLValue = false;
         } else if (op == "-") {
             $$->isConstVal = 1;
@@ -541,14 +715,14 @@ unary_expression
             $$->isLValue = false;
         } else if (op == "~") {
             $$->isConstVal = 1;
-            irGen.emit(TACOp::BIT_XOR, temp, $2->tacResult, "-1");
+            irGen.emit(TACOp::BIT_NOT, temp, $2->tacResult, "-1");
             $$->isLogical = true;
             $$->falseList = $2->falseList;
             $$->trueList = $2->trueList;
             $$->isLValue = false;
         } else if (op == "!") {
             $$->isConstVal = 1;
-            irGen.emit(TACOp::EQ, temp, $2->tacResult, "0");
+            irGen.emit(TACOp::NOT, temp, $2->tacResult, "0");
             $$->isLValue = false;
         }
         $$->tacResult = temp;         
@@ -585,7 +759,7 @@ cast_expression
             $$->isLValue = false;
             string temp = irGen.newTemp();
             string castExpr = "(" + $2->value + ")" + $4->tacResult;
-            irGen.emit(TACOp::ASSIGN, temp, castExpr, nullopt);
+            irGen.emit(TACOp::ASSIGN, temp, castExpr, "");
             $$->tacResult = temp;
         } */
     ;
@@ -607,6 +781,12 @@ multiplicative_expression
                 $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
                 typeCastFunction($1, $3);
                 string temp = irGen.newTemp();
+                helper = new TreeNode(OTHERS);
+                helper->typeSpecifier = $$->typeSpecifier;
+                helper->value = temp;
+                helper->offset = offsetStack.top();
+                offsetStack.top() += findOffset($$->typeSpecifier);
+                insertSymbol(temp,helper);
                 irGen.emit(TACOp::MUL, temp, $1->tacResult, $3->tacResult);
                 $$->tacResult = temp;
             } else {
@@ -627,6 +807,12 @@ multiplicative_expression
                 typeCastFunction($1, $3);
                 $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
                 string temp = irGen.newTemp();
+                helper = new TreeNode(OTHERS);
+                helper->typeSpecifier = $$->typeSpecifier;
+                helper->value = temp;
+                helper->offset = offsetStack.top();
+                offsetStack.top() += findOffset($$->typeSpecifier);
+                insertSymbol(temp,helper);
                 irGen.emit(TACOp::DIV, temp, $1->tacResult, $3->tacResult);
                 $$->tacResult = temp;
             } else {
@@ -649,6 +835,12 @@ multiplicative_expression
                 typeCastFunction($1, $3);
                 $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
                 string temp = irGen.newTemp();
+                helper = new TreeNode(OTHERS);
+                helper->typeSpecifier = $$->typeSpecifier;
+                helper->value = temp;
+                helper->offset = offsetStack.top();
+                offsetStack.top() += findOffset($$->typeSpecifier);
+                insertSymbol(temp,helper);
                 irGen.emit(TACOp::MOD, temp, $1->tacResult, $3->tacResult);
                 $$->tacResult = temp;
             } else {
@@ -663,6 +855,7 @@ additive_expression
         $$ = $1; 
     }
     | additive_expression PLUS_OPERATOR multiplicative_expression {
+        
         $$ = createNode(NODE_ADDITIVE_EXPRESSION, $2, $1, $3);
         if ($1->isConstVal && $3->isConstVal) $$->isConstVal = 1;
         int rhsPointerLevel = $3->pointerLevel;
@@ -675,8 +868,16 @@ additive_expression
             $$->pointerLevel = lhsPointerLevel + rhsPointerLevel;
             if (isTypeCompatible($1->typeSpecifier, $3->typeSpecifier, "+")) {
                 $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
+                
                 typeCastFunction($1, $3);
                 string temp = irGen.newTemp(); 
+                helper = new TreeNode(OTHERS);
+                helper->typeSpecifier = $$->typeSpecifier;
+                helper->value = temp;
+                helper->offset = offsetStack.top();
+                if($$->pointerLevel)offsetStack.top()+=8;
+                else offsetStack.top() += findOffset($$->typeSpecifier);
+                insertSymbol(temp,helper);
                 if ($1->typeCategory == 2 || $3->typeCategory == 2) {
                     $$->typeCategory = 2;
                 } else {
@@ -708,6 +909,13 @@ additive_expression
                     $$->typeCategory = 2;
                 }
                 string temp = irGen.newTemp();
+                helper = new TreeNode(OTHERS);
+                helper->typeSpecifier = $$->typeSpecifier;
+                helper->value = temp;
+                helper->offset = offsetStack.top();
+                if($$->pointerLevel)offsetStack.top()+=8;
+                else offsetStack.top() += findOffset($$->typeSpecifier);
+                insertSymbol(temp,helper);
                 irGen.emit(TACOp::SUB, temp, $1->tacResult, $3->tacResult);
                 $$->tacResult = temp; 
             } else {
@@ -738,6 +946,12 @@ shift_expression
                 typeCastFunction($1, $3);
                 $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
                 string temp = irGen.newTemp();
+                helper = new TreeNode(OTHERS);
+                helper->typeSpecifier = $$->typeSpecifier;
+                helper->value = temp;
+                helper->offset = offsetStack.top();
+                offsetStack.top() += findOffset($$->typeSpecifier);
+                insertSymbol(temp,helper);
                 irGen.emit(TACOp::LSHFT, temp, $1->tacResult, $3->tacResult);
                 $$->tacResult = temp;
             } else {
@@ -762,6 +976,12 @@ shift_expression
                 $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
                 typeCastFunction($1, $3);
                 string temp = irGen.newTemp();
+                helper = new TreeNode(OTHERS);
+                helper->typeSpecifier = $$->typeSpecifier;
+                helper->value = temp;
+                helper->offset = offsetStack.top();
+                offsetStack.top() += findOffset($$->typeSpecifier);
+                insertSymbol(temp,helper);
                 irGen.emit(TACOp::RSHFT, temp, $1->tacResult, $3->tacResult);
                 $$->tacResult = temp; 
             } else {
@@ -790,8 +1010,14 @@ relational_expression
                 typeCastFunction($1, $3, true);
                 backTrackRelExpr($$);
                 $$->tacResult = irGen.newTemp();
+                helper = new TreeNode(OTHERS);
+                helper->typeSpecifier = $$->typeSpecifier;
+                helper->value = $$->tacResult;
+                helper->offset = offsetStack.top();
+                offsetStack.top() += 4;
+                insertSymbol($$->tacResult,helper);
                 irGen.emit(TACOp::LT, "", $1->tacResult, $3->tacResult, true);
-                irGen.emit(TACOp::oth, "", nullopt, nullopt, true);
+                irGen.emit(TACOp::oth, "", "", "", true);
             } else {
                 raiseError("Incompatible Type: " + to_string($1->typeSpecifier) + " and " + 
                            to_string($3->typeSpecifier), yylineno);
@@ -814,8 +1040,14 @@ relational_expression
                 typeCastFunction($1, $3, true);
                 backTrackRelExpr($$);
                 irGen.emit(TACOp::GT, "", $1->tacResult, $3->tacResult, true);
-                irGen.emit(TACOp::oth, "", nullopt, nullopt, true);
+                irGen.emit(TACOp::oth, "", "", "", true);
                 $$->tacResult = irGen.newTemp();
+                helper = new TreeNode(OTHERS);
+                helper->typeSpecifier = $$->typeSpecifier;
+                helper->value = $$->tacResult;
+                helper->offset = offsetStack.top();
+                offsetStack.top() += 4;
+                insertSymbol($$->tacResult,helper);
             } else {
                 raiseError("Incompatible Type: " + to_string($1->typeSpecifier) + " and " + 
                            to_string($3->typeSpecifier), yylineno);
@@ -838,8 +1070,14 @@ relational_expression
                 typeCastFunction($1, $3, true);
                 backTrackRelExpr($$);
                 irGen.emit(TACOp::LE, "", $1->tacResult, $3->tacResult, true);
-                irGen.emit(TACOp::oth, "", nullopt, nullopt, true);
+                irGen.emit(TACOp::oth, "", "", "", true);
                 $$->tacResult = irGen.newTemp();
+                helper = new TreeNode(OTHERS);
+                helper->typeSpecifier = $$->typeSpecifier;
+                helper->value = $$->tacResult;
+                helper->offset = offsetStack.top();
+                offsetStack.top() += 4;
+                insertSymbol($$->tacResult,helper);
             } else {
                 raiseError("Incompatible Type: " + to_string($1->typeSpecifier) + " and " + 
                            to_string($3->typeSpecifier), yylineno);
@@ -862,8 +1100,14 @@ relational_expression
                 typeCastFunction($1, $3, true);
                 backTrackRelExpr($$);
                 irGen.emit(TACOp::GE, "", $1->tacResult, $3->tacResult, true);
-                irGen.emit(TACOp::oth, "", nullopt, nullopt, true);
+                irGen.emit(TACOp::oth, "", "", "", true);
                 $$->tacResult = irGen.newTemp();
+                helper = new TreeNode(OTHERS);
+                helper->typeSpecifier = $$->typeSpecifier;
+                helper->value = $$->tacResult;
+                helper->offset = offsetStack.top();
+                offsetStack.top() += 4;
+                insertSymbol($$->tacResult,helper);
             } else {
                 raiseError("Incompatible Type: " + to_string($1->typeSpecifier) + " and " + 
                            to_string($3->typeSpecifier), yylineno);
@@ -890,8 +1134,14 @@ equality_expression
                 $$->typeSpecifier = 3;
                 backTrackRelExpr($$);
                 irGen.emit(TACOp::EQ, "", $1->tacResult, $3->tacResult, true);
-                irGen.emit(TACOp::oth, "", nullopt, nullopt, true);
+                irGen.emit(TACOp::oth, "", "", "", true);
                 $$->tacResult = irGen.newTemp();
+                helper = new TreeNode(OTHERS);
+                helper->typeSpecifier = $$->typeSpecifier;
+                helper->value = $$->tacResult;
+                helper->offset = offsetStack.top();
+                offsetStack.top() += 4;
+                insertSymbol($$->tacResult,helper);
             } else {
                 raiseError("Incompatible Type: " + to_string($1->typeSpecifier) + " and " + 
                            to_string($3->typeSpecifier), yylineno);
@@ -914,8 +1164,14 @@ equality_expression
                 typeCastFunction($1, $3, true);
                 backTrackRelExpr($$);
                 irGen.emit(TACOp::NE, "", $1->tacResult, $3->tacResult, true);
-                irGen.emit(TACOp::oth, "", nullopt, nullopt, true);
+                irGen.emit(TACOp::oth, "", "", "", true);
                 $$->tacResult = irGen.newTemp();
+                helper = new TreeNode(OTHERS);
+                helper->typeSpecifier = $$->typeSpecifier;
+                helper->value = $$->tacResult;
+                helper->offset = offsetStack.top();
+                offsetStack.top() += 4;
+                insertSymbol($$->tacResult,helper);
             } else {
                 raiseError("Incompatible Type: " + to_string($1->typeSpecifier) + " and " + 
                            to_string($3->typeSpecifier), yylineno);
@@ -942,6 +1198,12 @@ and_expression
                 $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
                 typeCastFunction($1, $3);
                 string temp = irGen.newTemp();
+                helper = new TreeNode(OTHERS);
+                helper->typeSpecifier = $$->typeSpecifier;
+                helper->value = temp;
+                helper->offset = offsetStack.top();
+                offsetStack.top() += findOffset($$->typeSpecifier);
+                insertSymbol(temp,helper);
                 irGen.emit(TACOp::BIT_AND, temp, $1->tacResult, $3->tacResult);
                 $$->tacResult = temp;
             } else {
@@ -970,7 +1232,13 @@ exclusive_or_expression
                 $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
                 typeCastFunction($1, $3);
                 string temp = irGen.newTemp();
-                irGen.emit(TACOp::BIT_XOR, temp, $1->tacResult, $3->tacResult);
+                helper = new TreeNode(OTHERS);
+                helper->typeSpecifier = $$->typeSpecifier;
+                helper->value = temp;
+                helper->offset = offsetStack.top();
+                offsetStack.top() += findOffset($$->typeSpecifier);
+                insertSymbol(temp,helper);
+                irGen.emit(TACOp::XOR, temp, $1->tacResult, $3->tacResult);
                 $$->tacResult = temp;
             } else {
                 raiseError("Incompatible Type: " + to_string($1->typeSpecifier) + " and " + 
@@ -998,6 +1266,12 @@ inclusive_or_expression
                 $$->typeSpecifier = max($1->typeSpecifier, $3->typeSpecifier);
                 typeCastFunction($1, $3, false);
                 string temp = irGen.newTemp();
+                helper = new TreeNode(OTHERS);
+                helper->typeSpecifier = $$->typeSpecifier;
+                helper->value = temp;
+                helper->offset = offsetStack.top();
+                offsetStack.top() += findOffset($$->typeSpecifier);
+                insertSymbol(temp,helper);
                 irGen.emit(TACOp::BIT_OR, temp, $1->tacResult, $3->tacResult);
                 $$->tacResult = temp;
             } else {
@@ -1021,7 +1295,7 @@ logical_and_expression
             next = Backpatch::addToBackpatchList(curr, irGen.currentInstrIndex + 1);
             $1->falseList = next;
             irGen.emit(TACOp::NE, "", $1->tacResult, "0", true);
-            irGen.emit(TACOp::oth, "", nullopt, nullopt, true);
+            irGen.emit(TACOp::oth, "", "", "", true);
         }
     } LOGICAL_AND_OPERATOR M inclusive_or_expression { 
         int rhsPointerLevel = $5->pointerLevel;
@@ -1041,9 +1315,15 @@ logical_and_expression
                 next = Backpatch::addToBackpatchList(curr, irGen.currentInstrIndex + 1);
                 $5->falseList = next;
                 irGen.emit(TACOp::NE, "", $5->tacResult, "0", true);
-                irGen.emit(TACOp::oth, "", nullopt, nullopt, true);
+                irGen.emit(TACOp::oth, "", "", "", true);
             }
             string temp = irGen.newTemp();
+            helper = new TreeNode(OTHERS);
+            helper->typeSpecifier = $$->typeSpecifier;
+            helper->value = temp;
+            helper->offset = offsetStack.top();
+            offsetStack.top() += 4;
+            insertSymbol(temp,helper);
             $$->tacResult = temp; 
             Backpatch::backpatch($1->trueList, $4->tacResult);
             $$->trueList = $5->trueList;
@@ -1066,7 +1346,7 @@ logical_or_expression
             next = Backpatch::addToBackpatchList(curr, irGen.currentInstrIndex + 1);
             $1->falseList = next;
             irGen.emit(TACOp::NE, "", $1->tacResult, "0", true);
-            irGen.emit(TACOp::oth, "", nullopt, nullopt, true);
+            irGen.emit(TACOp::oth, "", "", "", true);
         }
     } LOGICAL_OR_OPERATOR M logical_and_expression { 
         int rhsPointerLevel = $5->pointerLevel;
@@ -1086,9 +1366,15 @@ logical_or_expression
                 next = Backpatch::addToBackpatchList(curr, irGen.currentInstrIndex + 1);
                 $5->falseList = next;
                 irGen.emit(TACOp::NE, "", $5->tacResult, "0", true);
-                irGen.emit(TACOp::oth, "", nullopt, nullopt, true);
+                irGen.emit(TACOp::oth, "", "", "", true);
             }
             string temp = irGen.newTemp();
+            helper = new TreeNode(OTHERS);
+            helper->typeSpecifier = $$->typeSpecifier;
+            helper->value = temp;
+            helper->offset = offsetStack.top();
+            offsetStack.top() += 4;
+            insertSymbol(temp,helper);
             $$->tacResult = temp; 
             Backpatch::backpatch($1->falseList, $4->tacResult);
             $$->falseList = $5->falseList;
@@ -1139,6 +1425,12 @@ assignment_expression
                     $$->typeSpecifier = $1->typeSpecifier;
                     if ($1->typeSpecifier != $3->typeSpecifier) {
                         string temp = irGen.newTemp();
+                        helper = new TreeNode(OTHERS);
+                        helper->typeSpecifier = $$->typeSpecifier;
+                        helper->value = temp;
+                        helper->offset = offsetStack.top();
+                        offsetStack.top() += findOffset($1->typeSpecifier);
+                        insertSymbol(temp,helper);
                         irGen.emit(TACOp::TYPECAST, temp, typeCastInfo($1->typeSpecifier, $3->typeSpecifier), $3->tacResult);
                         $3->tacResult = temp;
                     }
@@ -1155,6 +1447,12 @@ assignment_expression
                     $$->typeSpecifier = $1->typeSpecifier;
                     if ($1->typeSpecifier != $3->typeSpecifier) {
                         string temp = irGen.newTemp();
+                        helper = new TreeNode(OTHERS);
+                        helper->typeSpecifier = $$->typeSpecifier;
+                        helper->value = temp;
+                        helper->offset = offsetStack.top();
+                        offsetStack.top() += findOffset($1->typeSpecifier);
+                        insertSymbol(temp,helper);
                         irGen.emit(TACOp::TYPECAST, temp, typeCastInfo($1->typeSpecifier, $3->typeSpecifier), $3->tacResult);
                         $3->tacResult = temp;
                     }
@@ -1168,20 +1466,20 @@ assignment_expression
                 Backpatch::backpatch($3->trueList, to_string(irGen.currentInstrIndex));
                 Backpatch::backpatch($3->falseList, to_string(irGen.currentInstrIndex + 1));
                 if ($2->value == "=") {
-                    irGen.emit(TACOp::ASSIGN, $1->tacResult, "1", nullopt);
+                    irGen.emit(TACOp::ASSIGN, $1->tacResult, "1", "");
                 } else {
                     irGen.emit(assignToOp(opr[0]), $1->tacResult, $1->tacResult, "1");
                 }
                 if ($2->value == "=") {
-                    irGen.emit(TACOp::ASSIGN, $1->tacResult, "0", nullopt);
+                    irGen.emit(TACOp::ASSIGN, $1->tacResult, "0", "");
                 } else {
                     irGen.emit(assignToOp(opr[0]), $1->tacResult, $1->tacResult, "0");
                 }
             } else {
                 if ($2->value == "=") {
-                    irGen.emit(TACOp::ASSIGN, $1->tacResult, $3->tacResult, nullopt);
+                    irGen.emit(TACOp::ASSIGN, $1->tacResult, $3->tacResult, "");
                 } else {
-                    irGen.emit(assignToOp(opr[0]), $1->tacResult, $3->tacResult, $3->tacResult);
+                    irGen.emit(assignToOp(opr[0]), $1->tacResult, $1->tacResult, $3->tacResult);
                 }
             }
             $$->tacResult = $1->tacResult;
@@ -1223,7 +1521,7 @@ single_expression
             next = Backpatch::addToBackpatchList(curr, irGen.currentInstrIndex + 1);
             $$->falseList = next;
             irGen.emit(TACOp::NE, "", $1->tacResult, "0", true);
-            irGen.emit(TACOp::oth, "", nullopt, nullopt, true);
+            irGen.emit(TACOp::oth, "", "", "", true);
         }
     }
     ;
@@ -1372,12 +1670,12 @@ struct_specifier
             $2->typeCategory = 4;
             $2->typeSpecifier = 20;
         }
-        enterScope();
+        enterScope(true);
     } LBRACE struct_declaration_list RBRACE {
         $$ = createNode(NODE_STRUCT_SPECIFIER, "", $1, $2, $5);
         $2->symbolTable = currentTable->symbolTable;
         $2->totalOffset = offsetStack.top();
-        exitScope();
+        exitScope(true);
     }
     ;
 
@@ -1480,7 +1778,6 @@ pointer
     }
     ;
 
-
 parameter_list
     : parameter_declaration { 
         $$ = createNode(NODE_PARAMETER_LIST, "", $1); 
@@ -1550,36 +1847,50 @@ statement
 
 io_statement
     : KEYWORD_PRINTF LPAREN STRING RPAREN SEMICOLON {
-        $3->tacResult = $3->value;
+        string strTemp = irGen.newLabel();
+        TreeNode* strNode = new TreeNode(NODE_STRING_LITERAL);
+        strNode->typeSpecifier = 8;
+        strNode->typeCategory = 0;
+        strNode->value = strTemp;
+        allTables[0]->symbolTable.emplace_back(strTemp, strNode);
+        irGen.emit(TACOp::ASSIGN, strTemp, $3->value, "", false, true);
+        $3->tacResult = strTemp;
         $$ = createNode(NODE_IO_STATEMENT, "", $1, $3);  
         if (!checkFormatSpecifiers($3->value, {})) {
             raiseError("Format string in printf has specifiers but no arguments provided", yylineno);
             $$ = nullptr;
         } else {
             string temp = irGen.newTemp();
-            irGen.emit(TACOp::PARAM, $3->tacResult);
+            irGen.emit(TACOp::PARAM, $3->tacResult,"printf");
             irGen.emit(TACOp::CALL, temp, "printf", "1");   
             $$->tacResult = temp;
         }
     }
     | KEYWORD_PRINTF LPAREN STRING COMMA argument_expression_list RPAREN SEMICOLON {
-        $3->tacResult = $3->value;     
+        string strTemp = irGen.newLabel();
+        TreeNode* strNode = new TreeNode(NODE_STRING_LITERAL);
+        strNode->typeSpecifier = 8;
+        strNode->typeCategory = 0;
+        strNode->value = strTemp;
+        allTables[0]->symbolTable.emplace_back(strTemp, strNode);
+        irGen.emit(TACOp::ASSIGN, strTemp, $3->value, "", false, true);
+        $3->tacResult = strTemp;     
         $$ = createNode(NODE_IO_STATEMENT, "", $1, $3, $5);          
         vector<int> types = typeExtract($5);
         if (!checkFormatSpecifiers($3->value, types)) {
             raiseError("Type mismatch between format specifiers and arguments in printf", yylineno);
             $$ = nullptr;
         } else {
-            irGen.emit(TACOp::PARAM, $3->tacResult);
+            irGen.emit(TACOp::PARAM, $3->tacResult,"printf");
             int paramCount = 1;
             for (auto* arg : $5->children) {
                 if (arg->trueList || arg->falseList) {
                     Backpatch::backpatch(arg->trueList, to_string(irGen.currentInstrIndex));
                     Backpatch::backpatch(arg->falseList, to_string(irGen.currentInstrIndex + 1));
                     irGen.emit(TACOp::NE, "", arg->tacResult, "0", true);
-                    irGen.emit(TACOp::oth, "", nullopt, nullopt, true);
+                    irGen.emit(TACOp::oth, "", "", "", true);
                 }
-                irGen.emit(TACOp::PARAM, arg->tacResult);
+                irGen.emit(TACOp::PARAM, arg->tacResult,"printf");
                 paramCount++;
             }
             string temp = irGen.newTemp();
@@ -1611,7 +1922,7 @@ io_statement
                         Backpatch::backpatch(arg->trueList, to_string(irGen.currentInstrIndex));
                         Backpatch::backpatch(arg->falseList, to_string(irGen.currentInstrIndex + 1));
                         irGen.emit(TACOp::NE, "", arg->tacResult, "0", true);
-                        irGen.emit(TACOp::oth, "", nullopt, nullopt, true);
+                        irGen.emit(TACOp::oth, "", "", "", true);
                     }
                     irGen.emit(TACOp::PARAM, arg->tacResult);
                     paramCount++;
@@ -1650,6 +1961,12 @@ labeled_statement
         }
         if (switch_type != $2->typeSpecifier) {
             string temp = irGen.newTemp();
+            helper = new TreeNode(OTHERS);
+            helper->typeSpecifier = switch_type;
+            helper->value = temp;
+            helper->offset = offsetStack.top();
+            offsetStack.top() += findOffset(switch_type);
+            insertSymbol(temp, helper);
             irGen.emit(TACOp::TYPECAST, temp, typeCastInfo(switch_type, $2->typeSpecifier), $2->tacResult); 
             $2->tacResult = temp;
         }
@@ -1694,7 +2011,7 @@ block_item_list
         $$ = $1;
     }
     | block_item_list block_item { 
-        $$ = $1; 
+        $$ = new TreeNode(OTHERS); 
         $$->children.push_back($2);
         $$->continueList = Backpatch::mergeBackpatchLists($1->continueList, $2->continueList);
         $$->breakList = Backpatch::mergeBackpatchLists($1->breakList, $2->breakList);
@@ -1741,7 +2058,7 @@ selection_statement
     }
     | KEYWORD_SWITCH {
         switchStack.push(irGen.currentInstrIndex);
-        irGen.emit(TACOp::oth, "", nullopt, nullopt, true);
+        irGen.emit(TACOp::oth, "", "", "", true);
     } LPAREN expression RPAREN {
         enterScope(); 
         inLoop++; 
@@ -1751,7 +2068,7 @@ selection_statement
     } statement {
         if ($4->typeSpecifier == 1 || $4->typeSpecifier == 2 || $4->typeSpecifier == 3 || $4->typeSpecifier == 4) {
             $$->nextList = Backpatch::addToBackpatchList($$->nextList, irGen.currentInstrIndex);
-            irGen.emit(TACOp::oth, "", nullopt, nullopt, true);
+            irGen.emit(TACOp::oth, "", "", "", true);
             irGen.tacCode[switchStack.top()].result = to_string(irGen.currentInstrIndex);
             switchStack.pop();
             backpatchNode* curr = $7->switchList;
@@ -1762,7 +2079,7 @@ selection_statement
                 curr = curr->next;
             }
             if ($7->continueList) {
-                irGen.emit(TACOp::oth, to_string($7->continueList->index), nullopt, nullopt, true);
+                irGen.emit(TACOp::oth, to_string($7->continueList->index), "", "", true);
             }
             exitScope();
             inLoop--;
@@ -1782,7 +2099,7 @@ iteration_statement
     } M statement {
         Backpatch::backpatch($4->trueList, $7->tacResult);
         Backpatch::backpatch($8->nextList, $1->tacResult);
-        irGen.emit(TACOp::oth, $1->tacResult, nullopt, nullopt, true);
+        irGen.emit(TACOp::oth, $1->tacResult, "", "", true);
         Backpatch::backpatch($8->continueList, $1->tacResult);
         $$->nextList = Backpatch::mergeBackpatchLists($8->breakList, $4->falseList);
         $$->goToList = $8->goToList;
@@ -1805,18 +2122,29 @@ iteration_statement
         enterScope();
     } for_init M for_cond M for_inc RPAREN {
         inLoop++;
-        irGen.emit(TACOp::oth, $5->tacResult, nullopt, nullopt, true);
+        irGen.emit(TACOp::oth, $5->tacResult, "", "", true);
     } M statement {
         Backpatch::backpatch($6->trueList, $11->tacResult);            
         Backpatch::backpatch($12->nextList, $7->tacResult);
         Backpatch::backpatch($12->continueList, $7->tacResult);
         $$->nextList = Backpatch::mergeBackpatchLists($12->breakList, $6->falseList);
         $$->goToList = $12->goToList;
-        irGen.emit(TACOp::oth, $7->tacResult, nullopt, nullopt, true);
+        irGen.emit(TACOp::oth, $7->tacResult, "", "", true);
         exitScope();
         inLoop--; 
     }
-    ;
+    |M KEYWORD_UNTIL LPAREN single_expression RPAREN KEYWORD_DO M {
+        enterScope(); 
+        inLoop++;
+    } statement KEYWORD_DONE SEMICOLON {
+        inLoop--; 
+        exitScope();
+        Backpatch::backpatch($4->falseList, $7->tacResult);
+        Backpatch::backpatch($9->continueList, $1->tacResult);
+        $$->nextList = Backpatch::mergeBackpatchLists($9->breakList, $4->trueList);
+        $$->goToList = $10->goToList;
+        irGen.emit(TACOp::oth, $1->tacResult, "", "", true);
+    }
 
 for_init
     : expression_statement {
@@ -1849,7 +2177,7 @@ jump_statement
         if (!labelNode) {
             backpatchNode* newList = Backpatch::addToBackpatchList(nullptr, irGen.currentInstrIndex);
             labelToBeDefined.top()[$2->value] = Backpatch::mergeBackpatchLists(labelToBeDefined.top()[$2->value], newList);
-            irGen.emit(TACOp::oth, "", nullopt, nullopt, true);
+            irGen.emit(TACOp::oth, "", "", "", true);
         } else {
             irGen.emit(TACOp::GOTO, labelNode->tacResult);
         }
@@ -1862,7 +2190,7 @@ jump_statement
         } else {
             $$ = createNode(NODE_JUMP_STATEMENT, "", $1);
             $$->continueList = Backpatch::addToBackpatchList(nullptr, irGen.currentInstrIndex);
-            irGen.emit(TACOp::oth, "", nullopt, nullopt, true);
+            irGen.emit(TACOp::oth, "", "", "", true);
         }
     }
     | KEYWORD_BREAK SEMICOLON {
@@ -1871,7 +2199,7 @@ jump_statement
         } else {
             $$ = createNode(NODE_JUMP_STATEMENT, "", $1);
             $$->breakList = Backpatch::addToBackpatchList(nullptr, irGen.currentInstrIndex);
-            irGen.emit(TACOp::oth, "", nullopt, nullopt, true);
+            irGen.emit(TACOp::oth, "", "", "", true);
         }
     }
     | KEYWORD_RETURN SEMICOLON {
@@ -1895,6 +2223,14 @@ jump_statement
             $$ = createNode(NODE_JUMP_STATEMENT, "", $1, $2);
             if (expectedReturnType != $2->typeSpecifier) {
                 string temp = irGen.newTemp();
+                helper = new TreeNode(OTHERS);
+                helper->typeSpecifier = expectedReturnType;
+                helper->value = temp;
+                helper->offset = offsetStack.top();
+                offsetStack.top() += findOffset(expectedReturnType);
+                if($2->typeCategory == 1)offsetStack.top() += 8;
+                else offsetStack.top() += findOffset($2->typeSpecifier);
+                insertSymbol(temp, helper);
                 irGen.emit(TACOp::TYPECAST, temp, typeCastInfo(expectedReturnType, $2->typeSpecifier), $2->tacResult);
                 irGen.emit(TACOp::RETURN, temp);
             } else {
@@ -1938,7 +2274,9 @@ function_definition
     } compound_statement_func {
         $$ = createNode(NODE_FUNCTION_DEFINITION, "" , $1, $2, $4);
         inFunc = false;
-        exitScope();
+        $2->children[0]->totalOffset = offsetStack.top();
+        exitScope(true);
+        irGen.emit(TACOp::ENDFUNC, "", "", "");
         expectedReturnType = -1;
     }
     ;
@@ -1952,19 +2290,18 @@ void yyerror(const char *s) {
 }
 
 
-int main(int argc, char **argv)
+pair<vector<TACInstruction>,vector<TACInstruction>> parser(int argc, char **argv)
 {
     if (argc < 2)
     {
         cout << "Usage: " << argv[0] << " <input_file>" << endl;
-        return 1;
+        return {};
     }
-
     yyin = fopen(argv[1], "r");
     if (!yyin)
     {
         cout << "Error opening file" << endl;
-        return 1;
+        return {};
     }
 
     currentTable = new Table();
@@ -1973,14 +2310,15 @@ int main(int argc, char **argv)
     labelToBeDefined.push({});
     allTables.push_back(currentTable);
 
-    mkdir("output", 0777);
+    mkdir("output/3ac", 0777);
+    mkdir("output/asm", 0777);
     mkdir("error", 0777);
     mkdir("symTab", 0777);
 
     string inputPath(argv[1]);
     string base = inputPath.substr(inputPath.find_last_of("/\\") + 1);
     string baseName = base.substr(0, base.find_last_of('.'));
-    string outName = "output/" + baseName + ".3ac";
+    string outName = "output/3ac/" + baseName + ".3ac";
     string errName = "error/" + baseName + ".err";
     string symTabName = "symTab/" + baseName + ".txt";
     
@@ -1993,19 +2331,18 @@ int main(int argc, char **argv)
     if(!err)
     {
         cout << "Error opening error file: " << errName << endl;
-        return 1;
+        return {};
     }else if (!out)
     {
         cout << "Error opening output file: " << outName << endl;
-        return 1;
+        return {};
     }else if(!sym){
         cout << "Error opening symtab file: " << symTabName << endl;
-        return 1;
+        return {};
     }
 
     yyparse();
     fclose(yyin);
-
     cout.rdbuf(sym.rdbuf());
     printAllTables();
     cout.rdbuf(coutbuf);
@@ -2013,6 +2350,5 @@ int main(int argc, char **argv)
     cout.rdbuf(out.rdbuf());
     irGen.printTAC();
     cout.rdbuf(coutbuf);
-
-    return 0;
+    return {irGen.globalVars,irGen.tacCode};
 }
